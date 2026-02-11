@@ -1,0 +1,1157 @@
+/* ===========================
+   年間行事予定表アプリ - スタイルシート
+   =========================== */
+
+:root {
+    /* カラーパレット - 洗練された色合い */
+    --primary-blue: hsl(210, 100%, 56%);
+    --primary-blue-dark: hsl(210, 100%, 45%);
+    --primary-blue-light: hsl(210, 100%, 96%);
+
+    --secondary-purple: hsl(270, 70%, 60%);
+    --secondary-purple-dark: hsl(270, 70%, 50%);
+
+    --success-green: hsl(145, 65%, 50%);
+    --warning-orange: hsl(35, 95%, 60%);
+    --error-red: hsl(0, 85%, 60%);
+
+    --neutral-50: hsl(210, 20%, 98%);
+    --neutral-100: hsl(210, 20%, 95%);
+    --neutral-200: hsl(210, 20%, 90%);
+    --neutral-300: hsl(210, 15%, 80%);
+    --neutral-400: hsl(210, 10%, 60%);
+    --neutral-500: hsl(210, 10%, 45%);
+    --neutral-600: hsl(210, 15%, 30%);
+    --neutral-700: hsl(210, 20%, 20%);
+    --neutral-800: hsl(210, 25%, 12%);
+    --neutral-900: hsl(210, 30%, 8%);
+
+    /* タイポグラフィ */
+    --font-family: 'Inter', 'Noto Sans JP', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-size-xs: 0.75rem;
+    --font-size-sm: 0.875rem;
+    --font-size-base: 1rem;
+    --font-size-lg: 1.125rem;
+    --font-size-xl: 1.25rem;
+    --font-size-2xl: 1.5rem;
+    --font-size-3xl: 2rem;
+
+    /* スペーシング */
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+    --spacing-2xl: 3rem;
+
+    /* ボーダー半径 */
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    --radius-full: 9999px;
+
+    /* シャドウ */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+    /* トランジション */
+    --transition-fast: 150ms ease-in-out;
+    --transition-base: 250ms ease-in-out;
+    --transition-slow: 350ms ease-in-out;
+}
+
+/* ===========================
+   リセット & ベース スタイル
+   =========================== */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: var(--font-family);
+    font-size: var(--font-size-base);
+    line-height: 1.6;
+    color: var(--neutral-800);
+    background: linear-gradient(135deg, var(--neutral-50) 0%, var(--primary-blue-light) 100%);
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+/* Google Fonts Import */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap');
+
+/* ===========================
+   レイアウト
+   =========================== */
+
+.app-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: var(--spacing-xl);
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ===========================
+   ヘッダー
+   =========================== */
+
+.app-header {
+    background: linear-gradient(135deg, var(--primary-blue) 0%, var(--secondary-purple) 100%);
+    color: white;
+    padding: var(--spacing-xl);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-xl);
+    margin-bottom: var(--spacing-xl);
+    position: relative;
+    overflow: hidden;
+}
+
+.app-header::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -10%;
+    width: 300px;
+    height: 300px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    animation: float 6s ease-in-out infinite;
+}
+
+@keyframes float {
+
+    0%,
+    100% {
+        transform: translateY(0) rotate(0deg);
+    }
+
+    50% {
+        transform: translateY(-20px) rotate(180deg);
+    }
+}
+
+.app-header h1 {
+    font-size: var(--font-size-3xl);
+    font-weight: 700;
+    margin-bottom: var(--spacing-sm);
+    position: relative;
+    z-index: 1;
+}
+
+.app-header p {
+    font-size: var(--font-size-lg);
+    opacity: 0.95;
+    position: relative;
+    z-index: 1;
+}
+
+/* ===========================
+   カード
+   =========================== */
+
+.card {
+    background: white;
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-xl);
+    box-shadow: var(--shadow-md);
+    margin-bottom: var(--spacing-lg);
+    transition: all var(--transition-base);
+}
+
+.card:hover {
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-2px);
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+    padding-bottom: var(--spacing-md);
+    border-bottom: 2px solid var(--neutral-100);
+}
+
+.card-header h2 {
+    font-size: var(--font-size-xl);
+    font-weight: 600;
+    color: var(--neutral-800);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.card-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--primary-blue), var(--secondary-purple));
+    color: white;
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-lg);
+}
+
+/* ===========================
+   ボタン
+   =========================== */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md) var(--spacing-lg);
+    font-size: var(--font-size-base);
+    font-weight: 500;
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    text-decoration: none;
+    position: relative;
+    overflow: hidden;
+}
+
+.btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+}
+
+.btn:hover::before {
+    width: 300px;
+    height: 300px;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--primary-blue), var(--secondary-purple));
+    color: white;
+    box-shadow: var(--shadow-md);
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+.btn-secondary {
+    background: var(--neutral-100);
+    color: var(--neutral-700);
+}
+
+.btn-secondary:hover {
+    background: var(--neutral-200);
+}
+
+.btn-success {
+    background: var(--success-green);
+    color: white;
+    box-shadow: var(--shadow-md);
+}
+
+.btn-success:hover {
+    background: hsl(145, 65%, 45%);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+.btn-warning {
+    background: var(--warning-orange);
+    color: white;
+    box-shadow: var(--shadow-md);
+}
+
+.btn-warning:hover {
+    background: hsl(35, 95%, 55%);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn:disabled:hover {
+    transform: none;
+}
+
+/* ===========================
+   ファイルアップロード
+   =========================== */
+
+.upload-area {
+    border: 2px dashed var(--neutral-300);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-2xl);
+    text-align: center;
+    background: var(--neutral-50);
+    transition: all var(--transition-base);
+    cursor: pointer;
+}
+
+.upload-area:hover,
+.upload-area.drag-over {
+    border-color: var(--primary-blue);
+    background: var(--primary-blue-light);
+}
+
+.upload-icon {
+    font-size: 3rem;
+    color: var(--primary-blue);
+    margin-bottom: var(--spacing-md);
+}
+
+.upload-text {
+    font-size: var(--font-size-lg);
+    color: var(--neutral-600);
+    margin-bottom: var(--spacing-sm);
+}
+
+.upload-hint {
+    font-size: var(--font-size-sm);
+    color: var(--neutral-400);
+}
+
+.file-input {
+    display: none;
+}
+
+.file-selected {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    background: var(--primary-blue-light);
+    border-radius: var(--radius-md);
+    margin-top: var(--spacing-md);
+    animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ===========================
+   フィルター & コントロール
+   =========================== */
+
+.controls-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-xl);
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.control-label {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--neutral-700);
+}
+
+.control-input,
+.control-select {
+    padding: var(--spacing-md);
+    border: 1px solid var(--neutral-300);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-base);
+    transition: all var(--transition-fast);
+}
+
+.control-input:focus,
+.control-select:focus {
+    outline: none;
+    border-color: var(--primary-blue);
+    box-shadow: 0 0 0 3px var(--primary-blue-light);
+}
+
+/* ===========================
+   カレンダー表示
+   =========================== */
+
+.calendar-container {
+    margin-top: var(--spacing-xl);
+}
+
+.calendar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--spacing-lg);
+    padding: var(--spacing-lg);
+    background: linear-gradient(135deg, var(--primary-blue-light), var(--neutral-50));
+    border-radius: var(--radius-lg);
+}
+
+.calendar-nav {
+    display: flex;
+    gap: var(--spacing-md);
+}
+
+.calendar-title {
+    font-size: var(--font-size-2xl);
+    font-weight: 700;
+    color: var(--neutral-800);
+}
+
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-xl);
+}
+
+.calendar-day-header {
+    padding: var(--spacing-md);
+    text-align: center;
+    font-weight: 600;
+    color: var(--neutral-700);
+    background: var(--neutral-100);
+    border-radius: var(--radius-md);
+}
+
+.calendar-day-header.saturday {
+    color: var(--primary-blue);
+    background: var(--primary-blue-light);
+}
+
+.calendar-day-header.sunday {
+    color: var(--error-red);
+    background: hsl(0, 85%, 96%);
+}
+
+.calendar-day {
+    min-height: 120px;
+    padding: var(--spacing-md);
+    background: white;
+    border: 1px solid var(--neutral-200);
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast);
+    cursor: pointer;
+}
+
+.calendar-day:hover {
+    border-color: var(--primary-blue);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.calendar-day.saturday {
+    background: var(--primary-blue-light);
+}
+
+.calendar-day.sunday {
+    background: hsl(0, 85%, 96%);
+}
+
+.calendar-day.other-month {
+    opacity: 0.3;
+}
+
+.day-number {
+    font-weight: 600;
+    font-size: var(--font-size-lg);
+    color: var(--neutral-700);
+    margin-bottom: var(--spacing-sm);
+}
+
+.day-weekday-count {
+    display: inline-block;
+    padding: 2px var(--spacing-sm);
+    background: var(--secondary-purple);
+    color: white;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    margin-bottom: var(--spacing-sm);
+}
+
+.day-holiday {
+    display: inline-block;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background: linear-gradient(135deg, var(--error-red), hsl(0, 85%, 70%));
+    color: white;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    margin-bottom: var(--spacing-sm);
+    box-shadow: var(--shadow-sm);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.9;
+        transform: scale(0.98);
+    }
+}
+
+.day-events {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.event-item {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background: var(--neutral-50);
+    border-left: 3px solid var(--primary-blue);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+    line-height: 1.4;
+    transition: all var(--transition-fast);
+}
+
+.event-item:hover {
+    background: var(--neutral-100);
+    transform: translateX(2px);
+}
+
+.event-item.teacher {
+    border-left-color: var(--primary-blue);
+}
+
+.event-item.student {
+    border-left-color: var(--secondary-purple);
+}
+
+.event-item.meeting {
+    border-left-color: var(--warning-orange);
+    background: hsl(35, 95%, 95%);
+}
+
+.event-item.holiday {
+    border-left-color: var(--error-red);
+    background: hsl(0, 85%, 96%);
+}
+
+/* ===========================
+   エクスポート セクション
+   =========================== */
+
+.export-section {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--spacing-lg);
+}
+
+.export-card {
+    padding: var(--spacing-lg);
+    background: linear-gradient(135deg, var(--neutral-50), white);
+    border: 2px solid var(--neutral-200);
+    border-radius: var(--radius-lg);
+    text-align: center;
+    transition: all var(--transition-base);
+}
+
+.export-card:hover {
+    border-color: var(--primary-blue);
+    box-shadow: var(--shadow-lg);
+}
+
+.export-icon {
+    font-size: 3rem;
+    margin-bottom: var(--spacing-md);
+}
+
+.export-card h3 {
+    font-size: var(--font-size-lg);
+    margin-bottom: var(--spacing-sm);
+    color: var(--neutral-800);
+}
+
+.export-card p {
+    font-size: var(--font-size-sm);
+    color: var(--neutral-500);
+    margin-bottom: var(--spacing-lg);
+}
+
+/* ===========================
+   統計情報
+   =========================== */
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-xl);
+}
+
+.stat-card {
+    padding: var(--spacing-lg);
+    background: linear-gradient(135deg, var(--primary-blue-light), white);
+    border-radius: var(--radius-lg);
+    text-align: center;
+    box-shadow: var(--shadow-sm);
+    transition: all var(--transition-base);
+}
+
+.stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-md);
+}
+
+.stat-value {
+    font-size: var(--font-size-3xl);
+    font-weight: 700;
+    color: var(--primary-blue);
+    margin-bottom: var(--spacing-xs);
+}
+
+.stat-label {
+    font-size: var(--font-size-sm);
+    color: var(--neutral-600);
+    font-weight: 500;
+}
+
+/* ===========================
+   ローディング & スピナー
+   =========================== */
+
+.spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+/* ========================================
+   ローディングオーバーレイ
+   ======================================== */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(5px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+    opacity: 1;
+    transition: opacity 0.3s ease;
+}
+
+.loading-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.loading-content {
+    text-align: center;
+    color: white;
+}
+
+.loading-spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    border-top-color: var(--accent-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.loading-text {
+    font-size: 1.1rem;
+    font-weight: 500;
+}
+
+/* ========================================
+   授業登録セクション
+   ======================================== */
+.my-classes-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.class-input-form {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(168, 85, 247, 0.05));
+    padding: 2rem;
+    border-radius: 12px;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.form-section {
+    margin-bottom: 2rem;
+}
+
+.form-section:last-child {
+    margin-bottom: 0;
+}
+
+.form-section-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid rgba(99, 102, 241, 0.3);
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    align-items: end;
+}
+
+.form-group-wide {
+    grid-column: span 2;
+}
+
+.semester-schedule {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+}
+
+.semester-group {
+    padding: 1.5rem;
+    background: white;
+    border-radius: 10px;
+    border: 2px solid rgba(99, 102, 241, 0.15);
+}
+
+.semester-group h4 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--accent-color);
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 1.5rem;
+}
+
+.required {
+    color: var(--error-red);
+    font-weight: 700;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr auto;
+    gap: 1rem;
+    align-items: end;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.form-group label {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.form-input,
+.form-select {
+    padding: 0.75rem;
+    border: 2px solid rgba(99, 102, 241, 0.2);
+    border-radius: 8px;
+    font-size: 1rem;
+    background: white;
+    transition: all 0.3s ease;
+}
+
+.form-input:focus,
+.form-select:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.form-input::placeholder {
+    color: #9CA3AF;
+}
+
+.registered-classes h3 {
+    font-size: 1.2rem;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid rgba(99, 102, 241, 0.2);
+}
+
+.class-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.class-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem;
+    background: white;
+    border: 2px solid rgba(99, 102, 241, 0.15);
+    border-radius: 10px;
+    transition: all 0.3s ease;
+}
+
+.class-item:hover {
+    border-color: var(--accent-color);
+    transform: translateX(4px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+}
+
+.class-info {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.class-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 1rem;
+}
+
+.class-schedule {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.class-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    background: linear-gradient(135deg, var(--accent-color), var(--accent-secondary));
+    color: white;
+}
+
+.class-badge-schedule {
+    background: linear-gradient(135deg, #10B981, #059669);
+}
+
+.class-badge-location {
+    background: linear-gradient(135deg, #F59E0B, #D97706);
+}
+
+.class-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn-icon {
+    padding: 0.5rem;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    font-size: 1.2rem;
+}
+
+.btn-icon:hover {
+    background: rgba(239, 68, 68, 0.1);
+    transform: scale(1.1);
+}
+
+.empty-message {
+    text-align: center;
+    color: #9CA3AF;
+    padding: 2rem;
+    font-style: italic;
+}
+
+/* 授業イベント専用スタイル */
+.event-item.my-class {
+    background: linear-gradient(135deg, #10B981, #059669);
+    color: white;
+    font-weight: 600;
+    border-left: 4px solid #047857;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+
+    .class-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+
+    .class-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+}
+
+/* ===========================
+   レスポンシブ
+   =========================== */
+
+@media (max-width: 768px) {
+    .app-container {
+        padding: var(--spacing-md);
+    }
+
+    .app-header h1 {
+        font-size: var(--font-size-2xl);
+    }
+
+    .calendar-grid {
+        gap: 2px;
+    }
+
+    .calendar-day {
+        min-height: 80px;
+        padding: var(--spacing-sm);
+    }
+
+    .controls-grid,
+    .stats-grid,
+    .export-section {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ===========================
+   ユーティリティ
+   =========================== */
+
+.hidden {
+    display: none !important;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.mb-lg {
+    margin-bottom: var(--spacing-lg);
+}
+
+.mt-lg {
+    margin-top: var(--spacing-lg);
+}
+
+/* ===========================
+   授業日程表モーダル
+   =========================== */
+
+/* 登録済みクラスリストのヘッダー */
+.registered-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.registered-header h3 {
+    margin: 0;
+}
+
+/* モーダル */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal.hidden {
+    display: none !important;
+}
+
+.modal-content {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 900px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #ddd;
+}
+
+.modal-body {
+    flex: 1;
+    overflow-y: auto;
+    margin-bottom: 20px;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #ddd;
+}
+
+.close-modal-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+}
+
+/* 日程表テーブル */
+.schedule-table-container {
+    overflow-x: auto;
+}
+
+.schedule-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.schedule-table th,
+.schedule-table td {
+    padding: 10px;
+    border: 1px solid #ddd;
+    text-align: left;
+}
+
+.schedule-table th {
+    background: #f8f9fa;
+    position: sticky;
+    top: 0;
+    font-weight: bold;
+}
+
+.schedule-table tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+.schedule-table tr:hover {
+    background-color: #f0f4ff;
+}
+
+.schedule-table td.center {
+    text-align: center;
+}
+
+/* 印刷用スタイル */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+
+    .modal {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background: white;
+        display: block !important;
+    }
+
+    .modal-content {
+        box-shadow: none;
+        width: 100%;
+        max-width: 100%;
+        border: none;
+    }
+
+    .modal-header .close-modal-btn,
+    .modal-footer {
+        display: none;
+    }
+
+    .modal-content * {
+        visibility: visible;
+    }
+
+    .schedule-table {
+        font-size: 10pt;
+        width: 100%;
+    }
+
+    .schedule-table th {
+        background-color: #eee !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
