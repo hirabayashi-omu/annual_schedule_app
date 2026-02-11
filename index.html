@@ -37,9 +37,26 @@
             </div>
 
             <div id="fileSelected" class="file-selected hidden">
-                <span>✓ </span>
-                <strong id="fileName"></strong>
-                <span id="fileSize"></span>
+                <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                    <div>
+                        <span>✓ </span>
+                        <strong id="fileName"></strong>
+                        <span id="fileSize"></span>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-outline-primary btn-sm" onclick="downloadBackup()"
+                            title="現在の全データをJSON形式で保存">
+                            <span>📤 バックアップ</span>
+                        </button>
+                        <button class="btn btn-outline-primary btn-sm"
+                            onclick="document.getElementById('backupInput').click()" title="保存したJSONから復元">
+                            <span>📥 復旧</span>
+                        </button>
+                        <button id="clearDataBtn" class="btn btn-outline-danger btn-sm" onclick="clearScheduleData()">
+                            <span>🗑️ データを削除</span>
+                        </button>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -183,8 +200,19 @@
                     <div class="form-section">
                         <h3 class="form-section-title">時間割</h3>
 
+                        <div class="form-row" style="margin-bottom: 1rem;">
+                            <div class="form-group">
+                                <label for="semesterType">開講期間 <span class="required">*</span></label>
+                                <select id="semesterType" class="form-select">
+                                    <option value="full">通年</option>
+                                    <option value="first">前期のみ</option>
+                                    <option value="second">後期のみ</option>
+                                </select>
+                            </div>
+                        </div>
+
                         <div class="semester-schedule">
-                            <div class="semester-group">
+                            <div class="semester-group" id="firstSemesterGroup">
                                 <h4>前期</h4>
                                 <div class="form-row">
                                     <div class="form-group">
@@ -212,7 +240,7 @@
                                 </div>
                             </div>
 
-                            <div class="semester-group">
+                            <div class="semester-group" id="secondSemesterGroup">
                                 <h4>後期</h4>
                                 <div class="form-row">
                                     <div class="form-group">
@@ -243,6 +271,10 @@
                     </div>
 
                     <div class="form-actions">
+                        <input type="hidden" id="editingClassId">
+                        <button id="cancelEditBtn" class="btn btn-secondary hidden" style="margin-right: 10px;">
+                            <span>❌ キャンセル</span>
+                        </button>
                         <button id="addClassBtn" class="btn btn-primary">
                             <span>➕ 授業を追加</span>
                         </button>
@@ -336,6 +368,78 @@
                 </div>
             </div>
         </section>
+    </div>
+
+    <!-- 予定・授業の個別編集モーダル -->
+    <div id="quickEditModal" class="modal hidden">
+        <div class="modal-content" style="max-width: 450px;">
+            <div class="modal-header">
+                <h2 id="quickEditModalTitle">予定の編集（この日のみ）</h2>
+                <button class="close-modal-btn" onclick="closeQuickEditModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="quickEditForm" onsubmit="handleQuickEditSubmit(event)">
+                    <input type="hidden" id="quickEditType">
+                    <input type="hidden" id="quickEditId">
+                    <input type="hidden" id="quickEditDate">
+                    <input type="hidden" id="quickEditSourcePeriod">
+
+                    <div class="form-group" style="margin-bottom: 15px;">
+                        <label for="quickEditName">内容 / 授業名</label>
+                        <input type="text" id="quickEditName" class="form-input" required>
+                    </div>
+
+                    <div class="form-group"
+                        style="margin-bottom: 15px; flex-direction: row; align-items: center; gap: 10px;">
+                        <input type="checkbox" id="quickEditAllDay" onchange="toggleQuickEditTimeFields()">
+                        <label for="quickEditAllDay" style="margin-bottom: 0;">終日</label>
+                    </div>
+
+                    <div id="quickEditTimeFields" class="hidden">
+                        <div id="quickEditClassOnlyFields" class="hidden">
+                            <div class="form-group" style="margin-bottom: 15px;">
+                                <label for="quickEditPeriod">時限</label>
+                                <select id="quickEditPeriod" class="form-select" onchange="updateQuickTimeFromPeriod()">
+                                    <option value="1">1/2限</option>
+                                    <option value="2">3/4限</option>
+                                    <option value="3">5/6限</option>
+                                    <option value="4">7/8限</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                            <div class="form-group">
+                                <label for="quickEditStartTime">開始時刻</label>
+                                <input type="time" id="quickEditStartTime" class="form-input">
+                            </div>
+                            <div class="form-group">
+                                <label for="quickEditEndTime">終了時刻</label>
+                                <input type="time" id="quickEditEndTime" class="form-input">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 15px;">
+                        <label for="quickEditLocation">場所</label>
+                        <input type="text" id="quickEditLocation" class="form-input">
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 15px;">
+                        <label for="quickEditMemo">メモ（iCalの詳細はここに出力されます）</label>
+                        <textarea id="quickEditMemo" class="form-input"
+                            style="min-height: 80px; resize: vertical;"></textarea>
+                    </div>
+
+                    <div style="margin-top: 25px; display: flex; gap: 10px; justify-content: flex-end;">
+                        <button type="button" class="btn btn-secondary" onclick="closeQuickEditModal()">キャンセル</button>
+                        <button type="submit" class="btn btn-primary" style="padding-left: 30px; padding-right: 30px;">
+                            <span>💾 保存</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
 
     <!-- ローディングオーバーレイ -->
