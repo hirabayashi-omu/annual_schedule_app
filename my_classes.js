@@ -25,8 +25,15 @@ const CLASS_OPTIONS = {
 
 const WEEKDAY_NAMES = ['日', '月', '火', '水', '木', '金', '土'];
 
+// 初期化フラグ
+let isMyClassesInitialized = false;
+
 // 初期化
 function initializeMyClasses() {
+    if (isMyClassesInitialized) {
+        console.log('授業管理機能は既に初期化されています');
+        return;
+    }
     console.log('授業管理機能を初期化中...');
 
     // localStorageから読み込み
@@ -100,7 +107,7 @@ function initializeMyClasses() {
     // 教員入力フィールドのEnterキーリスナー
     const classTeacherInput = document.getElementById('classTeacher');
     if (classTeacherInput) {
-        classTeacherInput.addEventListener('keypress', function(e) {
+        classTeacherInput.addEventListener('keypress', function (e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 addTeacherToList();
@@ -152,6 +159,7 @@ function initializeMyClasses() {
     // デフォルトタブを「授業候補の修正」に設定
     switchSettingsTab('courses');
 
+    isMyClassesInitialized = true;
     console.log('授業管理機能の初期化完了');
 }
 
@@ -181,40 +189,49 @@ function escapeHtml(text) {
  */
 function addTeacherToList() {
     const input = document.getElementById('classTeacher');
-    
-    // 入力フィールドが見つからない場合
+
     if (!input) {
         console.error('Error: #classTeacher element not found');
-        alert('入力フィールドが見つかりません');
         return;
     }
-    
-    const teacher = input.value.trim();
-    console.log('addTeacherToList called with:', teacher);
 
-    if (!teacher) {
-        console.log('Empty teacher name provided');
+    const value = input.value.trim();
+    if (!value) {
         alert('教員名を入力してください');
         return;
     }
 
-    if (selectedTeachers.length >= 10) {
-        console.log('Maximum teachers reached');
-        alert('最大10人までご登録いただけます');
-        return;
+    // カンマ、読点、スペースで分割して各名前をトリム
+    const names = value.split(/[,、\s]+/).map(n => n.trim()).filter(n => n !== '');
+
+    let added = 0;
+    let skipped = 0;
+
+    names.forEach(name => {
+        if (selectedTeachers.length >= 10) {
+            return;
+        }
+        if (selectedTeachers.includes(name)) {
+            skipped++;
+            return;
+        }
+        selectedTeachers.push(name);
+        added++;
+    });
+
+    if (added > 0) {
+        input.value = '';
+        updateTeachersDisplay();
+        // サジェストが出ていれば閉じる
+        const suggestions = document.getElementById('teacherSuggestions');
+        if (suggestions) suggestions.classList.add('hidden');
     }
 
-    if (selectedTeachers.includes(teacher)) {
-        console.log('Teacher already exists:', teacher);
+    if (added === 0 && skipped > 0) {
         alert('既に追加されています');
-        return;
+    } else if (selectedTeachers.length >= 10 && names.length > added) {
+        alert('最大10人までしか登録できません');
     }
-
-    selectedTeachers.push(teacher);
-    input.value = '';
-    console.log('Teacher added. Current list:', selectedTeachers);
-
-    updateTeachersDisplay();
 }
 
 /**
@@ -263,7 +280,7 @@ function updateTeachersDisplay() {
                     " title="削除">✕</button>
             </div>
         `).join('');
-        
+
         badge.textContent = `${selectedTeachers.length}人`;
         badge.style.display = 'inline-block';
     }
@@ -865,9 +882,9 @@ function getClassesForDate(date, period) {
 // 曜日名から数値（0:日, 6:土）を取得するヘルパー
 function getWeekdayFromCount(countStr) {
     if (!countStr) return null;
-    // "補講日"の"日"に反応しないように一時的に除去
-    const cleanStr = countStr.replace(/補講日/g, '');
-    const match = cleanStr.match(/(日|月|火|水|木|金|土)/);
+    // 曜日判定を邪魔するキーワードを除去
+    const cleanStr = countStr.replace(/補講日/g, '').replace(/午前/g, '').replace(/午後/g, '');
+    const match = cleanStr.match(/(月|火|水|木|金|土|日)/);
     if (!match) return null;
     const dayName = match[1];
     const days = ['日', '月', '火', '水', '木', '金', '土'];
@@ -876,11 +893,13 @@ function getWeekdayFromCount(countStr) {
 
 // 午前・午後のみの授業日に、時限範囲を切り詰める
 // 午前・午後のみの授業日に、時限範囲を切り詰める
+// 午前・午後のみの授業日に、時限範囲を切り詰める
 function getEffectivePeriods(periodStr, isMorningOnly, isAfternoonOnly) {
     if (!periodStr) return null;
     let periods = [];
+
     // 全角数字を半角に変換
-    const str = String(periodStr).replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
+    const str = String(periodStr).replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)).trim();
 
     // 区切り文字（ハイフン、全角ハイフン、波ダッシュ、全角コロンなど）で分割
     const parts = str.split(/[-－―〜~:：]/);
@@ -888,25 +907,51 @@ function getEffectivePeriods(periodStr, isMorningOnly, isAfternoonOnly) {
     if (parts.length > 1) {
         const start = parseInt(parts[0]);
         const end = parseInt(parts[parts.length - 1]);
-        if (isNaN(start) || isNaN(end)) return null;
-        for (let p = Math.min(start, end); p <= Math.max(start, end); p++) periods.push(p);
+        if (!isNaN(start) && !isNaN(end)) {
+            for (let p = Math.min(start, end); p <= Math.max(start, end); p++) {
+                periods.push(p);
+            }
+        } else {
+            // 数値でないものが混ざっている場合（例: 3-HR）はそのまま扱う
+            periods = [str];
+        }
     } else {
-        const p = parseInt(str);
-        if (isNaN(p)) return null;
-        periods.push(p);
+        if (str === 'HR' || str === 'after') {
+            periods.push(str);
+        } else {
+            const p = parseInt(str);
+            if (isNaN(p)) {
+                // 数値でなくても、HR等の文字列なら許可
+                periods.push(str);
+            } else {
+                periods.push(p);
+            }
+        }
     }
 
+    const originalCount = periods.length;
     if (isMorningOnly) {
-        periods = periods.filter(p => p <= 2);
+        // 午前のみの場合、3限以降（およびHR, after）を除去
+        periods = periods.filter(p => {
+            if (p === 'HR' || p === 'after') return false;
+            if (typeof p === 'number') return p <= 2;
+            return false; // 不明な文字列は除去
+        });
     } else if (isAfternoonOnly) {
-        periods = periods.filter(p => p >= 3);
+        // 午後のみの場合、2限以前を除去
+        periods = periods.filter(p => {
+            if (p === 'HR' || p === 'after') return true;
+            if (typeof p === 'number') return p >= 3;
+            return true; // 不明な文字列も午後に含めておく（安全策）
+        });
     }
 
     if (periods.length === 0) return null;
 
     return {
         periods: periods,
-        label: periods.length === 1 ? String(periods[0]) : `${periods[0]}-${periods[periods.length - 1]}`
+        label: periods.length === 1 ? String(periods[0]) : `${periods[0]}-${periods[periods.length - 1]}`,
+        isTruncated: periods.length < originalCount
     };
 }
 
@@ -990,16 +1035,27 @@ function generateClassEvents(year, options = {}) {
         // 授業日（weekdayCountがある日）のみを抽出
         const classDays = sourceData.filter(item => item.weekdayCount);
 
-        // 日付の重複を排除（Setを使用）
-        const processedDates = new Set();
+        const dateToBestCount = new Map();
 
         classDays.forEach(item => {
             const dateStr = item.date.toDateString();
-            if (!processedDates.has(dateStr)) {
-                processedDates.add(dateStr);
-                uniqueClassDays.push(item);
+            const currentCount = item.weekdayCount;
+            const existingItem = dateToBestCount.get(dateStr);
+
+            if (!existingItem) {
+                dateToBestCount.set(dateStr, item);
+            } else {
+                // より具体的な情報を優先する（数字が含まれている方を優先）
+                const currentHasDigit = /\d/.test(currentCount);
+                const existingHasDigit = /\d/.test(existingItem.weekdayCount);
+
+                if (currentHasDigit && !existingHasDigit) {
+                    dateToBestCount.set(dateStr, item);
+                }
             }
         });
+
+        uniqueClassDays = Array.from(dateToBestCount.values());
     } else {
         // データがない場合
         const startDate = new Date(year, 3, 1);
@@ -1084,22 +1140,52 @@ function generateClassEvents(year, options = {}) {
                     if (excludedDates.includes(dateStrKey)) return;
                 }
 
-                // 午前・午後のみ制限をチェック
+                // 午前・午後のみ制限をより正確にチェック
                 const allItems = sourceData.filter(d => formatDateKey(d.date) === dateStrKey);
-                const isMorningOnly = allItems.some(d =>
-                    (d.event && d.event.includes("午前")) ||
-                    (d.weekdayCount && d.weekdayCount.includes("午前"))
-                ) && !allItems.some(d =>
-                    (d.event && d.event.includes("午後")) ||
-                    (d.weekdayCount && d.weekdayCount.includes("午後"))
-                );
-                const isAfternoonOnly = allItems.some(d =>
-                    (d.event && d.event.includes("午後")) ||
-                    (d.weekdayCount && d.weekdayCount.includes("午後"))
-                ) && !allItems.some(d =>
-                    (d.event && d.event.includes("午前")) ||
-                    (d.weekdayCount && d.weekdayCount.includes("午前"))
-                );
+
+                let sessionInfo = {
+                    hasMorningIndicator: false,
+                    hasAfternoonIndicator: false,
+                    hasPriorityMorning: false,
+                    hasPriorityAfternoon: false
+                };
+
+                allItems.forEach(d => {
+                    const eventText = (d.event || "");
+                    const combined = eventText + (d.weekdayCount || "");
+                    const isMorningMatch = combined.includes("午前") || combined.includes("午後打ち切り");
+                    const isAfternoonMatch = combined.includes("午後") || combined.includes("午前打ち切り");
+
+                    if (!isMorningMatch && !isAfternoonMatch) return;
+
+                    // 授業に関係あるか (項目自体に「曜日・数字・曜授業」などの指定があるか)
+                    // C列由来のweekdayCountが全項目にコピーされているため、eventテキスト自体を重視する
+                    const isRelated = d.isSpecificWeekday || eventText.includes("曜授業") || /\d/.test(eventText);
+
+                    // 無関係なキーワード (これらが含まれる場合は、授業の制限としては採用しない)
+                    const isUnrelatedKeyword = eventText.includes("準備") || eventText.includes("後片付け") || eventText.includes("片付け") || eventText.includes("清掃") || eventText.includes("会議");
+
+                    if (isRelated) {
+                        if (isMorningMatch) sessionInfo.hasPriorityMorning = true;
+                        if (isAfternoonMatch) sessionInfo.hasPriorityAfternoon = true;
+                    } else if (!isUnrelatedKeyword) {
+                        if (isMorningMatch) sessionInfo.hasMorningIndicator = true;
+                        if (isAfternoonMatch) sessionInfo.hasAfternoonIndicator = true;
+                    }
+                });
+
+                let isMorningOnly = false;
+                let isAfternoonOnly = false;
+
+                if (sessionInfo.hasPriorityMorning || sessionInfo.hasPriorityAfternoon) {
+                    // 授業への直接指示がある場合はそれを優先（競合時は無効化）
+                    isMorningOnly = sessionInfo.hasPriorityMorning && !sessionInfo.hasPriorityAfternoon;
+                    isAfternoonOnly = sessionInfo.hasPriorityAfternoon && !sessionInfo.hasPriorityMorning;
+                } else {
+                    // 直接指示がない場合は一般指示（かつ無関係でないもの）を採用
+                    isMorningOnly = sessionInfo.hasMorningIndicator && !sessionInfo.hasAfternoonIndicator;
+                    isAfternoonOnly = sessionInfo.hasAfternoonIndicator && !sessionInfo.hasMorningIndicator;
+                }
 
                 const effectiveResult = getEffectivePeriods(schedule.period, isMorningOnly, isAfternoonOnly);
                 if (!effectiveResult) return;
@@ -1182,20 +1268,20 @@ function generateClassEvents(year, options = {}) {
 
             // 移動先での制約チェック
             const allItemsForTarget = sourceData.filter(d => formatDateKey(d.date) === dateStr);
-            const isMorningOnly = allItemsForTarget.some(d =>
-                (d.event && d.event.includes("午前")) ||
-                (d.weekdayCount && d.weekdayCount.includes("午前"))
-            ) && !allItemsForTarget.some(d =>
-                (d.event && d.event.includes("午後")) ||
-                (d.weekdayCount && d.weekdayCount.includes("午後"))
+            const morningMarkers = ["午前", "午後打ち切り", "●"];
+            const afternoonMarkers = ["午後", "午前打ち切り"];
+
+            const hasMorningMarkerTarget = allItemsForTarget.some(d =>
+                (d.event && morningMarkers.some(m => d.event.includes(m))) ||
+                (d.weekdayCount && morningMarkers.some(m => d.weekdayCount.includes(m)))
             );
-            const isAfternoonOnly = allItemsForTarget.some(d =>
-                (d.event && d.event.includes("午後")) ||
-                (d.weekdayCount && d.weekdayCount.includes("午後"))
-            ) && !allItemsForTarget.some(d =>
-                (d.event && d.event.includes("午前")) ||
-                (d.weekdayCount && d.weekdayCount.includes("午前"))
+            const hasAfternoonMarkerTarget = allItemsForTarget.some(d =>
+                (d.event && afternoonMarkers.some(m => d.event.includes(m))) ||
+                (d.weekdayCount && afternoonMarkers.some(m => d.weekdayCount.includes(m)))
             );
+
+            const isMorningOnly = hasMorningMarkerTarget && !hasAfternoonMarkerTarget;
+            const isAfternoonOnly = hasAfternoonMarkerTarget && !hasMorningMarkerTarget;
 
             const effectiveResult = getEffectivePeriods(ov.period, isMorningOnly, isAfternoonOnly);
             if (!effectiveResult) return;
@@ -1280,8 +1366,7 @@ function addMyClassesToDayCell(dayCell, date, dayEvents) {
     let showStandardClasses = true;
     let isMorningOnly = false;
     let isAfternoonOnly = false;
-
-    let weekdayCountItem = null;
+    let finalCountStr = "";
 
     if (dayEvents && dayEvents.length > 0) {
         // 中間試験チェック（中間試験が含まれる日は授業を表示しない）
@@ -1293,38 +1378,72 @@ function addMyClassesToDayCell(dayCell, date, dayEvents) {
             showStandardClasses = false;
         }
 
-        weekdayCountItem = dayEvents.find(item => item.weekdayCount);
+        // その日の全てのイベントから一番具体的な曜日情報を取得
+        dayEvents.forEach(item => {
+            if (item.weekdayCount) {
+                if (!finalCountStr || (/\d/.test(item.weekdayCount) && !/\d/.test(finalCountStr))) {
+                    finalCountStr = item.weekdayCount;
+                }
+            }
+        });
 
-
-        if (!weekdayCountItem) {
+        if (!finalCountStr) {
             showStandardClasses = false;
         } else {
-            const countStr = weekdayCountItem.weekdayCount || "";
-            // イベント名も含めて判定
-            isMorningOnly = (dayEvents.some(d => d.event && d.event.includes("午前")) || countStr.includes("午前")) &&
-                !(dayEvents.some(d => d.event && d.event.includes("午後")) || countStr.includes("午後"));
+            let sessionInfo = {
+                hasMorningIndicator: false,
+                hasAfternoonIndicator: false,
+                hasPriorityMorning: false,
+                hasPriorityAfternoon: false
+            };
 
-            isAfternoonOnly = (dayEvents.some(d => d.event && d.event.includes("午後")) || countStr.includes("午後")) &&
-                !(dayEvents.some(d => d.event && d.event.includes("午前")) || countStr.includes("午前"));
+            dayEvents.forEach(d => {
+                const eventText = (d.event || "");
+                const combined = eventText + (d.weekdayCount || "");
+                const isMorningMatch = combined.includes("午前") || combined.includes("午後打ち切り");
+                const isAfternoonMatch = combined.includes("午後") || combined.includes("午前打ち切り");
 
+                if (!isMorningMatch && !isAfternoonMatch) return;
+
+                // 授業に関係あるか (項目自体に指定があるか)
+                const isRelated = d.isSpecificWeekday || eventText.includes("曜授業") || /\d/.test(eventText);
+                const isUnrelatedKeyword = eventText.includes("準備") || eventText.includes("後片付け") || eventText.includes("片付け") || eventText.includes("清掃") || eventText.includes("会議");
+
+                if (isRelated) {
+                    if (isMorningMatch) sessionInfo.hasPriorityMorning = true;
+                    if (isAfternoonMatch) sessionInfo.hasPriorityAfternoon = true;
+                } else if (!isUnrelatedKeyword) {
+                    if (isMorningMatch) sessionInfo.hasMorningIndicator = true;
+                    if (isAfternoonMatch) sessionInfo.hasAfternoonIndicator = true;
+                }
+            });
+
+            if (sessionInfo.hasPriorityMorning || sessionInfo.hasPriorityAfternoon) {
+                isMorningOnly = sessionInfo.hasPriorityMorning && !sessionInfo.hasPriorityAfternoon;
+                isAfternoonOnly = sessionInfo.hasPriorityAfternoon && !sessionInfo.hasPriorityMorning;
+            } else {
+                isMorningOnly = sessionInfo.hasMorningIndicator && !sessionInfo.hasAfternoonIndicator;
+                isAfternoonOnly = sessionInfo.hasAfternoonIndicator && !sessionInfo.hasMorningIndicator;
+            }
         }
     } else if (typeof scheduleData !== 'undefined' && scheduleData.length > 0) {
-        // フォールバック（通常ここは通らないはず）
+        // フォールバック
         const dateStr = date.toDateString();
         const dailyItems = scheduleData.filter(item => item.date.toDateString() === dateStr);
-        weekdayCountItem = dailyItems.find(item => item.weekdayCount);
+        const weekdayCountItem = dailyItems.find(item => item.weekdayCount);
 
         if (!weekdayCountItem) {
             showStandardClasses = false;
         } else {
-            const countStr = weekdayCountItem.weekdayCount || "";
-            // イベント名も含めて判定
-            isMorningOnly = (dailyItems.some(d => d.event && d.event.includes("午前")) || countStr.includes("午前")) &&
-                !(dailyItems.some(d => d.event && d.event.includes("午後")) || countStr.includes("午後"));
+            finalCountStr = weekdayCountItem.weekdayCount || "";
+            const morningMarkers = ["午前", "午後打ち切り", "●"];
+            const afternoonMarkers = ["午後", "午前打ち切り"];
 
-            isAfternoonOnly = (dailyItems.some(d => d.event && d.event.includes("午後")) || countStr.includes("午後")) &&
-                !(dailyItems.some(d => d.event && d.event.includes("午前")) || countStr.includes("午前"));
+            const hasMorningMarker = (dailyItems.some(d => d.event && morningMarkers.some(m => d.event.includes(m))) || morningMarkers.some(m => finalCountStr.includes(m)));
+            const hasAfternoonMarker = (dailyItems.some(d => d.event && afternoonMarkers.some(m => d.event.includes(m))) || afternoonMarkers.some(m => finalCountStr.includes(m)));
 
+            isMorningOnly = hasMorningMarker && !hasAfternoonMarker;
+            isAfternoonOnly = hasAfternoonMarker && !hasMorningMarker;
         }
     } else {
         // データがない場合は表示しない（デフォルト）
@@ -1332,9 +1451,7 @@ function addMyClassesToDayCell(dayCell, date, dayEvents) {
     }
 
     if (showStandardClasses) {
-        const countStr = weekdayCountItem ? (weekdayCountItem.weekdayCount || "") : "";
-
-        const batchWeekday = getWeekdayFromCount(countStr);
+        const batchWeekday = getWeekdayFromCount(finalCountStr);
         const effectiveWeekday = batchWeekday !== null ? batchWeekday : date.getDay();
 
         const classes = getClassesForDay(date, effectiveWeekday);
@@ -1403,8 +1520,11 @@ function addMyClassesToDayCell(dayCell, date, dayEvents) {
             eventItem.dataset.date = dateStr_key;
             eventItem.dataset.period = schedule.period;
 
+            const truncatedLabel = effectiveResult.isTruncated ? '<span class="truncated-badge" style="color:#ff4d4f; font-weight:bold; font-size:0.8em;">(打ち切り)</span>' : '';
+            if (effectiveResult.isTruncated) eventItem.classList.add('truncated-event');
+
             eventItem.innerHTML = `
-                <span class="event-text">${times.start} ${cls.name} (${displayPeriod})${assignedMark}</span>
+                <span class="event-text">${times.start}～${times.end} ${cls.name} (${displayPeriod})${truncatedLabel}${assignedMark}</span>
                 <button class="event-delete-btn" onclick="deleteCalendarEvent(event, 'myclass', '${cls.id}', '${dateStr_key}', '${schedule.period}')" title="この日だけ削除">×</button>
             `;
 
@@ -1524,15 +1644,11 @@ function restoreClassDefault(id) {
 }
 window.restoreClassDefault = restoreClassDefault;
 
-// 初期化を起動
-document.addEventListener('DOMContentLoaded', function () {
-    console.log('DOMContentLoaded: 授業管理の初期化を開始します');
-    initializeMyClasses();
-});
+// 初期化を起動（app.jsから呼ばれるが、単体でも動作するように一応残す。二重実行はガードで防ぐ）
+document.addEventListener('DOMContentLoaded', initializeMyClasses);
 
 // すでに読み込まれている場合も対応
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    console.log('ドキュメント既読み込み済み: 授業管理の初期化を開始します');
     setTimeout(initializeMyClasses, 1);
 }
 
@@ -1707,9 +1823,9 @@ function showClassSchedule(classId = null) {
                 <td>${dateStr}</td>
 
                 <td style="${colorStyle}">${weekdayStr}</td>
-                <td class="center">${item.period}</td>
+                <td class="center">${item.period || ''}</td>
                 <td class="center">${timeRange}</td>
-                <td>${item.name}</td>
+                <td>${item.name || item.event || ''}</td>
                 <td>${targetLabel}</td>
                 <td>${item.location || ''}</td>
                 <td>${remark}</td>
@@ -1821,7 +1937,7 @@ function exportClassScheduleCsv() {
             item.period,
             formatTime(item.startTime),
             formatTime(item.endTime),
-            item.name,
+            item.name || item.event || '',
             targetLabel,
             item.location || '',
             item.weekdayCount || ''
@@ -2343,8 +2459,8 @@ const DEFAULT_COURSES = [
     { name: "オペレーティングシステム", grade: 5, course: "I" }, { name: "人工知能", grade: 5, course: "I" }, { name: "情報理論", grade: 5, course: "I" },
     { name: "コンピュータアーキテクチャ", grade: 5, course: "I" }, { name: "卒業研究", grade: 5, course: "I" }, { name: "応用専門概論", grade: 3, course: "common" },
     { name: "応用専門PBL1", grade: 3, course: "common" }, { name: "応用専門PBL2", grade: 4, course: "common" }, { name: "インターンシップ", grade: 4, course: "common" },
-    { name: "生活と物質", grade: 4, course: "common" }, { name: "社会と環境", grade: 4, course: "common" }, { name: "物質プロセス基礎", grade: 5, course: "common" },
-    { name: "物質デザイン概論", grade: 5, course: "common" }, { name: "防災工学", grade: 4, course: "common" }, { name: "エルゴノミクス", grade: 4, course: "common" },
+    { name: "生活と物質", grade: 4, course: "common" }, { name: "社会と環境", grade: 4, course: "common" }, { name: "物質プロセス基礎", grade: 4, course: "common" },
+    { name: "物質デザイン概論", grade: 4, course: "common" }, { name: "防災工学", grade: 4, course: "common" }, { name: "エルゴノミクス", grade: 4, course: "common" },
     { name: "食品エンジニアリング", grade: 5, course: "common" }, { name: "コスメティックス", grade: 5, course: "common" }, { name: "バイオテクノロジー", grade: 5, course: "common" },
     { name: "高純度化技術", grade: 5, course: "common" }, { name: "環境モニタリング", grade: 5, course: "common" }, { name: "エネルギー変換デバイス", grade: 5, course: "common" },
     { name: "食と健康のセンサ", grade: 5, course: "common" }, { name: "環境対応デバイス", grade: 5, course: "common" }, { name: "社会基盤構造", grade: 5, course: "common" },
@@ -2676,39 +2792,23 @@ function appendTeacherName(name) {
     const teacherInput = document.getElementById('classTeacher');
     if (!teacherInput) return;
 
-    const currentVal = teacherInput.value.trim();
-    if (currentVal) {
-        // 現在の値をカンマで分割
-        let names = currentVal.split(/[,、\s]+/).map(n => n.trim()).filter(n => n !== '');
+    // 直接追加を試みる
+    if (selectedTeachers.length < 10) {
+        if (!selectedTeachers.includes(name)) {
+            selectedTeachers.push(name);
+            updateTeachersDisplay();
+            teacherInput.value = ''; // 入力をクリア
 
-        // 入力途中の部分をチェック
-        const lastName = names[names.length - 1];
-
-        // 最後の要素が完全な教員名（ALL_TEACHERSに含まれる）かチェック
-        const isComplete = ALL_TEACHERS.some(t => t.name === lastName);
-
-        if (!isComplete && lastName !== '') {
-            // 入力中の文字列がある場合は、それを置換
-            names[names.length - 1] = name;
+            // サジェストを閉じる
+            const suggestions = document.getElementById('teacherSuggestions');
+            if (suggestions) suggestions.classList.add('hidden');
         } else {
-            // 完全な名前がある場合は、追加（重複チェック）
-            if (!names.includes(name)) {
-                names.push(name);
-            }
+            alert('既に追加されています');
         }
-
-        teacherInput.value = names.join(', ');
     } else {
-        teacherInput.value = name;
+        alert('最大10人まで登録可能です');
     }
 
-    // 次の入力の準備（カンマとスペース追加）
-    if (teacherInput.value && !teacherInput.value.endsWith(', ')) {
-        teacherInput.value += ', ';
-    }
-
-    // 入力イベントを発火させてサジェストを更新
-    teacherInput.dispatchEvent(new Event('input', { bubbles: true }));
     teacherInput.focus();
 }
 

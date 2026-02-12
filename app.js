@@ -336,17 +336,158 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeEventListeners();
 
     // バックアップ復元用のインプットを追加（動的）
-    const backupInput = document.createElement('input');
-    backupInput.type = 'file';
-    backupInput.id = 'backupInput';
-    backupInput.className = 'hidden';
-    backupInput.accept = '.json';
-    backupInput.onchange = restoreFromBackup;
-    document.body.appendChild(backupInput);
+    const backupFileInput = document.createElement('input');
+    backupFileInput.type = 'file';
+    backupFileInput.id = 'backupFileInput';
+    backupFileInput.className = 'hidden';
+    backupFileInput.accept = '.json';
+    backupFileInput.onchange = restoreFromBackup;
+    document.body.appendChild(backupFileInput);
 
     // 初回表示のために必ず一度年度リストを更新
     updateAvailableYearsAndMonths();
+    updateBackupInfo(); // バックアップ情報の初期表示
 });
+
+/**
+ * バックアップ情報の表示更新
+ */
+function updateBackupInfo() {
+    const lastBackupTime = localStorage.getItem('lastBackupTime') || '未保存';
+    const lastTimeEl = document.getElementById('lastBackupTime');
+    if (lastTimeEl) lastTimeEl.textContent = lastBackupTime;
+
+    const scheduleCountEl = document.getElementById('scheduleCountInfo');
+    if (scheduleCountEl) scheduleCountEl.textContent = `${scheduleData.length}件`;
+
+    const classesCountEl = document.getElementById('classesCountInfo');
+    if (classesCountEl) classesCountEl.textContent = `${myClasses.length}件`;
+}
+
+/**
+ * バックアップをダウンロード
+ */
+function downloadSelectiveBackup() {
+    const type = document.getElementById('backupTypeSelect').value;
+    const backupData = {};
+
+    if (type === 'all' || type === 'schedule') {
+        backupData.scheduleCache = scheduleCache;
+    }
+    if (type === 'all' || type === 'classes') {
+        backupData.myClasses = myClasses;
+        backupData.classOverrides = classOverrides;
+        // assignmentExclusionsも保存対象に含める
+        try {
+            backupData.assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
+        } catch (e) { backupData.assignmentExclusions = {}; }
+    }
+    if (type === 'all' || type === 'settings') {
+        try {
+            backupData.teacherMaster = JSON.parse(localStorage.getItem('teacherMaster') || '[]');
+            backupData.courseMaster = JSON.parse(localStorage.getItem('courseMaster') || '[]');
+        } catch (e) {
+            backupData.teacherMaster = [];
+            backupData.courseMaster = [];
+        }
+    }
+
+    backupData.timestamp = new Date().toISOString();
+    backupData.backupType = type;
+
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `backup_${type}_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    localStorage.setItem('lastBackupTime', new Date().toLocaleString());
+    updateBackupInfo();
+}
+window.downloadSelectiveBackup = downloadSelectiveBackup;
+
+/**
+ * 旧形式のバックアップダウンロード（互換性用）
+ */
+function downloadBackup() {
+    // 全データバックアップとして動作
+    const typeSelect = document.getElementById('backupTypeSelect');
+    if (typeSelect) typeSelect.value = 'all';
+    downloadSelectiveBackup();
+}
+window.downloadBackup = downloadBackup;
+
+/**
+ * バックアップから復元
+ */
+async function restoreFromBackup(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const restoreType = document.getElementById('restoreTypeSelect').value;
+
+    try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+
+        if (!confirm('データを復元しますか？（現在のデータは上書き・変更されます）')) {
+            e.target.value = '';
+            return;
+        }
+
+        let restartNeeded = false;
+
+        // スケジュールの復元
+        if (data.scheduleCache && (restoreType === 'all' || restoreType === 'schedule' || restoreType === 'merge')) {
+            if (restoreType === 'merge') {
+                scheduleCache = { ...scheduleCache, ...data.scheduleCache };
+            } else {
+                scheduleCache = data.scheduleCache;
+            }
+            saveScheduleToStorage();
+            rebuildScheduleDataFromCache();
+            restartNeeded = true;
+        }
+
+        // 授業データの復元
+        if (data.myClasses && (restoreType === 'all' || restoreType === 'classes' || restoreType === 'merge')) {
+            if (restoreType === 'merge') {
+                myClasses = [...myClasses, ...data.myClasses];
+                classOverrides = [...classOverrides, ...data.classOverrides];
+                // 重複IDの調整が必要かもしれないが、簡易的にマージ
+            } else {
+                myClasses = data.myClasses;
+                classOverrides = data.classOverrides;
+            }
+            if (data.assignmentExclusions) {
+                localStorage.setItem('assignmentExclusions', JSON.stringify(data.assignmentExclusions));
+            }
+            saveMyClasses();
+            restartNeeded = true;
+        }
+
+        // 設定の復元
+        if (data.teacherMaster && (restoreType === 'all' || restoreType === 'settings' || restoreType === 'merge')) {
+            localStorage.setItem('teacherMaster', JSON.stringify(data.teacherMaster));
+            localStorage.setItem('courseMaster', JSON.stringify(data.courseMaster));
+            restartNeeded = true;
+        }
+
+        if (restartNeeded) {
+            alert('復元が完了しました。ページを再読み込みします。');
+            location.reload();
+        } else {
+            alert('復元対象のデータが見つかりませんでした。');
+        }
+    } catch (err) {
+        console.error('Restore error:', err);
+        alert('ファイルの読み込みに失敗しました。JSON形式が正しいか確認してください。');
+    }
+    e.target.value = ''; // リセット
+}
+window.restoreFromBackup = restoreFromBackup;
 
 /**
  * scheduleDataをlocalStorageに保存
@@ -933,8 +1074,10 @@ function parseScheduleData(workbook) {
                                 return;
                             }
 
+                            const { text, weekday } = extractWeekdayFromEvent(event);
+
                             // イベントから祝日名を除去
-                            const cleanedEvent = removeHolidayNames(replaceSpecialMarks(event));
+                            const cleanedEvent = removeHolidayNames(replaceSpecialMarks(text));
 
                             // 空になったイベントはスキップ
                             if (!cleanedEvent || cleanedEvent.trim() === '') {
@@ -945,7 +1088,8 @@ function parseScheduleData(workbook) {
                                 date: dateObj,
                                 event: cleanedEvent,
                                 type: 'teacher',
-                                weekdayCount: weekdayCount,
+                                weekdayCount: weekday || weekdayCount,
+                                isSpecificWeekday: !!weekday,
                                 period: period
                             });
                             teacherEventAdded = true;
@@ -960,6 +1104,7 @@ function parseScheduleData(workbook) {
                         event: '',  // イベントなし
                         type: 'teacher',
                         weekdayCount: weekdayCount,
+                        isSpecificWeekday: true,
                         period: period
                     });
                 }
@@ -991,6 +1136,7 @@ function parseScheduleData(workbook) {
                                 event: cleanedEvent,
                                 type: 'student',
                                 weekdayCount: weekday || weekdayCount,
+                                isSpecificWeekday: !!weekday,
                                 period: period
                             });
                             studentEventAdded = true;
@@ -1005,6 +1151,7 @@ function parseScheduleData(workbook) {
                         event: '',  // イベントなし
                         type: 'student',
                         weekdayCount: weekdayCount,
+                        isSpecificWeekday: true,
                         period: period
                     });
                 }
@@ -1049,53 +1196,39 @@ function processWeekdayCount(value, dateObj) {
     try {
         let valueStr = String(value).trim();
 
-        // 丸数字を通常の数字に変換
+        // 全角英数字を半角に変換、丸数字も変換
+        valueStr = valueStr.replace(/[Ａ-Ｚａ-ｚ０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
         for (const [mark, num] of Object.entries(MARU_NUM_DICT)) {
             valueStr = valueStr.replace(new RegExp(mark, 'g'), num);
         }
 
         // --- 特殊パターンの処理 (午前木曜授業など) ---
-        // パターン: "午前[曜日]曜授業" -> その曜日の午前のみ
-        // パターン: "午後[曜日]曜授業" -> その曜日の午後のみ
-        const complexPattern = /^(午前|午後)([月火水木金土日])曜?授業/;
+        // パターン: "(午前) 火曜授業" または "火曜授業 (午前)" など
+        const complexPattern = /[【〔[（(]?\s*(午前|午後)\s*[】〕\]）)]?/;
+        const weekdayPattern = /([月火水木金土日])(曜?授業|(\d+))/;
+
         const complexMatch = valueStr.match(complexPattern);
+        const weekdayMatch = valueStr.match(weekdayPattern);
 
-        if (complexMatch) {
-            const periodType = complexMatch[1]; // "午前" or "午後"
-            const weekdayChar = complexMatch[2]; // "月", "火"...
-
-            // 既存の数値や他の情報があれば保持したいが、このパターンは通常単独で来る
-            // "木(午前のみ)" や "木(午後のみ)" のような内部形式に変換する
-            // ※数字がない場合は便宜上 "1" とする（週番号がない場合）
-            //   もし元の文字列に週番号が含まれていればそれを抽出するロジックが必要だが、
-            //   「午前木曜授業」には数字が含まれないことが多い。
-
-            // 数字が含まれているか確認
-            const numMatch = valueStr.match(/\d+/);
-            const num = numMatch ? numMatch[0] : "";
+        if (weekdayMatch) {
+            const weekdayChar = weekdayMatch[1];
+            const num = weekdayMatch[3] || ""; // 数字があれば取得
+            const periodType = complexMatch ? complexMatch[1] : "";
 
             if (periodType === "午前") {
                 return `${weekdayChar}${num}(午前のみ)`;
-            } else {
+            } else if (periodType === "午後") {
                 return `${weekdayChar}${num}(午後のみ)`;
+            } else {
+                return `${weekdayChar}${num}`;
             }
         }
 
-        // すでに「月1」「火2」などの形式になっている場合
-        // 接尾辞（例：午前のみ）が含まれていても、ここで返す
-        const weekdayPattern = /^([月火水木金土日])(\d+)/;
-        const match = valueStr.match(weekdayPattern);
-        if (match) {
-            return valueStr; // そのまま返す
-        }
-
-        // 数値から始まる場合、曜日を付与
-        // 例: "1" -> "月1", "1(午前)" -> "月1(午前)"
-        const numMatch = valueStr.match(/^(\d+)(.*)$/);
-        if (numMatch) {
-            const num = numMatch[1];
-            const suffix = numMatch[2] || '';
-
+        // 数値のみ（曜日なし）の場合、当日曜日を付与
+        const numOnlyMatch = valueStr.match(/^(\d+)(.*)$/);
+        if (numOnlyMatch) {
+            const num = numOnlyMatch[1];
+            const suffix = numOnlyMatch[2] || '';
             const weekdays = ['月', '火', '水', '木', '金', '土', '日'];
             const weekday = weekdays[dateObj.getDay() === 0 ? 6 : dateObj.getDay() - 1];
             return `${weekday}${num}${suffix}`;
@@ -1122,16 +1255,31 @@ function replaceSpecialMarks(text) {
 }
 
 function extractWeekdayFromEvent(event) {
-    // 丸数字を数字に変換
-    let processed = event;
+    if (!event) return { text: '', weekday: null };
+
+    // 全角英数字を半角に変換、丸数字も変換
+    let processed = String(event).replace(/[Ａ-Ｚａ-ｚ０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
     for (const [mark, num] of Object.entries(MARU_NUM_DICT)) {
         processed = processed.replace(new RegExp(mark, 'g'), num);
     }
 
-    const match = processed.match(/^([月火水木金土日])(\d+)/);
-    if (match) {
-        const weekday = `${match[1]}${match[2]}`;
-        const rest = processed.substring(match[0].length).trim();
+    // パターン1: "火6", "月1", "【火1】" など (場所は先頭に限らない)
+    const match1 = processed.match(/([月火水木金土日])(\d+)/);
+    if (match1) {
+        const weekday = `${match1[1]}${match1[2]}`;
+        // マッチした部分（とその前後の括弧など）を取り除き、前後の空白を調整
+        // 括弧類も含めて除去を試みる
+        const removalPattern = new RegExp(`[【〔\\[（\\(]?\\s*${match1[1]}\\s*${match1[2]}\\s*[】〕\\]）\\)]?`, 'g');
+        const rest = processed.replace(removalPattern, '').replace(/\s+/g, ' ').trim();
+        return { text: rest, weekday: weekday };
+    }
+
+    // パターン2: "火曜授業", "月曜授業" など
+    const match2 = processed.match(/([月火水木金土日])曜?授業/);
+    if (match2) {
+        const weekday = match2[1];
+        const removalPattern = new RegExp(`[【〔\\[（\\(]?\\s*${match2[1]}\\s*曜?授業\\s*[】〕\\]）\\)]?`, 'g');
+        const rest = processed.replace(removalPattern, '').replace(/\s+/g, ' ').trim();
         return { text: rest, weekday: weekday };
     }
 

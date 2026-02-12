@@ -131,7 +131,7 @@
                                 <span>📤 バックアップ</span>
                             </button>
                             <button class="btn btn-outline-primary btn-sm"
-                                onclick="document.getElementById('backupInput').click()" title="保存したJSONから復元">
+                                onclick="document.getElementById('backupFileInput').click()" title="保存したJSONから復元">
                                 <span>📥 復旧</span>
                             </button>
                             <button id="clearDataBtn" class="btn btn-outline-danger btn-sm"
@@ -250,7 +250,8 @@
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
                     <!-- バックアップ -->
-                    <div style="border: 1px solid var(--neutral-200); border-radius: 8px; padding: 15px; background: rgba(34, 197, 94, 0.05);">
+                    <div
+                        style="border: 1px solid var(--neutral-200); border-radius: 8px; padding: 15px; background: rgba(34, 197, 94, 0.05);">
                         <h3 style="margin-top: 0; font-size: 1rem; color: var(--success-600);">📤 バックアップを保存</h3>
                         <p style="font-size: 0.85rem; color: var(--neutral-600); margin: 8px 0 12px;">
                             現在のすべてのデータをJSONファイルで保存します
@@ -264,13 +265,15 @@
                                 <option value="settings">設定のみ</option>
                             </select>
                         </div>
-                        <button class="btn btn-success btn-block" onclick="downloadSelectiveBackup()" style="width: 100%; padding: 10px;">
+                        <button class="btn btn-success btn-block" onclick="downloadSelectiveBackup()"
+                            style="width: 100%; padding: 10px;">
                             💾 バックアップを保存
                         </button>
                     </div>
 
                     <!-- 復元 -->
-                    <div style="border: 1px solid var(--neutral-200); border-radius: 8px; padding: 15px; background: rgba(59, 130, 246, 0.05);">
+                    <div
+                        style="border: 1px solid var(--neutral-200); border-radius: 8px; padding: 15px; background: rgba(59, 130, 246, 0.05);">
                         <h3 style="margin-top: 0; font-size: 1rem; color: var(--primary-600);">📥 バックアップから復元</h3>
                         <p style="font-size: 0.85rem; color: var(--neutral-600); margin: 8px 0 12px;">
                             保存したバックアップファイルを選択して復元します
@@ -285,7 +288,9 @@
                                 <option value="merge">現在のデータにマージ</option>
                             </select>
                         </div>
-                        <button class="btn btn-primary btn-block" onclick="document.getElementById('backupFileInput').click()" style="width: 100%; padding: 10px;">
+                        <button class="btn btn-primary btn-block"
+                            onclick="document.getElementById('backupFileInput').click()"
+                            style="width: 100%; padding: 10px;">
                             📂 ファイルを選択
                         </button>
                     </div>
@@ -294,16 +299,20 @@
                 <!-- バックアップ履歴 -->
                 <div style="border-top: 1px solid var(--neutral-200); padding-top: 15px;">
                     <h3 style="font-size: 0.95rem; margin-bottom: 12px; color: var(--neutral-700);">📋 バックアップ情報</h3>
-                    <div id="backupInfoContainer" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
-                        <div style="background: rgba(99, 102, 241, 0.05); padding: 12px; border-radius: 6px; border-left: 3px solid var(--primary-500);">
+                    <div id="backupInfoContainer"
+                        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+                        <div
+                            style="background: rgba(99, 102, 241, 0.05); padding: 12px; border-radius: 6px; border-left: 3px solid var(--primary-500);">
                             <div style="font-size: 0.8rem; color: var(--neutral-600);">最後のバックアップ</div>
                             <div id="lastBackupTime" style="font-weight: bold; margin-top: 4px;">未保存</div>
                         </div>
-                        <div style="background: rgba(34, 197, 94, 0.05); padding: 12px; border-radius: 6px; border-left: 3px solid var(--success-500);">
+                        <div
+                            style="background: rgba(34, 197, 94, 0.05); padding: 12px; border-radius: 6px; border-left: 3px solid var(--success-500);">
                             <div style="font-size: 0.8rem; color: var(--neutral-600);">スケジュール件数</div>
                             <div id="scheduleCountInfo" style="font-weight: bold; margin-top: 4px;">0件</div>
                         </div>
-                        <div style="background: rgba(168, 85, 247, 0.05); padding: 12px; border-radius: 6px; border-left: 3px solid var(--secondary-purple);">
+                        <div
+                            style="background: rgba(168, 85, 247, 0.05); padding: 12px; border-radius: 6px; border-left: 3px solid var(--secondary-purple);">
                             <div style="font-size: 0.8rem; color: var(--neutral-600);">授業登録件数</div>
                             <div id="classesCountInfo" style="font-weight: bold; margin-top: 4px;">0件</div>
                         </div>
@@ -435,41 +444,7 @@
     </section>
     </div>
 
-    <!-- 授業日程表モーダル -->
-    <div id="classScheduleModal" class="modal hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>授業日程表 (2026年度)</h2>
-                <button class="close-modal-btn">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="schedule-table-container">
-                    <table class="schedule-table">
-                        <thead>
-                            <tr>
-                                <th>日付</th>
-                                <th>曜日</th>
-                                <th>時限</th>
-                                <th>時間</th>
-                                <th>授業名</th>
-                                <th>対象</th>
-                                <th>場所</th>
-                                <th>備考</th>
-                            </tr>
-                        </thead>
-                        <tbody id="classScheduleBody">
-                            <!-- JavaScriptで生成 -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-primary" id="csvExportScheduleBtn">📋 CSV出力</button>
-                <button class="btn btn-secondary" id="printScheduleBtn">🖨️ 印刷</button>
-                <button class="btn btn-secondary close-modal-btn">閉じる</button>
-            </div>
-        </div>
-    </div>
+
 
     <!-- 教員リストサジェスト（D&D用） - 共通で使用できるように外側に配置 -->
     <div id="teacherListContainer" class="teacher-list-container hidden">
@@ -498,7 +473,7 @@
                 <div class="class-input-form">
                     <div class="form-section">
                         <h3 class="form-section-title">基本情報</h3>
-                        
+
                         <!-- 授業名 -->
                         <div class="form-row-single">
                             <div class="form-group form-group-full" style="position: relative;">
@@ -531,17 +506,21 @@
                         </div>
 
                         <!-- 担当教員セクション -->
-                        <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid rgba(99, 102, 241, 0.15);">
+                        <div
+                            style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid rgba(99, 102, 241, 0.15);">
                             <div class="form-row-single">
                                 <div class="form-group form-group-full" style="position: relative;">
-                                    <label for="classTeacher">担当教員（複数可・最大10人） 
-                                        <span id="teacherCountBadge" style="display: none; margin-left: 8px; padding: 2px 8px; background: var(--primary-blue); color: white; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">0人</span>
+                                    <label for="classTeacher">担当教員（複数可・最大10人）
+                                        <span id="teacherCountBadge"
+                                            style="display: none; margin-left: 8px; padding: 2px 8px; background: var(--primary-blue); color: white; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">0人</span>
                                     </label>
                                     <div style="display: flex; gap: 8px; align-items: center;">
                                         <input type="text" id="classTeacher" placeholder="教員名を入力（ドラッグ＆ドロップ可）"
                                             class="form-input" style="flex: 1;">
-                                        <button type="button" id="toggleTeacherListBtn" class="btn btn-outline-secondary btn-sm"
-                                            style="padding: 8px 12px; white-space: nowrap;" title="教員リストを表示">👥 リスト</button>
+                                        <button type="button" id="toggleTeacherListBtn"
+                                            class="btn btn-outline-secondary btn-sm"
+                                            style="padding: 8px 12px; white-space: nowrap;" title="教員リストを表示">👥
+                                            リスト</button>
                                         <button type="button" id="addTeacherBtn" class="btn btn-outline-primary btn-sm"
                                             style="padding: 8px 12px; white-space: nowrap;" title="教員を追加">➕ 追加</button>
                                     </div>
@@ -550,9 +529,13 @@
                             </div>
 
                             <!-- 担当教員リスト -->
-                            <div id="selectedTeachersList" style="margin-top: 1rem; padding: 1rem; background: rgba(99, 102, 241, 0.05); border-radius: 8px; border: 1px solid rgba(99, 102, 241, 0.15); min-height: 60px;">
-                                <div id="teachersDisplay" style="display: flex; flex-wrap: wrap; gap: 8px; min-height: 40px; align-content: flex-start;">
-                                    <div class="empty-teacher-message" style="width: 100%; color: var(--neutral-500); font-size: 0.85rem;">教員を追加してください</div>
+                            <div id="selectedTeachersList"
+                                style="margin-top: 1rem; padding: 1rem; background: rgba(99, 102, 241, 0.05); border-radius: 8px; border: 1px solid rgba(99, 102, 241, 0.15); min-height: 60px;">
+                                <div id="teachersDisplay"
+                                    style="display: flex; flex-wrap: wrap; gap: 8px; min-height: 40px; align-content: flex-start;">
+                                    <div class="empty-teacher-message"
+                                        style="width: 100%; color: var(--neutral-500); font-size: 0.85rem;">教員を追加してください
+                                    </div>
                                 </div>
                             </div>
                         </div>
