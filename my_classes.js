@@ -1243,7 +1243,9 @@ function generateClassEvents(year, options = {}) {
                     semester: (month >= 4 && month <= 9) ? '前期' : '後期',
                     weekdayCount: finalWeekdayCount,
                     allDay: false,
-                    memo: cls.memo || ''
+                    memo: cls.memo || '',
+                    teachers: cls.teachers || [],
+                    departmentType: cls.departmentType
                 });
 
             }
@@ -1341,7 +1343,9 @@ function generateClassEvents(year, options = {}) {
                 weekdayCount: finalTargetCount,
                 allDay: !!cls.allDay,
                 memo: cls.memo || '',
-                isMoved: true
+                isMoved: true,
+                teachers: cls.teachers || [],
+                departmentType: cls.departmentType
             });
 
         }
@@ -1509,7 +1513,7 @@ function addMyClassesToDayCell(dayCell, date, dayEvents) {
             // 担当チェック（除外リストを確認）
             let assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
             let classExclusions = assignmentExclusions[cls.id] || [];
-            const assignedMark = ''; // (担)ラベルを非表示化（要望に基づき）
+            const assignedMark = !classExclusions.includes(dateStr_key) ? ' [担]' : '';
 
 
             const eventItem = document.createElement('div');
@@ -1602,7 +1606,7 @@ function addMyClassesToDayCell(dayCell, date, dayEvents) {
         // 担当チェック（除外リストを確認）
         let assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
         let classExclusions = assignmentExclusions[cls.id] || [];
-        const assignedMark = ''; // (担)ラベルを非表示化
+        const assignedMark = !classExclusions.includes(dateStr_iso) ? ' [担]' : '';
 
 
         const eventItem = document.createElement('div');
@@ -1731,6 +1735,9 @@ function showClassSchedule(classId = null) {
         }
     }
 
+    // 授業名・行事名が空欄の予定を除外
+    scheduleData = scheduleData.filter(item => item.name || item.event);
+
     console.log(`生成された日程表イベント数: ${scheduleData.length}`);
 
     // 特定の授業のみにフィルタリング
@@ -1791,11 +1798,16 @@ function showClassSchedule(classId = null) {
 
             const timeRange = `${formatTime(item.startTime)} - ${formatTime(item.endTime)}`;
 
-            const targetLabel = item.targetType === 'grade'
-                ? `${item.targetGrade}年全体`
-                : item.targetGrade === 1
-                    ? `${item.targetGrade}-${item.targetClass}`
-                    : `${item.targetGrade}${item.targetClass}`;
+            let targetLabel = '';
+            if (item.targetGrade) {
+                targetLabel = item.targetType === 'grade'
+                    ? `${item.targetGrade}年全体`
+                    : item.targetGrade === 1
+                        ? `${item.targetGrade}-${item.targetClass}`
+                        : `${item.targetGrade}${item.targetClass}`;
+            } else if (item.type === 'teacher' || item.type === 'student' || item.type === 'excel' || item.type === 'custom') {
+                targetLabel = item.type === 'student' ? '専攻科共通' : '共通行事';
+            }
 
             let colorStyle = '';
             if (weekday === 0) colorStyle = 'color: red; font-weight: bold;';
@@ -1863,6 +1875,11 @@ function showClassSchedule(classId = null) {
             // localStorageに保存
             localStorage.setItem('assignmentExclusions', JSON.stringify(assignmentExclusions));
             console.log('担当日設定(除外リスト)が更新されました:', assignmentExclusions);
+
+            // カレンダーを即座に更新（[担]マークの表示/非表示を反映）
+            if (typeof updateCalendar === 'function') {
+                updateCalendar();
+            }
         });
     });
 }
@@ -1888,15 +1905,40 @@ function exportClassScheduleCsv() {
     // ボタンからclassIdを取得
     const csvBtn = document.getElementById('csvExportScheduleBtn');
     const classId = csvBtn && csvBtn.dataset.classId ? parseInt(csvBtn.dataset.classId) : null;
-
     const targetYear = typeof currentYear !== 'undefined' ? currentYear : getFiscalYear(new Date());
     let scheduleData = typeof generateClassEvents === 'function' ? generateClassEvents(targetYear, { includeExclusions: false }) : [];
 
+    // 年度スケジュール(Excel)データも統合 (showClassScheduleと同様のロジック)
+    if (typeof window.getAppliedScheduleData === 'function') {
+        const annualEvents = window.getAppliedScheduleData('both');
+        if (classId) {
+            const targetCls = myClasses.find(c => String(c.id) === String(classId));
+            if (targetCls) {
+                const relevantAnnual = annualEvents.filter(item => {
+                    const isSameGrade = item.targetGrade === targetCls.targetGrade;
+                    const isSameClass = item.targetClass === targetCls.targetClass;
+                    const isMatch = (item.targetType === 'grade' && isSameGrade) || (isSameGrade && isSameClass);
+                    return isMatch;
+                });
+                scheduleData = scheduleData.concat(relevantAnnual);
+            }
+        } else {
+            scheduleData = scheduleData.concat(annualEvents);
+        }
+    }
 
     // 特定の授業のみにフィルタリング
     if (classId) {
-        scheduleData = scheduleData.filter(item => String(item.id) === String(classId));
+        scheduleData = scheduleData.filter(item => {
+            if (item.type === 'myclass') {
+                return String(item.id) === String(classId);
+            }
+            return true;
+        });
     }
+
+    // 授業名・行事名が空欄の予定を除外
+    scheduleData = scheduleData.filter(item => item.name || item.event);
 
 
     if (scheduleData.length === 0) {
@@ -1925,11 +1967,16 @@ function exportClassScheduleCsv() {
         const dateStr = formatDateKey(item.date);
         const weekdayStr = weekdays[item.date.getDay()];
 
-        const targetLabel = item.targetType === 'grade'
-            ? `${item.targetGrade}年全体`
-            : item.targetGrade === 1
-                ? `${item.targetGrade}-${item.targetClass}`
-                : `${item.targetGrade}${item.targetClass}`;
+        let targetLabel = '';
+        if (item.targetGrade) {
+            targetLabel = item.targetType === 'grade'
+                ? `${item.targetGrade}年全体`
+                : item.targetGrade === 1
+                    ? `${item.targetGrade}-${item.targetClass}`
+                    : `${item.targetGrade}${item.targetClass}`;
+        } else if (item.type === 'teacher' || item.type === 'student' || item.type === 'excel' || item.type === 'custom') {
+            targetLabel = item.type === 'student' ? '専攻科共通' : '共通行事';
+        }
 
         rows.push([
             dateStr,

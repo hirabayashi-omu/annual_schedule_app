@@ -620,6 +620,11 @@ body {
     background: hsl(0, 85%, 96%);
 }
 
+.event-item.custom {
+    border-left-color: var(--success-green);
+    background: hsl(145, 65%, 96%);
+}
+
 /* ===========================
    エクスポート セクション
    =========================== */
@@ -1069,6 +1074,7 @@ body {
         font-size: 0.95rem;
         margin-bottom: 0.75rem;
     }
+
     .modal {
         padding: 10px;
     }
@@ -1284,6 +1290,7 @@ body {
         opacity: 0;
         transform: translateY(30px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -2067,4 +2074,55 @@ body {
     gap: 0.5rem;
     margin-top: 1rem;
     cursor: pointer;
+}
+
+/* ========================================
+   ヘルプバルーン (Tooltips)
+   ======================================== */
+[data-tooltip] {
+    position: relative;
+}
+
+[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 125%;
+    left: 50%;
+    transform: translateX(-50%) translateY(10px);
+    background: var(--neutral-800);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s ease;
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+}
+
+[data-tooltip]::before {
+    content: '';
+    position: absolute;
+    bottom: 110%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: var(--neutral-800);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s ease;
+    z-index: 1000;
+}
+
+[data-tooltip]:hover::after {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+}
+
+[data-tooltip]:hover::before {
+    opacity: 1;
+    visibility: visible;
 }

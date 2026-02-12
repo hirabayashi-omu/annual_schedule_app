@@ -26,7 +26,7 @@
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <label for="globalYearSelect" style="color: white; font-weight: bold;">年度:</label>
                     <select id="globalYearSelect" class="form-select"
-                        style="width: auto; padding: 5px 10px; font-weight: bold;">
+                        style="width: auto; padding: 5px 10px; font-weight: bold;" title="表示する年度を切り替えます">
                         <!-- JSで生成 -->
                     </select>
                 </div>
@@ -35,19 +35,19 @@
 
         <!-- ナビゲーションツールバー -->
         <nav class="app-toolbar">
-            <button id="navCalendarBtn" class="nav-btn active">
+            <button id="navCalendarBtn" class="nav-btn active" data-tooltip="カレンダーで予定を表示">
                 <span class="nav-icon">📅</span>
                 <span class="nav-label">カレンダー</span>
             </button>
-            <button id="navImportBtn" class="nav-btn">
+            <button id="navImportBtn" class="nav-btn" data-tooltip="Excel読み込み・バックアップ">
                 <span class="nav-icon">📁</span>
                 <span class="nav-label">ファイル操作</span>
             </button>
-            <button id="navClassBtn" class="nav-btn">
+            <button id="navClassBtn" class="nav-btn" data-tooltip="自分の授業を登録・管理">
                 <span class="nav-icon">📖</span>
                 <span class="nav-label">授業設定</span>
             </button>
-            <button id="navSettingsBtn" class="nav-btn">
+            <button id="navSettingsBtn" class="nav-btn" data-tooltip="名簿や候補などの各種設定">
                 <span class="nav-icon">⚙️</span>
                 <span class="nav-label">各種設定</span>
             </button>
@@ -65,7 +65,7 @@
                 <div class="controls-grid">
                     <div class="control-group">
                         <label class="control-label" for="targetSelect">表示対象</label>
-                        <select id="targetSelect" class="control-select">
+                        <select id="targetSelect" class="control-select" title="カレンダーに表示する対象を選択します（本科教員向け/専攻科学生向け）">
                             <option value="teacher">本科用</option>
                             <option value="student">専攻科用</option>
                             <option value="both">両方</option>
@@ -76,7 +76,7 @@
 
                     <div class="control-group">
                         <label class="control-label" for="monthSelect">月</label>
-                        <select id="monthSelect" class="control-select"></select>
+                        <select id="monthSelect" class="control-select" title="表示する月を直接選択します"></select>
                     </div>
 
 
@@ -91,9 +91,9 @@
                 </div>
 
                 <div class="calendar-header">
-                    <button class="btn btn-secondary" id="prevMonthBtn">◀ 前月</button>
+                    <button class="btn btn-secondary" id="prevMonthBtn" title="前の月に移動します">◀ 前月</button>
                     <h3 class="calendar-title" id="calendarTitle">2026年 4月</h3>
-                    <button class="btn btn-secondary" id="nextMonthBtn">次月 ▶</button>
+                    <button class="btn btn-secondary" id="nextMonthBtn" title="次の月に移動します">次月 ▶</button>
                 </div>
 
                 <div class="calendar-grid" id="calendarGrid">
@@ -143,7 +143,7 @@
                 </div>
 
                 <!-- 読み込み済み年度の管理リスト -->
-                <div id="cachedYearsContainer" class="mt-lg"
+                <div id="cachedYearsContainer" class="mt-lg hidden"
                     style="border-top: 1px solid var(--neutral-200); padding-top: 15px;">
                     <h3 style="font-size: 0.95rem; margin-bottom: 10px; color: var(--neutral-600);">📊 読み込み済みの年度データ</h3>
                     <div class="table-container">
@@ -216,7 +216,8 @@
                         <div class="export-icon">📋</div>
                         <h3>JSON形式</h3>
                         <p>プログラムで処理しやすいJSON形式で出力</p>
-                        <button class="btn btn-success" id="exportJsonBtn">
+                        <button class="btn btn-success" id="exportJsonBtn"
+                            title="データをJSON形式でダウンロードします。他の端末への移行やシステム連携に利用できます。">
                             <span>JSON出力</span>
                         </button>
                     </div>
@@ -225,7 +226,8 @@
                         <div class="export-icon">📅</div>
                         <h3>ICAL形式</h3>
                         <p>GoogleカレンダーやOutlookで利用可能</p>
-                        <button class="btn btn-warning" id="exportIcalBtn">
+                        <button class="btn btn-warning" id="exportIcalBtn"
+                            title="カレンダー形式(iCal)で出力します。GoogleカレンダーやiPhone等で読み込めます。">
                             <span>ICAL出力</span>
                         </button>
                     </div>
@@ -234,7 +236,7 @@
                         <div class="export-icon">📄</div>
                         <h3>CSV形式</h3>
                         <p>表計算ソフトで編集可能なCSV形式</p>
-                        <button class="btn btn-primary" id="exportCsvBtn">
+                        <button class="btn btn-primary" id="exportCsvBtn" title="Excel等の表計算ソフトで編集可能な形式で出力します。">
                             <span>CSV出力</span>
                         </button>
                     </div>
@@ -258,17 +260,24 @@
                         </p>
                         <div class="form-group" style="margin-bottom: 8px;">
                             <label class="form-label" for="backupTypeSelect">バックアップ対象:</label>
-                            <select id="backupTypeSelect" class="form-select" style="padding: 6px;">
+                            <select id="backupTypeSelect" class="form-select" style="padding: 6px;"
+                                title="保存するデータの範囲を選択します">
                                 <option value="all">全データ（スケジュール＋授業＋設定）</option>
                                 <option value="schedule">スケジュールのみ</option>
                                 <option value="classes">授業登録のみ</option>
                                 <option value="settings">設定のみ</option>
                             </select>
                         </div>
-                        <button class="btn btn-success btn-block" onclick="downloadSelectiveBackup()"
-                            style="width: 100%; padding: 10px;">
-                            💾 バックアップを保存
-                        </button>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn btn-success" onclick="saveAllToLocalExplicit()"
+                                style="flex: 1; padding: 10px;" data-tooltip="編集内容をブラウザに保存">
+                                💾 すべて保存
+                            </button>
+                            <button class="btn btn-outline-success" onclick="downloadSelectiveBackup()"
+                                style="flex: 1; padding: 10px;" data-tooltip="JSON形式でファイル出力">
+                                📤 出力
+                            </button>
+                        </div>
                     </div>
 
                     <!-- 復元 -->
@@ -280,7 +289,8 @@
                         </p>
                         <div class="form-group" style="margin-bottom: 8px;">
                             <label class="form-label" for="restoreTypeSelect">復元対象:</label>
-                            <select id="restoreTypeSelect" class="form-select" style="padding: 6px;">
+                            <select id="restoreTypeSelect" class="form-select" style="padding: 6px;"
+                                title="復元する方法（上書きか追加か）を選択します">
                                 <option value="all">全データを復元</option>
                                 <option value="schedule">スケジュールのみ復元</option>
                                 <option value="classes">授業登録のみ復元</option>
@@ -334,8 +344,9 @@
                     <h3 class="form-section-title" id="timetableTitle">📆 あなたの時間割</h3>
                     <div style="display: flex; gap: 10px; align-items: center;">
                         <div class="timetable-switcher">
-                            <button class="active" onclick="switchTimetableSemester('first')">前期</button>
-                            <button onclick="switchTimetableSemester('second')">後期</button>
+                            <button class="active" onclick="switchTimetableSemester('first')"
+                                title="前期の時間割を表示します">前期</button>
+                            <button onclick="switchTimetableSemester('second')" title="後期の時間割を表示します">後期</button>
                         </div>
                     </div>
                 </div>
@@ -345,7 +356,7 @@
             </div>
 
             <div style="text-align: center; margin: 20px 0;">
-                <button class="btn btn-primary btn-lg" onclick="openClassInputModal()">
+                <button class="btn btn-primary btn-lg" onclick="openClassInputModal()" title="新しい自コマ（自分の授業）を登録します">
                     <span>➕ 授業を追加</span>
                 </button>
             </div>
@@ -354,7 +365,7 @@
             <div class="registered-classes">
                 <div class="registered-header">
                     <h3>登録済み授業（<span id="classCount">0</span>件）</h3>
-                    <button id="showClassScheduleBtn" class="btn btn-secondary btn-sm">
+                    <button id="showClassScheduleBtn" class="btn btn-secondary btn-sm" title="登録した授業の年間日程を一覧で確認します">
                         <span>📅 日程表を表示</span>
                     </button>
                 </div>
@@ -385,11 +396,12 @@
                 style="display: flex; flex-direction: column; gap: 10px; align-items: stretch;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <h3>授業候補（サジェスト）のマスター管理</h3>
-                    <button class="btn btn-primary btn-sm" onclick="openCourseEditModal()">➕ 候補授業を追加</button>
+                    <button class="btn btn-primary btn-sm" onclick="openCourseEditModal()"
+                        title="授業入力時に選択肢として表示される授業名を追加します">➕ 候補授業を追加</button>
                 </div>
                 <div class="search-box">
                     <input type="text" id="courseMasterSearch" class="form-input" placeholder="授業名で検索..."
-                        oninput="renderManageCourses()">
+                        oninput="renderManageCourses()" title="授業名でサジェストリスト内を検索します">
                 </div>
             </div>
             <div class="table-container">
@@ -417,7 +429,8 @@
                 style="display: flex; flex-direction: column; gap: 10px; align-items: stretch;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <h3>教員名簿の管理</h3>
-                    <button class="btn btn-primary btn-sm" onclick="openTeacherEditModal()">➕ 新規教員の登録</button>
+                    <button class="btn btn-primary btn-sm" onclick="openTeacherEditModal()"
+                        title="新しく教員の名前と情報を名簿に追加します">➕ 新規教員の登録</button>
                 </div>
                 <div class="search-box">
                     <input type="text" id="teacherMasterSearch" class="form-input" placeholder="氏名や所属で検索..."
@@ -710,6 +723,19 @@
                     <input type="hidden" id="quickEditId">
                     <input type="hidden" id="quickEditDate">
                     <input type="hidden" id="quickEditSourcePeriod">
+
+                    <div id="quickEditDateRangeFields" class="hidden">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                            <div class="form-group">
+                                <label for="quickEditStartDate">開始日</label>
+                                <input type="date" id="quickEditStartDate" class="form-input">
+                            </div>
+                            <div class="form-group">
+                                <label for="quickEditEndDate">終了日</label>
+                                <input type="date" id="quickEditEndDate" class="form-input">
+                            </div>
+                        </div>
+                    </div>
 
                     <div class="form-group" style="margin-bottom: 15px;">
                         <label for="quickEditName">内容 / 授業名</label>

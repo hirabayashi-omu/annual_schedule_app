@@ -665,70 +665,7 @@ window.deleteCachedYear = deleteCachedYear;
 /**
  * 読み込み済み年度リストを表示（管理用）
  */
-function renderCachedYearList() {
-    const listContainer = document.getElementById('cachedYearList'); // HTML側にこのIDが必要
-    if (!listContainer) return;
-
-    const years = Object.keys(scheduleCache).sort((a, b) => b - a); // 降順
-
-    if (years.length === 0) {
-        listContainer.innerHTML = '<p style="padding: 10px; color: #666;">読み込まれたデータはありません。</p>';
-        return;
-    }
-
-    let html = `
-    <table class="data-table" style="width: 100%; font-size: 0.9rem;">
-        <thead>
-            <tr style="background-color: #f5f5f5;">
-                <th style="padding: 8px;">年度</th>
-                <th style="padding: 8px;">読み込み元</th>
-                <th style="padding: 8px;">取込日</th>
-                <th style="padding: 8px; text-align: center;">総日数</th>
-                <th style="padding: 8px; text-align: center;">本科行事</th>
-                <th style="padding: 8px; text-align: center;">専攻科/備考</th>
-                <th style="padding: 8px; text-align: center;">授業日</th>
-                <th style="padding: 8px; text-align: center;">操作</th>
-            </tr>
-        </thead>
-        <tbody>
-    `;
-
-    years.forEach(year => {
-        const cache = scheduleCache[year];
-        const data = cache.data || [];
-        const date = new Date(cache.timestamp);
-        const dateStr = date.toLocaleDateString();
-
-        // 統計情報の計算
-        const totalItems = data.length;
-        const teacherEvents = data.filter(d => d.type === 'teacher').length;
-        // 専攻科または備考（その他）
-        const studentEvents = data.filter(d => d.type === 'student' || d.type === 'other').length;
-        // 授業日の概算（平日カウントがあるものなど）
-        const classDays = data.filter(d => d.weekdayCount).length;
-
-        // 総日数（ユニークな日付数）
-        const uniqueDates = new Set(data.map(d => d.date instanceof Date ? d.date.toDateString() : new Date(d.date).toDateString())).size;
-
-        html += `
-            <tr style="border-bottom: 1px solid #eee;">
-                <td style="padding: 8px;">${year}年度</td>
-                <td style="padding: 8px;">${cache.fileName || '-'}</td>
-                <td style="padding: 8px;">${dateStr}</td>
-                <td style="padding: 8px; text-align: center;">${uniqueDates}</td>
-                <td style="padding: 8px; text-align: center;">${teacherEvents}</td>
-                <td style="padding: 8px; text-align: center;">${studentEvents}</td>
-                <td style="padding: 8px; text-align: center;">${classDays}</td>
-                <td style="padding: 8px; text-align: center;">
-                    <button class="btn btn-danger btn-sm" onclick="deleteCachedYear(${year})" style="padding: 2px 8px; font-size: 0.8rem;">🗑️ 削除</button>
-                </td>
-            </tr>
-        `;
-    });
-
-    html += '</tbody></table>';
-    listContainer.innerHTML = html;
-}
+// 旧表示用関数は削除
 
 /**
  * （旧）インポートしたスケジュールデータを全削除
@@ -1624,7 +1561,59 @@ function createDayCell(date, target) {
         eventsContainer.appendChild(eventItem);
     });
 
+    // カスタム（新規追加）イベントを表示
+    const customEvents = classOverrides.filter(ov =>
+        ov.type === 'custom' &&
+        ov.action === 'add' &&
+        ov.data &&
+        (ov.startDate || ov.date) <= dateStr &&
+        (ov.endDate || ov.date || ov.startDate) >= dateStr
+    );
+
+    customEvents.forEach(ov => {
+        const item = ov.data;
+        let timeDisplay = '';
+        if (item.allDay === false && item.startTime) {
+            timeDisplay = item.startTime + ' ';
+        }
+
+        const eventItem = document.createElement('div');
+        eventItem.className = 'event-item custom';
+        eventItem.draggable = true;
+        eventItem.dataset.classId = ov.id;
+        eventItem.dataset.type = 'custom';
+        eventItem.dataset.date = dateStr;
+
+        eventItem.innerHTML = `
+            <span class="event-text">${timeDisplay}${item.event}</span>
+            <button class="event-delete-btn" onclick="deleteCalendarEvent(event, 'custom', '${ov.id}', '${dateStr}')" title="削除">×</button>
+        `;
+
+        eventItem.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            editCalendarEvent('custom', ov.id, dateStr);
+        });
+
+        eventItem.addEventListener('dragstart', handleEventDragStart);
+
+        let tooltip = `[カスタム] ${item.event}`;
+        if (item.location) tooltip += `\n場所: ${item.location}`;
+        if (item.memo) tooltip += `\nメモ: ${item.memo}`;
+        eventItem.title = tooltip;
+
+        eventsContainer.appendChild(eventItem);
+    });
+
     dayCell.appendChild(eventsContainer);
+
+    // セルクリックで新規追加
+    dayCell.addEventListener('click', (e) => {
+        // イベントアイテムやその中のボタンをクリックした時は反応しない
+        if (e.target.closest('.event-item') || e.target.closest('button')) return;
+
+        const newId = 'custom-' + Date.now();
+        editCalendarEvent('custom', newId, dateStr);
+    });
 
     // 自分の授業を追加（my_classes.jsから）
     if (typeof addMyClassesToDayCell === 'function') {
@@ -1800,13 +1789,20 @@ function deleteCalendarEvent(e, type, id, date, period = null) {
     if (e) e.stopPropagation();
     if (!confirm('この日だけこの項目を削除しますか？')) return;
 
-    classOverrides.push({
-        type: type,
-        id: id,
-        date: date,
-        action: 'delete',
-        period: period !== null ? String(period) : null // 1-2などのためStringで保持
-    });
+    if (type === 'custom') {
+        // カスタム予定の場合はオーバライドから物理削除（IDのみで判定）
+        classOverrides = classOverrides.filter(ov =>
+            !(ov.type === 'custom' && String(ov.id) === String(id))
+        );
+    } else {
+        classOverrides.push({
+            type: type,
+            id: id,
+            date: date,
+            action: 'delete',
+            period: period !== null ? String(period) : null // 1-2などのためStringで保持
+        });
+    }
 
 
     saveAllToLocal();
@@ -1893,6 +1889,34 @@ function editCalendarEvent(type, id, date, period) {
         document.getElementById('quickEditStartTime').value = currentStartTime;
         document.getElementById('quickEditEndTime').value = currentEndTime;
         document.getElementById('quickEditMemo').value = currentMemo;
+        document.getElementById('quickEditDateRangeFields').classList.add('hidden');
+    } else if (type === 'custom') {
+        classFields.classList.add('hidden');
+        document.getElementById('quickEditDateRangeFields').classList.remove('hidden');
+        document.getElementById('quickEditModalTitle').textContent = `${date} の新規予定追加`;
+
+        const override = classOverrides.find(ov => ov.id == id && ov.type === 'custom');
+        if (override && override.data) {
+            document.getElementById('quickEditModalTitle').textContent = `予定の編集`;
+            document.getElementById('quickEditName').value = override.data.event || '';
+            document.getElementById('quickEditLocation').value = override.data.location || '';
+            document.getElementById('quickEditStartTime').value = override.data.startTime || '';
+            document.getElementById('quickEditEndTime').value = override.data.endTime || '';
+            document.getElementById('quickEditMemo').value = override.data.memo || '';
+            document.getElementById('quickEditStartDate').value = override.startDate || override.date || date;
+            document.getElementById('quickEditEndDate').value = override.endDate || override.date || date;
+            allDayCheckbox.checked = override.data.allDay !== undefined ? override.data.allDay : true;
+        } else {
+            // 新規クリア
+            document.getElementById('quickEditName').value = '';
+            document.getElementById('quickEditLocation').value = '';
+            document.getElementById('quickEditStartTime').value = '';
+            document.getElementById('quickEditEndTime').value = '';
+            document.getElementById('quickEditMemo').value = '';
+            document.getElementById('quickEditStartDate').value = date;
+            document.getElementById('quickEditEndDate').value = date;
+            allDayCheckbox.checked = true;
+        }
     }
 
     toggleQuickEditTimeFields();
@@ -2021,6 +2045,31 @@ function handleQuickEditSubmit(e) {
                 memo: memo
             }
         });
+    } else if (type === 'custom') {
+        const startDateVal = document.getElementById('quickEditStartDate').value || date;
+        const endDateVal = document.getElementById('quickEditEndDate').value || startDateVal;
+
+        // 既存同一IDのクリア（編集対応）
+        classOverrides = classOverrides.filter(ov =>
+            !(String(ov.id) === String(id) && ov.type === 'custom')
+        );
+
+        classOverrides.push({
+            type: 'custom',
+            id: id,
+            date: startDateVal, // 下位互換用
+            startDate: startDateVal,
+            endDate: endDateVal,
+            action: 'add',
+            data: {
+                event: newName,
+                allDay: isAllDay,
+                startTime: startTime,
+                endTime: endTime,
+                location: location,
+                memo: memo
+            }
+        });
     }
 
     saveAllToLocal();
@@ -2028,6 +2077,15 @@ function handleQuickEditSubmit(e) {
     closeQuickEditModal();
 }
 window.handleQuickEditSubmit = handleQuickEditSubmit;
+
+/**
+ * 手動での「すべて保存」実行
+ */
+function saveAllToLocalExplicit() {
+    saveAllToLocal();
+    alert('すべてのデータを現在のブラウザ（LocalStorage）に保存しました。');
+}
+window.saveAllToLocalExplicit = saveAllToLocalExplicit;
 
 /**
  * フルバックアップの作成（JSON形式でダウンロード）
@@ -2192,6 +2250,31 @@ function getAppliedScheduleData(target) {
                 location: ov.data.location || '',
                 memo: ov.data.memo || ''
             });
+        } else if (ov.type === 'custom' && ov.action === 'add' && ov.data) {
+            // カスタム予定（期間対応）をエクスポートに展開
+            const sDate = parseDateKey(ov.startDate || ov.date);
+            const eDate = parseDateKey(ov.endDate || ov.date || ov.startDate);
+
+            for (let d = new Date(sDate); d <= eDate; d.setDate(d.getDate() + 1)) {
+                // ターゲット期間外はスキップ
+                if (target !== 'both') {
+                    // カスタム予定はひとまず共通行事扱い
+                }
+
+                result.push({
+                    id: ov.id,
+                    date: new Date(d),
+                    event: ov.data.event,
+                    type: 'custom',
+                    period: '',
+                    isCustom: true,
+                    allDay: ov.data.allDay !== undefined ? ov.data.allDay : true,
+                    startTime: ov.data.startTime || '',
+                    endTime: ov.data.endTime || '',
+                    location: ov.data.location || '',
+                    memo: ov.data.memo || ''
+                });
+            }
         }
     });
 
@@ -2360,11 +2443,20 @@ function exportToIcal() {
             const [eh, em] = item.endTime.split(':');
             endDt.setHours(parseInt(eh), parseInt(em), 0);
 
-            icalContent.push(`DTSTART:${formatDateForIcal(startDt)}`);
-            icalContent.push(`DTEND:${formatDateForIcal(endDt)}`);
+            // 予定あり(OPAQUE)か空き時間(TRANSPARENT)か。
+            // 時間指定のある行事は通常予定(OPAQUE)とする
+            icalContent.push(`DTSTART;TZID=Asia/Tokyo:${formatDateForIcal(startDt)}`);
+            icalContent.push(`DTEND;TZID=Asia/Tokyo:${formatDateForIcal(endDt)}`);
+            icalContent.push('TRANSP:OPAQUE');
         } else {
+            // 終日予定
+            const endDt = new Date(item.date);
+            endDt.setDate(endDt.getDate() + 1);
+            const nextDayStr = formatDateKey(endDt).replace(/-/g, '');
+
             icalContent.push(`DTSTART;VALUE=DATE:${dateStrOnly}`);
-            icalContent.push(`DTEND;VALUE=DATE:${dateStrOnly}`);
+            icalContent.push(`DTEND;VALUE=DATE:${nextDayStr}`);
+            icalContent.push('TRANSP:TRANSPARENT');
         }
 
         icalContent.push(`SUMMARY:${escapeIcalText(item.event)}`);
@@ -2377,9 +2469,12 @@ function exportToIcal() {
         if (item.memo) desc += `\n\n${item.memo}`;
         icalContent.push(`DESCRIPTION:${escapeIcalText(desc)}`);
 
-        icalContent.push(`CATEGORIES:${item.type === 'teacher' ? '本科' : '専攻科'}`);
+        let category = '行事';
+        if (item.type === 'teacher') category = '本科';
+        else if (item.type === 'student') category = '専攻科';
+
+        icalContent.push(`CATEGORIES:${category}`);
         icalContent.push('STATUS:CONFIRMED');
-        icalContent.push('TRANSP:TRANSPARENT');
         icalContent.push('END:VEVENT');
     });
 
@@ -2410,19 +2505,30 @@ function exportToIcal() {
                     : `${cls.targetGrade}${cls.targetClass}`;
 
             const dateStrOnly = formatDateKey(cls.date).replace(/-/g, '');
-            const uid = `my-class-${cls.name}-${dateStrOnly}@schedule-app`;
-            const summary = `${cls.name} (${cls.period}限 - ${targetLabel})`;
+            const uid = `my-class-${cls.id}-${dateStrOnly}@schedule-app`;
+
+            // 担当者マーク(★)の判定
+            const assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
+            const classExclusions = assignmentExclusions[cls.id] || [];
+            const isAssigned = !classExclusions.includes(formatDateKey(cls.date));
+            const assignedMark = isAssigned ? ' ★' : '';
+
+            // Summary: 授業名(学年クラス/コース) ★
+            const summary = `${cls.name}(${targetLabel})${assignedMark}`;
 
             icalContent.push('BEGIN:VEVENT');
             icalContent.push(`UID:${uid}`);
             icalContent.push(`DTSTAMP:${formatDateForIcal(new Date())}`);
 
             if (!cls.allDay && cls.startTime && cls.endTime) {
-                icalContent.push(`DTSTART:${formatDateForIcal(cls.startTime)}`);
-                icalContent.push(`DTEND:${formatDateForIcal(cls.endTime)}`);
+                icalContent.push(`DTSTART;TZID=Asia/Tokyo:${formatDateForIcal(cls.startTime)}`);
+                icalContent.push(`DTEND;TZID=Asia/Tokyo:${formatDateForIcal(cls.endTime)}`);
             } else {
+                const nextDay = new Date(cls.date);
+                nextDay.setDate(nextDay.getDate() + 1);
+                const nextDayStr = formatDateKey(nextDay).replace(/-/g, '');
                 icalContent.push(`DTSTART;VALUE=DATE:${dateStrOnly}`);
-                icalContent.push(`DTEND;VALUE=DATE:${dateStrOnly}`);
+                icalContent.push(`DTEND;VALUE=DATE:${nextDayStr}`);
             }
 
             icalContent.push(`SUMMARY:${escapeIcalText(summary)}`);
@@ -2431,9 +2537,17 @@ function exportToIcal() {
                 icalContent.push(`LOCATION:${escapeIcalText(cls.location)}`);
             }
 
-            let desc = `${cls.semester} - ${targetLabel}`;
-            if (cls.memo) desc += `\n\n${cls.memo}`;
-            icalContent.push(`DESCRIPTION:${escapeIcalText(desc)}`);
+            // Description: 教員リスト、学年、メモなどを統合
+            let descParts = [];
+            if (cls.teachers && cls.teachers.length > 0) {
+                descParts.push(`担当教員: ${cls.teachers.join('、')}`);
+            }
+            descParts.push(`対象: ${targetLabel} (${cls.departmentType === 'student' ? '専攻科' : '本科'})`);
+            descParts.push(`期間: ${cls.semester}`);
+            if (cls.period) descParts.push(`時限: ${cls.period}限`);
+            if (cls.memo) descParts.push(`\nメモ: ${cls.memo}`);
+
+            icalContent.push(`DESCRIPTION:${escapeIcalText(descParts.join('\n'))}`);
 
             icalContent.push('CATEGORIES:授業');
             icalContent.push('STATUS:CONFIRMED');
@@ -2579,14 +2693,17 @@ function exportToCsv() {
 // =============================
 // ユーティリティ関数
 // =============================
+// 以前は'Z'を付けていましたが、JST(日本標準時)としてOutlook等で正しく認識させるため、
+// タイムゾーン指定なしのローカル形式で返します。呼び出し側で TZID を指定します。
 function formatDateForIcal(date) {
+    if (!date || !(date instanceof Date)) return '';
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
     const seconds = String(date.getSeconds()).padStart(2, '0');
-    return `${year}${month}${day}T${hours}${minutes}${seconds}Z`;
+    return `${year}${month}${day}T${hours}${minutes}${seconds}`;
 }
 
 function generateUID(item) {
@@ -2644,9 +2761,10 @@ function renderCachedYearList() {
     const years = Object.keys(scheduleCache).sort((a, b) => b - a);
 
     if (years.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center">読み込み済みのデータはありません</td></tr>';
+        container.classList.add('hidden');
         return;
     }
+    container.classList.remove('hidden');
 
     tbody.innerHTML = years.map(year => {
         const info = scheduleCache[year];
