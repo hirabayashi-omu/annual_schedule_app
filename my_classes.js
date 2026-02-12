@@ -6,12 +6,21 @@
 
 
 // クラス定義
+// クラス定義
 const CLASS_OPTIONS = {
-    1: ['1', '2', '3', '4'], // 1年生: 1-1, 1-2, 1-3, 1-4
-    2: ['M', 'D', 'E', 'I'], // 2年生以上: M, D, E, I
-    3: ['M', 'D', 'E', 'I'],
-    4: ['M', 'D', 'E', 'I'],
-    5: ['M', 'D', 'E', 'I']
+    // 本科
+    teacher: {
+        1: ['1', '2', '3', '4'],
+        2: ['M', 'D', 'E', 'I'],
+        3: ['M', 'D', 'E', 'I'],
+        4: ['M', 'D', 'E', 'I'],
+        5: ['M', 'D', 'E', 'I']
+    },
+    // 専攻科
+    student: {
+        1: ['M', 'D', 'E', 'I'],
+        2: ['M', 'D', 'E', 'I']
+    }
 };
 
 const WEEKDAY_NAMES = ['日', '月', '火', '水', '木', '金', '土'];
@@ -22,6 +31,7 @@ function initializeMyClasses() {
 
     // localStorageから読み込み
     loadMyClasses();
+    console.log(`初期化後: myClasses.length=${myClasses.length}, classOverrides.length=${classOverrides.length}`);
 
     // DOM要素の存在確認
     const addBtn = document.getElementById('addClassBtn');
@@ -38,8 +48,11 @@ function initializeMyClasses() {
     console.log('DOM要素が見つかりました。イベントリスナーを設定中...');
 
     // イベントリスナー設定
-    // イベントリスナー設定
     targetType.addEventListener('change', updateTargetClassVisibility);
+    const departmentType = document.getElementById('departmentType');
+    if (departmentType) {
+        departmentType.addEventListener('change', updateGradeOptions);
+    }
     targetGrade.addEventListener('change', updateClassOptions);
     addBtn.addEventListener('click', addMyClass);
 
@@ -62,17 +75,38 @@ function initializeMyClasses() {
     console.log('イベントリスナーを設定しました');
 
     // 初期状態設定
-    updateClassOptions();
+    console.log('初期状態を設定中...');
+    updateClassYearOptions();
+    updateGradeOptions(); // これが updateClassOptions も呼ぶ
     updateTargetClassVisibility();
     updateSemesterVisibility(); // 初期表示更新
-    renderMyClassesList();
+    // updateTimetableYearOptions(); // グローバル化により不要
+    if (typeof updateAvailableYearsAndMonths === 'function') updateAvailableYearsAndMonths(); // App.jsの関数を呼び出し、年度リスト更新
+    loadTeachers(); // 教員リストをロード
+    loadCourses(); // 候補授業リストをロード
 
-    console.log('授業管理機能の初期化完了');
+    console.log(`renderMyClassesList呼び出し前: myClasses.length=${myClasses.length}`);
+    renderMyClassesList();
+    console.log('renderMyClassesList呼び出し完了');
+
+    renderManageTeachers(); // 教員リストの表示
+    renderManageCourses(); // 候補授業リストの表示
 
     // データ読み込み後、カレンダーを再描画（オーバーライド適用のため）
     if (typeof updateCalendar === 'function') {
         updateCalendar();
     }
+
+    // 検索・教員リスト機能の初期化
+    if (typeof initCourseSearch === 'function') initCourseSearch();
+    if (typeof initTeacherDragAndDrop === 'function') initTeacherDragAndDrop();
+
+    // 年度変更リスナーは app.js で一括管理されるためここでは追加しない
+
+    // デフォルトタブを「授業候補の修正」に設定
+    switchSettingsTab('courses');
+
+    console.log('授業管理機能の初期化完了');
 }
 
 // 開講期間による表示切り替え
@@ -99,17 +133,24 @@ function loadMyClasses() {
         const saved = localStorage.getItem('myClasses');
         if (saved) {
             myClasses = JSON.parse(saved);
+            console.log(`loadMyClasses: ${myClasses.length}件の授業を読み込みました`);
+        } else {
+            console.log('loadMyClasses: localStorageに授業データがありません');
+            myClasses = [];
         }
         const savedOverrides = localStorage.getItem('classOverrides');
         if (savedOverrides) {
             classOverrides = JSON.parse(savedOverrides);
+            console.log(`loadMyClasses: ${classOverrides.length}件のオーバーライドを読み込みました`);
         } else {
             classOverrides = [];
         }
+        window.classOverrides = classOverrides;
     } catch (error) {
         console.error('授業データの読み込みエラー:', error);
         myClasses = [];
         classOverrides = [];
+        window.classOverrides = classOverrides;
     }
 }
 
@@ -157,19 +198,70 @@ function updateTargetClassVisibility() {
     }
 }
 
+// 開講年度の選択肢更新
+function updateClassYearOptions() {
+    const yearSelect = document.getElementById('classYear');
+    if (!yearSelect) return;
+
+    // 現在の表示年度を基準にする
+    const baseYear = typeof currentYear !== 'undefined' ? currentYear : new Date().getFullYear();
+    // アプリ全体の利用可能年度
+    const appAvailableYears = typeof availableYears !== 'undefined' ? availableYears : [];
+
+    // 現在の年度、前後1年、および登録済み年度、年間行事予定の年度をすべて含める
+    const years = [baseYear - 1, baseYear, baseYear + 1, ...appAvailableYears];
+
+    // ユニークにしてソート
+    const uniqueYears = [...new Set(years)].sort((a, b) => a - b);
+
+    // 既に選択されている値があればそれを維持
+    const selected = yearSelect.value || baseYear;
+
+    yearSelect.innerHTML = uniqueYears.map(y =>
+        `<option value="${y}" ${y == selected ? 'selected' : ''}>${y}年度</option>`
+    ).join('');
+}
+
+// 課程に応じた学年選択肢を更新
+function updateGradeOptions() {
+    const dept = document.getElementById('departmentType').value;
+    const gradeSelect = document.getElementById('targetGrade');
+    const currentGrade = gradeSelect.value;
+
+    let maxGrade = 5; // default teacher
+    if (dept === 'student') maxGrade = 2;
+
+    let html = '';
+    for (let i = 1; i <= maxGrade; i++) {
+        html += `<option value="${i}">${i}年</option>`;
+    }
+    gradeSelect.innerHTML = html;
+
+    // 学年が範囲外になった場合は1年にリセット
+    if (parseInt(currentGrade) > maxGrade) {
+        gradeSelect.value = '1';
+    } else {
+        gradeSelect.value = currentGrade;
+    }
+
+    // クラス選択肢も更新
+    updateClassOptions();
+}
+
 // 学年に応じたクラス選択肢を更新
 function updateClassOptions() {
+    const dept = document.getElementById('departmentType').value;
     const gradeVal = document.getElementById('targetGrade').value;
     const grade = parseInt(gradeVal);
     const classSelect = document.getElementById('targetClass');
     const classGroup = document.getElementById('targetClassGroup');
     const classLabel = classGroup.querySelector('label');
-    const options = CLASS_OPTIONS[grade] || [];
+
+    const options = (CLASS_OPTIONS[dept] && CLASS_OPTIONS[dept][grade]) || [];
 
     // ラベルを変更
-    // innerHTMLを書き換えるとspanも消えるので注意
     let labelText = '';
-    if (grade === 1) {
+    if (dept === 'teacher' && grade === 1) {
         labelText = 'クラス';
     } else {
         labelText = 'コース';
@@ -188,12 +280,12 @@ function updateClassOptions() {
 
     // 選択肢を更新
     classSelect.innerHTML = options.map(cls =>
-        grade === 1
+        (dept === 'teacher' && grade === 1)
             ? `<option value="${cls}">${cls}組</option>`
             : `<option value="${cls}">${cls}コース</option>`
     ).join('');
 
-    console.log(`学年${grade}の選択肢を更新しました`);
+    console.log(`課程:${dept} 学年:${grade} の選択肢を更新しました`);
 }
 
 
@@ -202,10 +294,25 @@ function editMyClass(id) {
     const cls = myClasses.find(c => c.id === id);
     if (!cls) return;
 
+    // モーダルを開く前に値をセットする必要があるため、ここでモーダル表示
+    openClassInputModal();
+
     // フォームに値をセット
     document.getElementById('editingClassId').value = cls.id;
     document.getElementById('className').value = cls.name;
     document.getElementById('classLocation').value = cls.location || '';
+    if (document.getElementById('classTeacher')) {
+        document.getElementById('classTeacher').value = cls.teacher || '';
+    }
+
+    // 開講年度・課程の設定
+    if (cls.classYear && document.getElementById('classYear')) {
+        document.getElementById('classYear').value = cls.classYear;
+    }
+    if (cls.departmentType && document.getElementById('departmentType')) {
+        document.getElementById('departmentType').value = cls.departmentType;
+        updateGradeOptions(); // 課程変更に伴い学年選択肢更新
+    }
 
     // Select boxes
     const targetTypeSelect = document.getElementById('targetType');
@@ -250,8 +357,7 @@ function editMyClass(id) {
 
     cancelBtn.classList.remove('hidden');
 
-    // フォームへスクロール
-    document.querySelector('.class-input-form').scrollIntoView({ behavior: 'smooth' });
+    // フォームへスクロールは不要（モーダルなので）
 }
 
 // 編集キャンセル / フォームリセット
@@ -259,10 +365,19 @@ function resetForm() {
     document.getElementById('editingClassId').value = '';
     document.getElementById('className').value = '';
     document.getElementById('classLocation').value = '';
+    if (document.getElementById('classTeacher')) {
+        document.getElementById('classTeacher').value = '';
+    }
 
     // デフォルトに戻す
+    updateClassYearOptions(); // 今の年に戻す
+    if (document.getElementById('departmentType')) {
+        document.getElementById('departmentType').value = 'teacher';
+        updateGradeOptions(); // これで1年に戻るはず
+    }
+
     document.getElementById('targetType').value = 'class';
-    document.getElementById('targetGrade').value = '1';
+    // document.getElementById('targetGrade').value = '1'; // updateGradeOptionsでセットされる
 
     updateTargetClassVisibility();
     updateClassOptions();
@@ -272,11 +387,18 @@ function resetForm() {
         updateSemesterVisibility();
     }
 
+    // 時間割の選択解除
+    const selects = ['firstWeekday', 'firstPeriod', 'secondWeekday', 'secondPeriod'];
+    selects.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.selectedIndex = 0;
+    });
+
     // ボタン戻す
     const addBtn = document.getElementById('addClassBtn');
     const cancelBtn = document.getElementById('cancelEditBtn');
 
-    addBtn.innerHTML = '<span>➕ 授業を追加</span>';
+    addBtn.innerHTML = '<span>➕ 授業を保存</span>';
     addBtn.classList.remove('btn-success');
     addBtn.classList.add('btn-primary');
 
@@ -291,6 +413,9 @@ function addMyClass() {
 
     const name = document.getElementById('className').value.trim();
     const location = document.getElementById('classLocation').value.trim();
+    const teacher = document.getElementById('classTeacher') ? document.getElementById('classTeacher').value.trim() : '';
+    const classYear = parseInt(document.getElementById('classYear').value);
+    const departmentType = document.getElementById('departmentType').value;
     const targetType = document.getElementById('targetType').value;
     const targetGrade = parseInt(document.getElementById('targetGrade').value);
     const targetClass = targetType === 'class' ? document.getElementById('targetClass').value : null;
@@ -298,9 +423,9 @@ function addMyClass() {
     const semesterType = document.getElementById('semesterType').value;
 
     const firstWeekday = parseInt(document.getElementById('firstWeekday').value);
-    const firstPeriod = parseInt(document.getElementById('firstPeriod').value);
+    const firstPeriod = document.getElementById('firstPeriod').value;
     const secondWeekday = parseInt(document.getElementById('secondWeekday').value);
-    const secondPeriod = parseInt(document.getElementById('secondPeriod').value);
+    const secondPeriod = document.getElementById('secondPeriod').value;
 
     // バリデーション
     if (!name) {
@@ -319,6 +444,9 @@ function addMyClass() {
         id: isEditMode ? parseInt(idInput.value) : Date.now(),
         name,
         location,
+        teacher,
+        classYear,
+        departmentType,
         targetType,
         targetGrade,
         targetClass: targetType === 'class' ? targetClass : null,
@@ -342,9 +470,29 @@ function addMyClass() {
 
     saveMyClasses();
     renderMyClassesList();
-    resetForm(); // フォームリセット
+    closeClassInputModal(); // こちらがresetFormも呼ぶ
 
     // カレンダーを更新（授業を反映）
+    // scheduleDataに自分の授業イベントを追加
+    if (typeof generateClassEvents === 'function') {
+        try {
+            const myClassEvents = generateClassEvents(currentYear);
+            console.log(`生成された自分の授業イベント数: ${myClassEvents.length}`);
+            // scheduleDataに既存のExcelイベントは残して、myClassEvents を追加
+            // scheduleDataを再構築（既に含まれている可能性があるので一度クリア）
+            if (window.scheduleData) {
+                // Excelデータのみを取得（typeが'teacher'または'student'のもの）
+                const excelEvents = window.scheduleData.filter(item =>
+                    !item.fromMyClass // fromMyClassフラグがないもの（Excelデータ）
+                );
+                window.scheduleData = excelEvents.concat(myClassEvents);
+                console.log(`更新後のscheduleData数: ${window.scheduleData.length}`);
+            }
+        } catch (e) {
+            console.error('generateClassEvents呼び出しエラー:', e);
+        }
+    }
+
     if (typeof updateCalendar === 'function') {
         updateCalendar();
     }
@@ -358,13 +506,32 @@ function deleteMyClass(id) {
     const editingId = document.getElementById('editingClassId').value;
     if (editingId && parseInt(editingId) === id) {
         resetForm();
+        closeClassInputModal();
     }
 
     myClasses = myClasses.filter(cls => cls.id !== id);
     saveMyClasses();
     renderMyClassesList();
 
-    // カレンダーを更新
+    // カレンダーを更新（削除を反映）
+    // scheduleDataに自分の授業イベントを追加
+    if (typeof generateClassEvents === 'function') {
+        try {
+            const myClassEvents = generateClassEvents(currentYear);
+            console.log(`生成された自分の授業イベント数: ${myClassEvents.length}`);
+            // scheduleDataを再構築
+            if (window.scheduleData) {
+                const excelEvents = window.scheduleData.filter(item =>
+                    !item.fromMyClass // fromMyClassフラグがないもの（Excelデータ）
+                );
+                window.scheduleData = excelEvents.concat(myClassEvents);
+                console.log(`更新後のscheduleData数: ${window.scheduleData.length}`);
+            }
+        } catch (e) {
+            console.error('generateClassEvents呼び出しエラー:', e);
+        }
+    }
+
     if (typeof updateCalendar === 'function') {
         updateCalendar();
     }
@@ -375,18 +542,48 @@ function renderMyClassesList() {
     const listContainer = document.getElementById('classList');
     const countElement = document.getElementById('classCount');
 
-    if (!listContainer || !countElement) return;
+    if (!listContainer || !countElement) {
+        console.warn('renderMyClassesList: DOM要素が見つかりません');
+        return;
+    }
+
+    // classOverridesの初期化（未定義の場合）
+    if (typeof classOverrides === 'undefined') {
+        window.classOverrides = [];
+    }
+
+    console.log(`renderMyClassesList: myClasses.length=${myClasses.length}, classOverrides.length=${classOverrides.length}`);
 
     // 件数更新
     countElement.textContent = myClasses.length;
 
-    if (myClasses.length === 0) {
-        listContainer.innerHTML = '<p class="empty-message">まだ授業が登録されていません</p>';
+    // 選択された年度を取得 (グローバル)
+    const yearSelect = document.getElementById('globalYearSelect');
+    const selectedYear = yearSelect ? parseInt(yearSelect.value) : (typeof currentYear !== 'undefined' ? currentYear : new Date().getFullYear());
+
+    // 年度でフィルタリング
+    const filteredClasses = myClasses.filter(cls => {
+        const classYear = cls.classYear || (typeof currentYear !== 'undefined' ? currentYear : new Date().getFullYear());
+        return classYear === selectedYear;
+    });
+
+    if (filteredClasses.length === 0) {
+        console.log('renderMyClassesList: 該当年度の授業が登録されていません');
+        listContainer.innerHTML = '<p class="empty-message">この年度の授業は登録されていません</p>';
+        countElement.textContent = 0;
+        // 時間割も更新（空になるはず）
+        if (typeof renderTimetable === 'function') renderTimetable();
         return;
     }
 
-    listContainer.innerHTML = myClasses.map(cls => {
-        const hasOverride = classOverrides.some(ov => ov.id == cls.id && ov.type === 'myclass');
+    // 件数更新
+    countElement.textContent = filteredClasses.length;
+
+    listContainer.innerHTML = filteredClasses.map(cls => {
+        const hasOverride = classOverrides.some(ov => String(ov.id) === String(cls.id) && ov.type === 'myclass');
+
+        const deptLabel = cls.departmentType === 'student' ? '専攻科' : '本科';
+        const yearLabel = cls.classYear ? `[${cls.classYear}]` : '';
 
         const targetLabel = cls.targetType === 'grade'
             ? `${cls.targetGrade} 年全体`
@@ -418,9 +615,11 @@ function renderMyClassesList() {
                         ${hasOverride ? '<span class="override-badge" title="一部変更あり">⚠️ 一部変更</span>' : ''}
                     </div>
                     <div class="class-schedule">
+                        <span class="class-badge" style="background-color: #e3f2fd; color: #0d47a1;">${yearLabel} ${deptLabel}</span>
                         <span class="class-badge">${targetLabel}</span>
                         ${scheduleInfo}
                         ${cls.location ? `<span class="class-badge class-badge-location">📍 ${cls.location}</span>` : ''}
+                        ${cls.teacher ? cls.teacher.split(/[,、]+/).map(t => `<span class="class-badge" style="background: linear-gradient(135deg, #6366f1, #4338ca); color: white;">👤 ${t.trim()}</span>`).join('') : ''}
                     </div>
                 </div>
                 <div class="class-actions">
@@ -432,7 +631,15 @@ function renderMyClassesList() {
             </div>
         `;
     }).join('');
+
+    console.log('renderMyClassesList: リスト描画完了、時間割を更新');
+    if (typeof renderTimetable === 'function') {
+        renderTimetable();
+    } else {
+        console.warn('renderTimetable関数が見つかりません');
+    }
 }
+
 // グローバルスコープに登録
 window.editMyClass = editMyClass;
 window.deleteMyClass = deleteMyClass;
@@ -452,6 +659,10 @@ function getClassesForDate(date, period) {
     }
 
     return myClasses.filter(cls => {
+        // 年度チェック (classYearがない場合は全年度で有効とするか、あるいは currentYear に合わせるか)
+        // ここでは classYear が設定されていれば、その年度のみ有効とする
+        if (cls.classYear && cls.classYear !== fiscalYear) return false;
+
         // 学期ごとの設定チェック
         if (semester === 'first' && !cls.firstSemester) return false;
         if (semester === 'second' && !cls.secondSemester) return false;
@@ -461,9 +672,61 @@ function getClassesForDate(date, period) {
     });
 }
 
+// 曜日名から数値（0:日, 6:土）を取得するヘルパー
+function getWeekdayFromCount(countStr) {
+    if (!countStr) return null;
+    // "補講日"の"日"に反応しないように一時的に除去
+    const cleanStr = countStr.replace(/補講日/g, '');
+    const match = cleanStr.match(/(日|月|火|水|木|金|土)/);
+    if (!match) return null;
+    const dayName = match[1];
+    const days = ['日', '月', '火', '水', '木', '金', '土'];
+    return days.indexOf(dayName);
+}
+
+// 午前・午後のみの授業日に、時限範囲を切り詰める
+// 午前・午後のみの授業日に、時限範囲を切り詰める
+function getEffectivePeriods(periodStr, isMorningOnly, isAfternoonOnly) {
+    if (!periodStr) return null;
+    let periods = [];
+    // 全角数字を半角に変換
+    const str = String(periodStr).replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
+
+    // 区切り文字（ハイフン、全角ハイフン、波ダッシュ、全角コロンなど）で分割
+    const parts = str.split(/[-－―〜~:：]/);
+
+    if (parts.length > 1) {
+        const start = parseInt(parts[0]);
+        const end = parseInt(parts[parts.length - 1]);
+        if (isNaN(start) || isNaN(end)) return null;
+        for (let p = Math.min(start, end); p <= Math.max(start, end); p++) periods.push(p);
+    } else {
+        const p = parseInt(str);
+        if (isNaN(p)) return null;
+        periods.push(p);
+    }
+
+    if (isMorningOnly) {
+        periods = periods.filter(p => p <= 2);
+    } else if (isAfternoonOnly) {
+        periods = periods.filter(p => p >= 3);
+    }
+
+    if (periods.length === 0) return null;
+
+    return {
+        periods: periods,
+        label: periods.length === 1 ? String(periods[0]) : `${periods[0]}-${periods[periods.length - 1]}`
+    };
+}
+
+
+
+
 // 特定の日の全授業を取得（期間用）
-function getClassesForDay(date) {
-    const weekday = date.getDay();
+function getClassesForDay(date, overrideWeekday = null) {
+    const actualWeekday = date.getDay();
+    const weekday = overrideWeekday !== null ? overrideWeekday : actualWeekday;
     const month = date.getMonth() + 1;
 
     // 前期 or 後期判定
@@ -475,14 +738,19 @@ function getClassesForDay(date) {
     }
 
     return myClasses.filter(cls => {
+        // 年度チェック
+        const fiscalYear = getFiscalYear(date);
+        if (cls.classYear && cls.classYear !== fiscalYear) return false;
+
         // 学期ごとの設定チェック
         if (semester === 'first' && !cls.firstSemester) return false;
         if (semester === 'second' && !cls.secondSemester) return false;
 
         const schedule = semester === 'first' ? cls.firstSemester : cls.secondSemester;
-        return schedule.weekday === weekday;
+        return String(schedule.weekday) === String(weekday);
     });
 }
+
 
 // エクスポート用：全授業データを取得
 function getAllMyClasses() {
@@ -490,12 +758,8 @@ function getAllMyClasses() {
 }
 
 // 授業時間帯定義
-const PERIOD_TIMES = {
-    1: { start: '09:00', end: '10:35' },
-    2: { start: '10:45', end: '12:20' },
-    3: { start: '13:05', end: '14:40' },
-    4: { start: '14:50', end: '16:25' }
-};
+// PERIOD_TIMES は app.js で定義済み
+
 
 // 日付と時刻文字列からDateオブジェクトを生成
 function createDateTime(date, timeStr) {
@@ -506,8 +770,18 @@ function createDateTime(date, timeStr) {
 }
 
 // エクスポート用：特定年度の全授業イベントを生成
-function generateClassEvents(year) {
+// エクスポート用：特定年度の全授業イベントを生成
+function generateClassEvents(year, options = {}) {
     const events = [];
+    const includeExclusions = options.includeExclusions !== undefined ? options.includeExclusions : true;
+
+    // classOverridesの初期化（未定義の場合）
+    if (typeof classOverrides === 'undefined') {
+        window.classOverrides = [];
+    }
+
+    // assignmentExclusionsを取得
+    const assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
 
     // scheduleDataにアクセス（app.jsから）
     // カレンダー表示と一致させるため、オーバーライド適用済みのデータを取得
@@ -518,27 +792,42 @@ function generateClassEvents(year) {
         sourceData = scheduleData;
     }
 
-    if (sourceData.length === 0) {
-        // console.warn('scheduleDataが見つかりません。授業イベントを生成できません。');
-        return events;
+    console.log(`generateClassEvents: sourceData.length=${sourceData.length}, myClasses.length=${myClasses.length}, classOverrides.length=${classOverrides.length}`);
+
+    let uniqueClassDays = [];
+
+    if (sourceData.length > 0) {
+        // 授業日（weekdayCountがある日）のみを抽出
+        const classDays = sourceData.filter(item => item.weekdayCount);
+
+        // 日付の重複を排除（Setを使用）
+        const processedDates = new Set();
+
+        classDays.forEach(item => {
+            const dateStr = item.date.toDateString();
+            if (!processedDates.has(dateStr)) {
+                processedDates.add(dateStr);
+                uniqueClassDays.push(item);
+            }
+        });
+    } else {
+        // データがない場合
+        const startDate = new Date(year, 3, 1);
+        const endDate = new Date(year + 1, 2, 31);
+
+        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+            const day = d.getDay();
+            if (day === 0 || day === 6) continue;
+
+            uniqueClassDays.push({
+                date: new Date(d),
+                weekdayCount: null,
+                event: null
+            });
+        }
     }
 
-    // 授業日（weekdayCountがある日）のみを抽出
-    const classDays = sourceData.filter(item => item.weekdayCount);
-
-    // 日付の重複を排除（Setを使用）
-    const processedDates = new Set();
-    const uniqueClassDays = [];
-
-    classDays.forEach(item => {
-        const dateStr = item.date.toDateString();
-        if (!processedDates.has(dateStr)) {
-            processedDates.add(dateStr);
-            uniqueClassDays.push(item);
-        }
-    });
-
-    console.log(`${uniqueClassDays.length} 日のユニークな授業日が見つかりました`);
+    console.log(`${uniqueClassDays.length} 日の授業実施候補日を処理します`);
 
     // 各授業日に対して授業をチェック
     uniqueClassDays.forEach(dayData => {
@@ -551,42 +840,119 @@ function generateClassEvents(year) {
         // 指定された年度の授業日のみ
         if (fiscalYear !== year) return;
 
+        // 中間試験チェック（中間試験が含まれる日は授業を行わない）
+        // sourceDataからその日の全イベントを確認
+        const allItemsForDay = sourceData.filter(d => formatDateKey(d.date) === dateStrKey);
+        const isMidterm = allItemsForDay.some(d =>
+            (d.event && d.event.includes('中間試験')) ||
+            (d.name && d.name.includes('中間試験'))
+        );
+        if (isMidterm) {
+            console.log(`generateClassEvents: ${dateStrKey} は中間試験のためスキップします`);
+            return;
+        }
+
+
         // 前期 or 後期判定
         const semester = (month >= 4 && month <= 9) ? 'first' : 'second';
 
         // この日に該当する授業を検索
         myClasses.forEach(cls => {
+            // 年度チェック
+            if (cls.classYear && cls.classYear !== fiscalYear) return;
+
             // 学期チェック
             if (semester === 'first' && !cls.firstSemester) return;
             if (semester === 'second' && !cls.secondSemester) return;
 
             const schedule = semester === 'first' ? cls.firstSemester : cls.secondSemester;
 
+            if (!schedule) return;
+
+            // 曜日カウント（バッチ）から有効な曜日を取得
+            const countStr = dayData.weekdayCount || "";
+            const batchWeekday = getWeekdayFromCount(countStr);
+            const effectiveWeekday = batchWeekday !== null ? batchWeekday : date.getDay();
+
             // 曜日が一致する場合のみ追加
-            if (schedule.weekday === weekday) {
+            if (String(schedule.weekday) === String(effectiveWeekday)) {
+
                 // オーバライドチェック（削除または移動済みか）
                 const isOverridden = classOverrides.some(ov =>
-                    ov.id == cls.id &&
+                    String(ov.id) === String(cls.id) &&
                     ov.type === 'myclass' &&
                     ov.date === dateStrKey &&
                     (ov.action === 'delete' || ov.action === 'move') &&
-                    (ov.period === undefined || parseInt(ov.period) === schedule.period)
+                    (!ov.period || ov.period === 'null' || ov.period === 'undefined' || String(ov.period) === String(schedule.period))
                 );
+
                 if (isOverridden) return;
 
-                // 曜日カウントによる時間帯制限（午前のみ・午後のみ）をチェック
-                const countStr = dayData.weekdayCount || "";
-                const isMorningOnly = countStr.includes("午前") && !countStr.includes("午後");
-                const isAfternoonOnly = countStr.includes("午後") && !countStr.includes("午前");
+                // 担当除外チェック
+                if (!includeExclusions) {
+                    const excludedDates = assignmentExclusions[cls.id] || [];
+                    if (excludedDates.includes(dateStrKey)) return;
+                }
 
-                if (isMorningOnly && (schedule.period === 3 || schedule.period === 4)) return;
-                if (isAfternoonOnly && (schedule.period === 1 || schedule.period === 2)) return;
+                // 午前・午後のみ制限をチェック
+                const allItems = sourceData.filter(d => formatDateKey(d.date) === dateStrKey);
+                const isMorningOnly = allItems.some(d =>
+                    (d.event && d.event.includes("午前")) ||
+                    (d.weekdayCount && d.weekdayCount.includes("午前"))
+                ) && !allItems.some(d =>
+                    (d.event && d.event.includes("午後")) ||
+                    (d.weekdayCount && d.weekdayCount.includes("午後"))
+                );
+                const isAfternoonOnly = allItems.some(d =>
+                    (d.event && d.event.includes("午後")) ||
+                    (d.weekdayCount && d.weekdayCount.includes("午後"))
+                ) && !allItems.some(d =>
+                    (d.event && d.event.includes("午前")) ||
+                    (d.weekdayCount && d.weekdayCount.includes("午前"))
+                );
 
-                const times = PERIOD_TIMES[schedule.period];
+                const effectiveResult = getEffectivePeriods(schedule.period, isMorningOnly, isAfternoonOnly);
+                if (!effectiveResult) return;
+
+                const displayPeriod = effectiveResult.label;
+                const activePeriods = effectiveResult.periods;
+
+                // 時限の解析
+                const PERIOD_TIMES_LOCAL = window.PERIOD_TIMES || (typeof PERIOD_TIMES !== 'undefined' ? PERIOD_TIMES : {});
+                let times = PERIOD_TIMES_LOCAL[displayPeriod];
+
+                if (!times) {
+                    const firstTimes = PERIOD_TIMES_LOCAL[activePeriods[0]];
+                    const lastTimes = PERIOD_TIMES_LOCAL[activePeriods[activePeriods.length - 1]];
+                    if (firstTimes && lastTimes) {
+                        times = { start: firstTimes.start, end: lastTimes.end };
+                    }
+                }
+
+                if (!times) {
+                    console.warn(`時限 "${displayPeriod}" の時間設定が見つかりません`);
+                    return;
+                }
+
                 const startTime = createDateTime(date, times.start);
                 const endTime = createDateTime(date, times.end);
 
+
+
+                // 補講日チェック
+                const allItemsForDay = sourceData.filter(d => formatDateKey(d.date) === dateStrKey);
+                const isDayMakeup = allItemsForDay.some(d =>
+                    (d.event && d.event.includes('補講日')) ||
+                    (d.weekdayCount && d.weekdayCount.includes('補講日'))
+                );
+                let finalWeekdayCount = countStr;
+                if (isDayMakeup && !finalWeekdayCount.includes('補講日')) {
+                    finalWeekdayCount = finalWeekdayCount ? `${finalWeekdayCount} (補講日)` : '補講日';
+                }
+
                 events.push({
+                    id: cls.id,
+                    type: 'myclass',
                     date: new Date(date),
                     startTime: startTime,
                     endTime: endTime,
@@ -595,15 +961,20 @@ function generateClassEvents(year) {
                     targetType: cls.targetType,
                     targetGrade: cls.targetGrade,
                     targetClass: cls.targetClass,
-                    period: schedule.period,
-                    semester: semester === 'first' ? '前期' : '後期',
-                    weekdayCount: dayData.weekdayCount
+                    period: displayPeriod,
+
+
+                    semester: (month >= 4 && month <= 9) ? '前期' : '後期',
+                    weekdayCount: finalWeekdayCount,
+                    allDay: false,
+                    memo: cls.memo || ''
                 });
+
             }
         });
     });
 
-    // オーバライドによる追加分（移動先）を処理
+    // 移動先
     classOverrides.forEach(ov => {
         if (ov.type === 'myclass' && ov.action === 'move' && ov.data) {
             const date = parseDateKey(ov.date);
@@ -611,24 +982,74 @@ function generateClassEvents(year) {
             if (fiscalYear !== year) return;
 
             const cls = ov.data;
-            let startTime, endTime;
-            if (cls.allDay) {
-                // 終日の場合は 00:00 - 00:00 (iCal export handles this as DATE type)
-                startTime = createDateTime(date, '00:00');
-                endTime = createDateTime(date, '00:00');
-            } else if (cls.startTime && cls.endTime) {
-                startTime = createDateTime(date, cls.startTime);
-                endTime = createDateTime(date, cls.endTime);
-            } else {
-                const times = PERIOD_TIMES[ov.period] || { start: '09:00', end: '10:35' };
-                startTime = createDateTime(date, times.start);
-                endTime = createDateTime(date, times.end);
+            const dateStr = ov.date;
+
+            // 担当除外チェック
+            if (!includeExclusions) {
+                const excludedDates = assignmentExclusions[cls.id] || [];
+                if (excludedDates.includes(dateStr)) return;
             }
 
-            // 曜日カウントを取得
-            const dayData = scheduleData.find(d => d.date.toDateString() === date.toDateString());
+            // 移動先での制約チェック
+            const allItemsForTarget = sourceData.filter(d => formatDateKey(d.date) === dateStr);
+            const isMorningOnly = allItemsForTarget.some(d =>
+                (d.event && d.event.includes("午前")) ||
+                (d.weekdayCount && d.weekdayCount.includes("午前"))
+            ) && !allItemsForTarget.some(d =>
+                (d.event && d.event.includes("午後")) ||
+                (d.weekdayCount && d.weekdayCount.includes("午後"))
+            );
+            const isAfternoonOnly = allItemsForTarget.some(d =>
+                (d.event && d.event.includes("午後")) ||
+                (d.weekdayCount && d.weekdayCount.includes("午後"))
+            ) && !allItemsForTarget.some(d =>
+                (d.event && d.event.includes("午前")) ||
+                (d.weekdayCount && d.weekdayCount.includes("午前"))
+            );
+
+            const effectiveResult = getEffectivePeriods(ov.period, isMorningOnly, isAfternoonOnly);
+            if (!effectiveResult) return;
+
+            const displayPeriod = effectiveResult.label;
+            const activePeriods = effectiveResult.periods;
+
+            // 移動先での解析
+            const PERIOD_TIMES_LOCAL = window.PERIOD_TIMES || (typeof PERIOD_TIMES !== 'undefined' ? PERIOD_TIMES : {});
+            let times = PERIOD_TIMES_LOCAL[displayPeriod];
+
+            if (!times) {
+                const firstTimes = PERIOD_TIMES_LOCAL[activePeriods[0]];
+                const lastTimes = PERIOD_TIMES_LOCAL[activePeriods[activePeriods.length - 1]];
+                if (firstTimes && lastTimes) {
+                    times = { start: firstTimes.start, end: lastTimes.end };
+                }
+            }
+
+            if (!times) times = { start: '09:00', end: '10:35' }; // デフォルト
+
+            const startTime = createDateTime(date, times.start);
+            const endTime = createDateTime(date, times.end);
+
+
+
+            // 移動先での補講日チェック
+            // allItemsForTargetは既に定義済み
+            const isTargetMakeup = allItemsForTarget.some(d =>
+                (d.event && d.event.includes('補講日')) ||
+                (d.weekdayCount && d.weekdayCount.includes('補講日'))
+            );
+
+            let finalTargetCount = countStr;
+            if (isTargetMakeup && !finalTargetCount.includes('補講日')) {
+                finalTargetCount = finalTargetCount ? `${finalTargetCount} (補講日)` : '補講日';
+            }
+            if (!finalTargetCount && !isTargetMakeup) {
+                finalTargetCount = '[移動]';
+            }
 
             events.push({
+                id: cls.id || ov.id,
+                type: 'myclass',
                 date: new Date(date),
                 startTime: startTime,
                 endTime: endTime,
@@ -637,18 +1058,23 @@ function generateClassEvents(year) {
                 targetType: cls.targetType,
                 targetGrade: cls.targetGrade,
                 targetClass: cls.targetClass,
-                period: ov.period,
+                period: displayPeriod,
+
+
                 semester: (date.getMonth() + 1 >= 4 && date.getMonth() + 1 <= 9) ? '前期' : '後期',
-                weekdayCount: dayData ? dayData.weekdayCount : '[移動]',
+                weekdayCount: finalTargetCount,
                 allDay: !!cls.allDay,
-                memo: cls.memo || ''
+                memo: cls.memo || '',
+                isMoved: true
             });
+
         }
     });
 
     console.log(`${events.length} 件の授業イベントを生成しました`);
     return events;
 }
+
 
 // グローバルスコープに登録
 window.getAllMyClasses = getAllMyClasses;
@@ -665,28 +1091,50 @@ function addMyClassesToDayCell(dayCell, date, dayEvents) {
     let isMorningOnly = false;
     let isAfternoonOnly = false;
 
+    let weekdayCountItem = null;
+
     if (dayEvents && dayEvents.length > 0) {
-        const weekdayCountItem = dayEvents.find(item => item.weekdayCount);
+        // 中間試験チェック（中間試験が含まれる日は授業を表示しない）
+        const isMidterm = dayEvents.some(item =>
+            (item.event && item.event.includes('中間試験')) ||
+            (item.name && item.name.includes('中間試験'))
+        );
+        if (isMidterm) {
+            showStandardClasses = false;
+        }
+
+        weekdayCountItem = dayEvents.find(item => item.weekdayCount);
+
 
         if (!weekdayCountItem) {
             showStandardClasses = false;
         } else {
             const countStr = weekdayCountItem.weekdayCount || "";
-            isMorningOnly = countStr.includes("午前") && !countStr.includes("午後");
-            isAfternoonOnly = countStr.includes("午後") && !countStr.includes("午前");
+            // イベント名も含めて判定
+            isMorningOnly = (dayEvents.some(d => d.event && d.event.includes("午前")) || countStr.includes("午前")) &&
+                !(dayEvents.some(d => d.event && d.event.includes("午後")) || countStr.includes("午後"));
+
+            isAfternoonOnly = (dayEvents.some(d => d.event && d.event.includes("午後")) || countStr.includes("午後")) &&
+                !(dayEvents.some(d => d.event && d.event.includes("午前")) || countStr.includes("午前"));
+
         }
     } else if (typeof scheduleData !== 'undefined' && scheduleData.length > 0) {
         // フォールバック（通常ここは通らないはず）
         const dateStr = date.toDateString();
         const dailyItems = scheduleData.filter(item => item.date.toDateString() === dateStr);
-        const weekdayCountItem = dailyItems.find(item => item.weekdayCount);
+        weekdayCountItem = dailyItems.find(item => item.weekdayCount);
 
         if (!weekdayCountItem) {
             showStandardClasses = false;
         } else {
             const countStr = weekdayCountItem.weekdayCount || "";
-            isMorningOnly = countStr.includes("午前") && !countStr.includes("午後");
-            isAfternoonOnly = countStr.includes("午後") && !countStr.includes("午前");
+            // イベント名も含めて判定
+            isMorningOnly = (dailyItems.some(d => d.event && d.event.includes("午前")) || countStr.includes("午前")) &&
+                !(dailyItems.some(d => d.event && d.event.includes("午後")) || countStr.includes("午後"));
+
+            isAfternoonOnly = (dailyItems.some(d => d.event && d.event.includes("午後")) || countStr.includes("午後")) &&
+                !(dailyItems.some(d => d.event && d.event.includes("午前")) || countStr.includes("午前"));
+
         }
     } else {
         // データがない場合は表示しない（デフォルト）
@@ -694,34 +1142,68 @@ function addMyClassesToDayCell(dayCell, date, dayEvents) {
     }
 
     if (showStandardClasses) {
-        const classes = getClassesForDay(date);
+        const countStr = weekdayCountItem ? (weekdayCountItem.weekdayCount || "") : "";
+
+        const batchWeekday = getWeekdayFromCount(countStr);
+        const effectiveWeekday = batchWeekday !== null ? batchWeekday : date.getDay();
+
+        const classes = getClassesForDay(date, effectiveWeekday);
         classes.forEach(cls => {
+
             const semester = (date.getMonth() + 1) >= 4 && (date.getMonth() + 1) <= 9 ? 'first' : 'second';
             if (semester === 'first' && !cls.firstSemester) return;
             if (semester === 'second' && !cls.secondSemester) return;
 
             const schedule = semester === 'first' ? cls.firstSemester : cls.secondSemester;
 
-            if (isMorningOnly && (schedule.period === 3 || schedule.period === 4)) return;
-            if (isAfternoonOnly && (schedule.period === 1 || schedule.period === 2)) return;
+            // 有効な時限を取得（午前・午後制限による切り詰め対応）
+            const effectiveResult = getEffectivePeriods(schedule.period, isMorningOnly, isAfternoonOnly);
+            if (!effectiveResult) return;
 
-            const times = PERIOD_TIMES[schedule.period];
+            const displayPeriod = effectiveResult.label;
+            const activePeriods = effectiveResult.periods;
+
+            // 時限の解析
+            const PERIOD_TIMES_LOCAL = window.PERIOD_TIMES || PERIOD_TIMES;
+            let times = PERIOD_TIMES_LOCAL[displayPeriod];
+
+            if (!times) {
+                const firstTimes = PERIOD_TIMES_LOCAL[activePeriods[0]];
+                const lastTimes = PERIOD_TIMES_LOCAL[activePeriods[activePeriods.length - 1]];
+                if (firstTimes && lastTimes) {
+                    times = { start: firstTimes.start, end: lastTimes.end };
+                }
+            }
+
+            if (!times) times = { start: '--:--', end: '--:--' };
+
+            const departmentShort = cls.departmentType === 'student' ? '専' : '本';
+
             const targetLabel = cls.targetType === 'grade'
-                ? `${cls.targetGrade}年`
+                ? `[${departmentShort}${cls.targetGrade}]`
                 : cls.targetGrade === 1
-                    ? `${cls.targetGrade}-${cls.targetClass}`
-                    : `${cls.targetGrade}${cls.targetClass}`;
+                    ? `[${departmentShort}${cls.targetGrade}-${cls.targetClass}]`
+                    : `[${departmentShort}${cls.targetGrade}${cls.targetClass}]`;
 
             const dateStr_key = formatDateKey(date);
             const isOverridden = classOverrides.some(ov =>
-                ov.id == cls.id &&
+                String(ov.id) === String(cls.id) &&
                 ov.type === 'myclass' &&
                 ov.date === dateStr_key &&
                 (ov.action === 'delete' || ov.action === 'move') &&
-                parseInt(ov.period) === schedule.period
+                (!ov.period || ov.period === 'null' || ov.period === 'undefined' || String(ov.period) === String(schedule.period))
             );
 
+
+
+
             if (isOverridden) return;
+
+            // 担当チェック（除外リストを確認）
+            let assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
+            let classExclusions = assignmentExclusions[cls.id] || [];
+            const assignedMark = ''; // (担)ラベルを非表示化（要望に基づき）
+
 
             const eventItem = document.createElement('div');
             eventItem.className = 'event-item my-class';
@@ -732,9 +1214,11 @@ function addMyClassesToDayCell(dayCell, date, dayEvents) {
             eventItem.dataset.period = schedule.period;
 
             eventItem.innerHTML = `
-                <span class="event-text">${times.start} ${cls.name} (${targetLabel})</span>
-                <button class="event-delete-btn" onclick="deleteCalendarEvent(event, 'myclass', '${cls.id}', '${dateStr_key}', ${schedule.period})" title="この日だけ削除">×</button>
+                <span class="event-text">${times.start} ${cls.name} (${displayPeriod})${assignedMark}</span>
+                <button class="event-delete-btn" onclick="deleteCalendarEvent(event, 'myclass', '${cls.id}', '${dateStr_key}', '${schedule.period}')" title="この日だけ削除">×</button>
             `;
+
+
 
             eventItem.addEventListener('dblclick', () => editCalendarEvent('myclass', cls.id, dateStr_key, schedule.period));
 
@@ -760,9 +1244,10 @@ function addMyClassesToDayCell(dayCell, date, dayEvents) {
             String(dov.id) === String(ov.id) &&
             dov.type === 'myclass' &&
             (dov.action === 'delete' || (dov.action === 'move' && !dov.data)) &&
-            parseInt(dov.period) === parseInt(ov.period)
+            String(dov.period) === String(ov.period)
         )
     );
+
 
     addedOverrides.forEach(ov => {
         const cls = ov.data;
@@ -776,16 +1261,39 @@ function addMyClassesToDayCell(dayCell, date, dayEvents) {
             timeDisplay = cls.startTime + ' ';
             fullTimeRange = `${cls.startTime}～${cls.endTime}`;
         } else {
-            const times = PERIOD_TIMES[ov.period] || { start: '--:--', end: '--:--' };
+            const periodData = ov.period;
+            const PERIOD_TIMES_LOCAL = window.PERIOD_TIMES || PERIOD_TIMES;
+            let times = PERIOD_TIMES_LOCAL[periodData];
+
+            // 複数時限対応
+            if (!times && typeof periodData === 'string' && periodData.includes('-')) {
+                const parts = periodData.split('-');
+                const first = PERIOD_TIMES_LOCAL[parts[0]];
+                const last = PERIOD_TIMES_LOCAL[parts[parts.length - 1]];
+                if (first && last) {
+                    times = { start: first.start, end: last.end };
+                }
+            }
+
+
+            if (!times) times = { start: '--:--', end: '--:--' }; // フォールバック
             timeDisplay = times.start + ' ';
             fullTimeRange = `${times.start}～${times.end}`;
         }
 
+        const departmentShort = cls.departmentType === 'student' ? '専' : '本';
+
         const targetLabel = cls.targetType === 'grade'
-            ? `${cls.targetGrade}年`
+            ? `[${departmentShort}${cls.targetGrade}]`
             : cls.targetGrade === 1
-                ? `${cls.targetGrade}-${cls.targetClass}`
-                : `${cls.targetGrade}${cls.targetClass}`;
+                ? `[${departmentShort}${cls.targetGrade}-${cls.targetClass}]`
+                : `[${departmentShort}${cls.targetGrade}${cls.targetClass}]`;
+
+        // 担当チェック（除外リストを確認）
+        let assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
+        let classExclusions = assignmentExclusions[cls.id] || [];
+        const assignedMark = ''; // (担)ラベルを非表示化
+
 
         const eventItem = document.createElement('div');
         eventItem.className = 'event-item my-class moved';
@@ -796,9 +1304,10 @@ function addMyClassesToDayCell(dayCell, date, dayEvents) {
         eventItem.dataset.period = ov.period;
 
         eventItem.innerHTML = `
-            <span class="event-text">${timeDisplay}${cls.name} (${targetLabel})</span>
-            <button class="event-delete-btn" onclick="deleteCalendarEvent(event, 'myclass', '${cls.id}', '${dateStr_iso}', ${ov.period})" title="この日だけ削除">×</button>
+            <span class="event-text">${timeDisplay}${cls.name}${assignedMark}</span>
+            <button class="event-delete-btn" onclick="deleteCalendarEvent(event, 'myclass', '${cls.id}', '${dateStr_iso}', '${ov.period}')" title="この日だけ削除">×</button>
         `;
+
 
         eventItem.addEventListener('dblclick', () => editCalendarEvent('myclass', cls.id, dateStr_iso, ov.period));
 
@@ -857,13 +1366,22 @@ function showClassSchedule(classId = null) {
 
     const modalTitle = modal.querySelector('.modal-header h2');
 
-    // 対象年度を決定（app.jsのcurrentYear優先、なければ現在日時より算出）
+    // 対象年度を決定
+    // 1. 時間割で選択された年度 (timetableYearSelect)
+    // 2. app.jsのcurrentYear
+    // 3. 現在日時より算出
     let targetYear;
-    try {
-        targetYear = typeof currentYear !== 'undefined' ? currentYear : getFiscalYear(new Date());
-    } catch (e) {
-        console.warn('currentYear または getFiscalYear の取得に失敗しました', e);
-        targetYear = new Date().getFullYear();
+    const timetableYearSelect = document.getElementById('timetableYearSelect');
+
+    if (timetableYearSelect && timetableYearSelect.value) {
+        targetYear = parseInt(timetableYearSelect.value);
+    } else {
+        try {
+            targetYear = typeof currentYear !== 'undefined' ? currentYear : getFiscalYear(new Date());
+        } catch (e) {
+            console.warn('currentYear または getFiscalYear の取得に失敗しました', e);
+            targetYear = new Date().getFullYear();
+        }
     }
 
     // タイトルを更新
@@ -882,26 +1400,70 @@ function showClassSchedule(classId = null) {
         }
     }
 
-    let scheduleData = typeof generateClassEvents === 'function' ? generateClassEvents(targetYear) : [];
+    console.log(`myClasses数: ${myClasses.length}, classId: ${classId}`);
+    let scheduleData = typeof generateClassEvents === 'function' ? generateClassEvents(targetYear, { includeExclusions: true }) : [];
+
+    // 年度スケジュール(Excel)データも統合
+    if (typeof window.getAppliedScheduleData === 'function') {
+        const annualEvents = window.getAppliedScheduleData('both');
+        // 現在のフィルタリング条件に合わせて追加
+        if (classId) {
+            const targetCls = myClasses.find(c => String(c.id) === String(classId));
+            if (targetCls) {
+                const relevantAnnual = annualEvents.filter(item => {
+                    // クラス名、学年、クラスが一致するものを抽出
+                    const isSameGrade = item.targetGrade === targetCls.targetGrade;
+                    const isSameClass = item.targetClass === targetCls.targetClass;
+                    const isMatch = (item.targetType === 'grade' && isSameGrade) || (isSameGrade && isSameClass);
+                    return isMatch;
+                });
+                scheduleData = scheduleData.concat(relevantAnnual);
+            }
+        } else {
+            // 全体表示の場合は全て結合
+            scheduleData = scheduleData.concat(annualEvents);
+        }
+    }
+
+    console.log(`生成された日程表イベント数: ${scheduleData.length}`);
 
     // 特定の授業のみにフィルタリング
     if (classId) {
-        // classIdは数値か文字列か確認が必要だが、通常ID比較
         scheduleData = scheduleData.filter(item => {
-            // item.name で判定するのは不確実なので、generateClassEventsでIDを含めるのがベストだが
-            // 現状の item 構造には classId が含まれていない可能性が高い。
-            // generateClassEvents を修正するか、名前でマッチングする。
-            // ここでは名前マッチングを試みる（同名授業がある場合注意）
-            const cls = myClasses.find(c => c.id === classId);
-            return cls && item.name === cls.name;
+            if (item.type === 'myclass') {
+                return String(item.id) === String(classId);
+            }
+            return true; // Excelイベントはそのまま表示
         });
+    }
+
+
+
+
+    // テーブルヘッダーを更新（チェックボックス列を追加）
+    const thead = modal.querySelector('table.schedule-table thead');
+    if (thead) {
+        thead.innerHTML = `
+            <tr>
+                <th style="width: 40px;" title="実施/担当設定">担当</th>
+                <th style="width: 80px;">日付</th>
+                <th style="width: 40px;">曜</th>
+                <th style="width: 50px;">時限</th>
+                <th style="width: 110px;">時間</th>
+                <th>授業名</th>
+                <th>クラス</th>
+                <th>場所</th>
+                <th>備考</th>
+            </tr>
+        `;
     }
 
     // テーブルをクリア
     tbody.innerHTML = '';
 
     if (scheduleData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="center">授業予定が見つかりません。授業を登録するか、Excelファイルを読み込んでください。</td></tr>';
+        console.warn('授業予定が見つかりません');
+        tbody.innerHTML = '<tr><td colspan="9" class="center">授業予定が見つかりません。授業を登録するか、Excelファイルを読み込んでください。</td></tr>';
     } else {
         // 日付順にソート (generateClassEventsですでにソートされているはずだが念のため)
         scheduleData.sort((a, b) => a.date - b.date);
@@ -938,8 +1500,22 @@ function showClassSchedule(classId = null) {
                 remark = remark ? `${remark} / ${item.memo}` : item.memo;
             }
 
+            // 日付キーを作成 (YYYY-MM-DD形式)
+            const dateKey = formatDateKey(item.date);
+            const classIdToUse = item.id || classId;
+
+            // チェックボックスの状態を取得 (デフォルトTrueにするため、除外リストを使用)
+            let assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
+            let classExclusions = assignmentExclusions[classIdToUse] || [];
+            // 除外リストに含まれていなければTrue（チェック状態）
+            const isChecked = !classExclusions.includes(dateKey);
+
             tr.innerHTML = `
+                <td class="center">
+                    <input type="checkbox" class="schedule-checkbox" data-class-id="${classIdToUse}" data-date-key="${dateKey}" ${isChecked ? 'checked' : ''}>
+                </td>
                 <td>${dateStr}</td>
+
                 <td style="${colorStyle}">${weekdayStr}</td>
                 <td class="center">${item.period}</td>
                 <td class="center">${timeRange}</td>
@@ -954,6 +1530,35 @@ function showClassSchedule(classId = null) {
 
     // モーダルを表示
     modal.classList.remove('hidden');
+
+    // チェックボックスのイベントリスナーを設定
+    const checkboxes = tbody.querySelectorAll('.schedule-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+            const classId = e.target.dataset.classId;
+            const dateKey = e.target.dataset.dateKey;
+
+            // assignmentExclusionsオブジェクトを取得または初期化
+            let assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
+            if (!assignmentExclusions[classId]) {
+                assignmentExclusions[classId] = [];
+            }
+
+            // チェックOFF（担当しない）の場合、除外リストに追加
+            if (!e.target.checked) {
+                if (!assignmentExclusions[classId].includes(dateKey)) {
+                    assignmentExclusions[classId].push(dateKey);
+                }
+            } else {
+                // チェックON（担当する）の場合、除外リストから削除
+                assignmentExclusions[classId] = assignmentExclusions[classId].filter(d => d !== dateKey);
+            }
+
+            // localStorageに保存
+            localStorage.setItem('assignmentExclusions', JSON.stringify(assignmentExclusions));
+            console.log('担当日設定(除外リスト)が更新されました:', assignmentExclusions);
+        });
+    });
 }
 
 // モーダルを閉じる
@@ -963,6 +1568,9 @@ function closeClassScheduleModal() {
         modal.classList.add('hidden');
     }
 }
+
+window.showClassSchedule = showClassSchedule;
+window.closeClassScheduleModal = closeClassScheduleModal;
 
 // 印刷機能
 window.printClassSchedule = function () {
@@ -976,15 +1584,14 @@ function exportClassScheduleCsv() {
     const classId = csvBtn && csvBtn.dataset.classId ? parseInt(csvBtn.dataset.classId) : null;
 
     const targetYear = typeof currentYear !== 'undefined' ? currentYear : getFiscalYear(new Date());
-    let scheduleData = typeof generateClassEvents === 'function' ? generateClassEvents(targetYear) : [];
+    let scheduleData = typeof generateClassEvents === 'function' ? generateClassEvents(targetYear, { includeExclusions: false }) : [];
+
 
     // 特定の授業のみにフィルタリング
     if (classId) {
-        scheduleData = scheduleData.filter(item => {
-            const cls = myClasses.find(c => c.id === classId);
-            return cls && item.name === cls.name;
-        });
+        scheduleData = scheduleData.filter(item => String(item.id) === String(classId));
     }
+
 
     if (scheduleData.length === 0) {
         alert('出力する授業データがありません。');
@@ -1055,7 +1662,14 @@ function exportClassScheduleCsv() {
 window.exportClassScheduleCsv = exportClassScheduleCsv;
 
 // イベントリスナー追加（初期化関数に追加）
+let scheduleEventListenersInitialized = false;
+
 function addScheduleEventListeners() {
+    if (scheduleEventListenersInitialized) {
+        console.log('日程表イベントリスナーは既に設定済みです');
+        return;
+    }
+
     console.log('日程表イベントリスナーを設定中...');
     const showBtn = document.getElementById('showClassScheduleBtn');
     const modal = document.getElementById('classScheduleModal');
@@ -1064,7 +1678,10 @@ function addScheduleEventListeners() {
     const csvBtn = document.getElementById('csvExportScheduleBtn');
 
     if (showBtn) {
-        showBtn.addEventListener('click', showClassSchedule);
+        showBtn.addEventListener('click', function (e) {
+            console.log('「日程表を表示」ボタンがクリックされました');
+            showClassSchedule();
+        });
         console.log('「日程表を表示」ボタンにイベントを設定しました');
     } else {
         console.warn('「日程表を表示」ボタンが見つかりません');
@@ -1085,12 +1702,15 @@ function addScheduleEventListeners() {
     }
 
     // モーダル外クリックで閉じる
-    window.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            closeClassScheduleModal();
-        }
-    });
+    if (modal) {
+        window.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeClassScheduleModal();
+            }
+        });
+    }
 
+    scheduleEventListenersInitialized = true;
     console.log('日程表イベントリスナーを設定完了');
 }
 
@@ -1105,3 +1725,1420 @@ window.closeClassScheduleModal = closeClassScheduleModal;
 window.printClassSchedule = printClassSchedule;
 window.exportClassScheduleCsv = exportClassScheduleCsv;
 
+
+/* ===========================
+   時間割表表示機能
+   =========================== */
+
+let currentTimetableSemester = 'first';
+
+// 時間割の年度選択肢更新 (Global化により廃止 - 互換性のために残す)
+function updateTimetableYearOptions() {
+    // コンソールログも不要なら削除可能
+    // console.log('updateTimetableYearOptions called but ignored (global year used)');
+}
+
+function renderTimetable(semester) {
+    if (semester) currentTimetableSemester = semester;
+    else semester = currentTimetableSemester;
+
+    // 選択された年度を取得 (globalYearSelect)
+    const yearSelect = document.getElementById('globalYearSelect');
+    const selectedYear = yearSelect ? parseInt(yearSelect.value) : (typeof currentYear !== 'undefined' ? currentYear : new Date().getFullYear());
+
+    // タイトルの年度表記を更新（もし必要なら）
+    const titleEl = document.getElementById('timetableTitle');
+    if (titleEl) {
+        titleEl.textContent = `📆 あなたの時間割（${selectedYear}年度）`;
+    }
+
+    const grid = document.getElementById('timetableGrid');
+    if (!grid) return;
+
+    grid.innerHTML = '';
+
+    // CSS Gridの設定を適用（行定義を追加）
+    grid.style.display = 'grid';
+    grid.style.gridTemplateColumns = '80px repeat(5, 1fr)';
+    grid.style.gridAutoRows = 'minmax(140px, auto)';
+
+    // 1. 曜日ヘッダー (Row 1)
+    const weekdays = ['月', '火', '水', '木', '金'];
+    const corner = document.createElement('div');
+    corner.className = 'timetable-cell header-cell';
+    corner.textContent = '/';
+    corner.style.gridColumn = '1';
+    corner.style.gridRow = '1';
+    grid.appendChild(corner);
+
+    weekdays.forEach((day, i) => {
+        const header = document.createElement('div');
+        header.className = 'timetable-cell header-cell';
+        header.textContent = day;
+        header.style.gridColumn = `${i + 2}`;
+        header.style.gridRow = '1';
+        grid.appendChild(header);
+    });
+
+    // 2. 空セルと時限ヘッダーの配置
+    const periods = [1, 2, 3, 4, "after"];
+    const periodMap = { 1: 2, 2: 3, 3: 4, 4: 5, "after": 6 };
+    const periodTimes = {
+        1: "9:00\n~\n10:35",
+        2: "10:45\n~\n12:20",
+        3: "13:05\n~\n14:40",
+        4: "14:50\n~\n16:25",
+        "after": "放課後"
+    };
+
+    periods.forEach(p => {
+        const rowIndex = periodMap[p];
+
+        // 時限ヘッダー
+        const pHeader = document.createElement('div');
+        pHeader.className = 'timetable-cell period-header' + (p === "after" ? " after-period" : "");
+        const headerText = p === "after" ? "放課後" : `${p}限`;
+        const timeText = p === "after" ? "" : `<span style="font-size:0.7em; font-weight:normal; display:block; margin-top:2px;">${periodTimes[p].replace(/\n/g, ' ')}</span>`;
+        pHeader.innerHTML = headerText + timeText;
+        pHeader.style.gridColumn = '1';
+        pHeader.style.gridRow = `${rowIndex}`;
+        grid.appendChild(pHeader);
+
+        // 空セル (背景・クリック用)
+        for (let w = 1; w <= 5; w++) {
+            const cell = document.createElement('div');
+            cell.className = 'timetable-cell';
+            cell.style.gridColumn = `${w + 1}`;
+            cell.style.gridRow = `${rowIndex}`;
+            cell.style.zIndex = '1';
+
+            // ドラッグ＆ドロップ対応
+            cell.dataset.weekday = w;
+            cell.dataset.period = p;
+            cell.dataset.semester = semester;
+            cell.addEventListener('dragover', handleTimetableDragOver);
+            cell.addEventListener('dragleave', handleTimetableDragLeave);
+            cell.addEventListener('drop', handleTimetableDrop);
+
+            // クリックで新規登録
+            cell.onclick = (e) => {
+                if (e.target === cell) {
+                    openClassInputModal({ weekday: w, period: p, semester: semester });
+                }
+            };
+            cell.style.cursor = 'pointer';
+            cell.title = 'クリックして授業を追加';
+            grid.appendChild(cell);
+        }
+
+    });
+
+    // 3. 授業カードの配置
+    // 対象年度と学期でフィルタ
+    const targetClasses = myClasses.filter(cls => {
+        const classYear = cls.classYear || (typeof currentYear !== 'undefined' ? currentYear : new Date().getFullYear());
+        if (classYear !== selectedYear) return false;
+
+        if (semester === 'first' && !cls.firstSemester) return false;
+        if (semester === 'second' && !cls.secondSemester) return false;
+        return true;
+    });
+
+    targetClasses.forEach(cls => {
+        const schedule = semester === 'first' ? cls.firstSemester : cls.secondSemester;
+        if (!schedule) return;
+
+        // 時限解析 (結合対応)
+        const periodStr = String(schedule.period);
+        let startPeriod, endPeriod;
+
+        if (periodStr.includes('-')) {
+            const parts = periodStr.split('-');
+            startPeriod = parseInt(parts[0]);
+            endPeriod = parseInt(parts[parts.length - 1]);
+        } else if (periodStr === 'after') {
+            startPeriod = 'after';
+            endPeriod = 'after';
+        } else if (periodStr === 'HR') {
+            // HRは4限と同じ枠とする
+            startPeriod = 4;
+            endPeriod = 4;
+        } else {
+            startPeriod = parseInt(periodStr);
+            endPeriod = parseInt(periodStr);
+        }
+
+        // Grid配置座標の計算
+        // periodMap: { 1: 2, 2: 3, 3: 4, 4: 5, "after": 6 }
+        const gridRowStart = periodMap[startPeriod];
+        const gridRowEnd = periodMap[endPeriod] ? periodMap[endPeriod] + 1 : gridRowStart + 1; // endはexclusiveなので+1
+        const gridColumn = schedule.weekday + 1;
+
+        if (!gridRowStart) return; // 無効な時限
+
+        // カード生成
+        const card = document.createElement('div');
+        const deptClass = cls.departmentType === 'student' ? 'dept-student' : 'dept-teacher';
+        card.className = `timetable-class-card ${deptClass}`;
+
+        // スタイル配置
+        card.style.gridColumn = `${gridColumn}`;
+        card.style.gridRow = `${gridRowStart} / ${gridRowEnd}`;
+        card.style.zIndex = '2'; // セルの上に表示
+        card.style.margin = '4px';
+        card.style.height = 'calc(100% - 8px)'; // マージン分引く
+
+        // ドラッグ＆ドロップ対応
+        card.draggable = true;
+        card.dataset.classId = cls.id;
+        card.dataset.type = 'myclass'; // app.jsのhandleEventDragStartを利用
+        card.dataset.semester = semester;
+        card.addEventListener('dragstart', handleEventDragStart);
+
+        // カードクリックで編集
+        card.onclick = (e) => {
+            e.stopPropagation();
+            editMyClass(cls.id);
+        };
+        card.style.cursor = 'pointer';
+
+
+        const deptShort = cls.departmentType === 'student' ? '専' : '本';
+        let targetLabel = cls.targetType === 'grade'
+            ? `${cls.targetGrade}年`
+            : `${cls.targetGrade}${cls.targetType === 'class' && cls.targetGrade === 1 ? '-' : ''}${cls.targetClass}`;
+
+        // この授業・この学期に関連するカレンダーオーバライド（変更）があるかチェック
+        const hasOverrides = classOverrides && classOverrides.some(ov =>
+            String(ov.id) === String(cls.id) && ov.type === 'myclass'
+        );
+
+        card.innerHTML = `
+            <div class="timetable-class-name">
+                ${cls.name}
+                ${hasOverrides ? '<span style="color:#d32f2f; font-size:0.8em; margin-left:4px;" title="カレンダー上で一部日程の変更・移動があります">⚠️</span>' : ''}
+            </div>
+            <div class="timetable-class-meta">
+                <span>📚 [${deptShort}]</span>
+                <span>👥 ${targetLabel}</span>
+                ${cls.location ? `<span>📍 ${cls.location}</span>` : ''}
+            </div>
+        `;
+
+        grid.appendChild(card);
+    });
+
+
+    // スイッチャーのスタイル更新
+    const container = document.querySelector('.timetable-switcher');
+    if (container) {
+        const buttons = container.querySelectorAll('button');
+
+        buttons.forEach((btn, idx) => {
+            if ((semester === 'first' && idx === 0) || (semester === 'second' && idx === 1)) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+    }
+}
+
+
+function handleTimetableDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    e.currentTarget.classList.add('drag-over');
+}
+
+function handleTimetableDragLeave(e) {
+    e.currentTarget.classList.remove('drag-over');
+}
+
+function handleTimetableDrop(e) {
+    e.preventDefault();
+    const cell = e.currentTarget;
+    cell.classList.remove('drag-over');
+
+    const targetWeekday = parseInt(cell.dataset.weekday);
+    const targetPeriod = cell.dataset.period;
+    const targetSemester = cell.dataset.semester;
+
+    const json = e.dataTransfer.getData('text/plain');
+    if (!json) return;
+
+    try {
+        const data = JSON.parse(json);
+        // カレンダーからもドラッグされる可能性があるため、myclassのみ許可
+        if (data.type !== 'myclass') return;
+
+        const cls = myClasses.find(c => String(c.id) === String(data.id));
+        if (!cls) {
+            console.warn('Timetable drop: Class not found', data.id);
+            return;
+        }
+
+        const isCopy = (e.ctrlKey || e.metaKey);
+
+        // 移動元と移動先が同じなら何もしない
+        if (!isCopy) {
+            const currentSchedule = targetSemester === 'first' ? cls.firstSemester : cls.secondSemester;
+            if (currentSchedule && currentSchedule.weekday === targetWeekday && String(currentSchedule.period) === String(targetPeriod)) {
+                return;
+            }
+        }
+
+        console.log(`Timetable drop: ${isCopy ? 'COPY' : 'MOVE'} class "${cls.name}" (ID: ${cls.id}) to ${targetSemester} ${targetWeekday} ${targetPeriod}`);
+
+
+        if (isCopy) {
+            // コピー: 元の情報を変えず、新しいオブジェクトを作る
+            const newCls = JSON.parse(JSON.stringify(cls));
+            newCls.id = Date.now(); // 新しい一意なID
+
+            if (targetSemester === 'first') {
+                if (!newCls.firstSemester) newCls.firstSemester = {};
+                newCls.firstSemester.weekday = targetWeekday;
+                newCls.firstSemester.period = targetPeriod;
+            } else {
+                if (!newCls.secondSemester) newCls.secondSemester = {};
+                newCls.secondSemester.weekday = targetWeekday;
+                newCls.secondSemester.period = targetPeriod;
+            }
+            myClasses.push(newCls);
+        } else {
+            // 移動: 既存オブジェクトを更新
+            if (targetSemester === 'first') {
+                if (!cls.firstSemester) cls.firstSemester = {};
+                cls.firstSemester.weekday = targetWeekday;
+                cls.firstSemester.period = targetPeriod;
+            } else {
+                if (!cls.secondSemester) cls.secondSemester = {};
+                cls.secondSemester.weekday = targetWeekday;
+                cls.secondSemester.period = targetPeriod;
+            }
+        }
+
+        saveMyClasses();
+        renderMyClassesList(); // これで一覧と時間割が更新される
+        if (typeof updateCalendar === 'function') updateCalendar();
+
+    } catch (err) {
+        console.error('Timetable drop error:', err);
+    }
+}
+
+
+function switchTimetableSemester(semester) {
+    currentTimetableSemester = semester;
+    renderTimetable(semester);
+}
+
+// 初期ロード時の呼び出し、およびリスト更新時の呼び出し
+// renderMyClassesList内から呼ぶか、個別に呼ぶか。
+// 依存関係を避けるため、グローバル登録してHTMLから呼べるようにする
+
+window.switchTimetableSemester = switchTimetableSemester;
+window.renderTimetable = renderTimetable;
+
+// モーダル操作関数
+function openClassInputModal(preset = null) {
+    const modal = document.getElementById('classInputModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+
+        // プリセットがあれば反映（新規作成時）
+        if (preset) {
+            resetForm(); // まずリセット
+
+            // 学期設定
+            if (preset.semester) {
+                const semSelect = document.getElementById('semesterType');
+                if (semSelect) {
+                    semSelect.value = preset.semester === 'first' ? 'first' : 'second';
+                    // もし currentTimetableSemester が 'first' なら first のみ、等の制御は好みだが、
+                    // ここでは「前期のみ」「後期のみ」を選択状態にする
+                    updateSemesterVisibility();
+                }
+            }
+
+            // 後期曜日・時限
+            if (preset.weekday && preset.period) {
+                if (preset.semester !== 'second') { // 前期または通年
+                    document.getElementById('firstWeekday').value = preset.weekday;
+                    document.getElementById('firstPeriod').value = preset.period;
+                }
+                if (preset.semester !== 'first') { // 後期または通年
+                    document.getElementById('secondWeekday').value = preset.weekday;
+                    document.getElementById('secondPeriod').value = preset.period;
+                }
+            }
+        }
+    }
+}
+
+function closeClassInputModal() {
+    const modal = document.getElementById('classInputModal');
+    if (modal) modal.classList.add('hidden');
+    resetForm(); // 閉じるときはリセット
+}
+
+window.openClassInputModal = openClassInputModal;
+window.closeClassInputModal = closeClassInputModal;
+
+
+// =============================
+// 授業科目検索・サジェスト機能
+// =============================
+
+// 授業科目（候補）リスト管理
+let ALL_COURSES = [];
+
+// デフォルトの授業データ
+const DEFAULT_COURSES = [
+    { name: "国語1", grade: 1, course: "common" }, { name: "国語2", grade: 2, course: "common" }, { name: "国語3", grade: 3, course: "common" }, { name: "言語と文化", grade: 4, course: "common" },
+    { name: "社会1", grade: 1, course: "common" }, { name: "社会2", grade: 2, course: "common" }, { name: "社会3", grade: 3, course: "common" }, { name: "現代社会論", grade: 4, course: "common" },
+    { name: "法律", grade: 5, course: "common" }, { name: "経済", grade: 5, course: "common" }, { name: "哲学", grade: 5, course: "common" }, { name: "心理学", grade: 5, course: "common" },
+    { name: "基礎数学A", grade: 1, course: "common" }, { name: "基礎数学B", grade: 1, course: "common" }, { name: "基礎数学C", grade: 1, course: "common" },
+    { name: "微分積分1", grade: 2, course: "common" }, { name: "微分積分2", grade: 2, course: "common" }, { name: "ベクトル・行列", grade: 2, course: "common" },
+    { name: "解析1", grade: 3, course: "common" }, { name: "解析2", grade: 3, course: "common" }, { name: "線形代数・微分方程式", grade: 3, course: "common" },
+    { name: "確率統計", grade: 4, course: "common" }, { name: "基礎物理1", grade: 1, course: "common" }, { name: "基礎物理2", grade: 2, course: "common" },
+    { name: "基礎物理3", grade: 3, course: "common" }, { name: "現代物理学概論", grade: 5, course: "common" }, { name: "化学1", grade: 1, course: "common" },
+    { name: "化学2", grade: 2, course: "common" }, { name: "生物", grade: 2, course: "common" }, { name: "保健・体育1", grade: 1, course: "common" },
+    { name: "保健・体育2", grade: 2, course: "common" }, { name: "保健・体育3", grade: 3, course: "common" }, { name: "保健・体育4", grade: 4, course: "common" },
+    { name: "英語1", grade: 1, course: "common" }, { name: "英語2", grade: 1, course: "common" }, { name: "英語3", grade: 2, course: "common" }, { name: "英語4", grade: 2, course: "common" },
+    { name: "英語5", grade: 3, course: "common" }, { name: "英語6", grade: 4, course: "common" }, { name: "英語表現1", grade: 1, course: "common" },
+    { name: "英語表現2", grade: 2, course: "common" }, { name: "英語表現3", grade: 3, course: "common" }, { name: "英語A", grade: 4, course: "common" },
+    { name: "英語B", grade: 4, course: "common" }, { name: "中国語", grade: 4, course: "common" }, { name: "ドイツ語", grade: 4, course: "common" },
+    { name: "美術", grade: 1, course: "common" }, { name: "書道", grade: 1, course: "common" }, { name: "音楽", grade: 1, course: "common" },
+    { name: "総合工学システム概論", grade: 1, course: "common" }, { name: "総合工学システム実験実習", grade: 1, course: "common" },
+    { name: "情報1", grade: 1, course: "common" }, { name: "情報2", grade: 2, course: "common" }, { name: "情報3", grade: 3, course: "common" },
+    { name: "ダイバーシティと人権", grade: 1, course: "common" }, { name: "多文化共生", grade: 4, course: "common" }, { name: "労働環境と人権", grade: 5, course: "common" },
+    { name: "技術倫理", grade: 5, course: "common" }, { name: "システム安全入門", grade: 5, course: "common" }, { name: "環境システム工学", grade: 5, course: "common" },
+    { name: "資源と産業", grade: 5, course: "common" }, { name: "環境倫理", grade: 5, course: "common" }, { name: "応用数学A", grade: 4, course: "common" },
+    { name: "応用数学B", grade: 4, course: "common" }, { name: "物理学A", grade: 4, course: "common" }, { name: "物理学B", grade: 4, course: "common" },
+    { name: "計測工学", grade: 5, course: "common" }, { name: "技術英語", grade: 5, course: "common" }, { name: "機械工学概論", grade: 2, course: "M" },
+    { name: "基礎製図", grade: 2, course: "M" }, { name: "電気・電子回路", grade: 2, course: "M" }, { name: "シーケンス制御", grade: 2, course: "M" },
+    { name: "機械工作実習1", grade: 2, course: "M" }, { name: "材料力学入門", grade: 3, course: "M" }, { name: "熱力学入門", grade: 3, course: "M" },
+    { name: "流体力学入門", grade: 3, course: "M" }, { name: "機械工作法", grade: 3, course: "M" }, { name: "CAD製図", grade: 3, course: "M" },
+    { name: "機械設計製図", grade: 3, course: "M" }, { name: "機械工作実習2", grade: 3, course: "M" }, { name: "材料力学", grade: 4, course: "M" },
+    { name: "熱力学", grade: 4, course: "M" }, { name: "流れ学", grade: 4, course: "M" }, { name: "機械力学", grade: 4, course: "M" },
+    { name: "材料学", grade: 4, course: "M" }, { name: "数値計算", grade: 4, course: "M" }, { name: "エネルギー機械実験1", grade: 4, course: "M" },
+    { name: "機械設計", grade: 5, course: "M" }, { name: "伝熱工学", grade: 5, course: "M" }, { name: "流体工学", grade: 5, course: "M" },
+    { name: "生産加工工学", grade: 5, course: "M" }, { name: "制御工学", grade: 5, course: "M" }, { name: "エネルギー変換工学", grade: 5, course: "M" },
+    { name: "エネルギー機械実験2", grade: 5, course: "M" }, { name: "卒業研究", grade: 5, course: "M" }, { name: "プロダクトデザイン概論", grade: 2, course: "D" },
+    { name: "製図基礎", grade: 2, course: "D" }, { name: "プログラミング基礎", grade: 2, course: "D" }, { name: "機械工作法", grade: 2, course: "D" },
+    { name: "機械工作実習", grade: 2, course: "D" }, { name: "工業力学", grade: 3, course: "D" }, { name: "CAD設計製図", grade: 3, course: "D" },
+    { name: "材料学", grade: 3, course: "D" }, { name: "加工学", grade: 3, course: "D" }, { name: "ユニバーサルデザイン", grade: 3, course: "D" },
+    { name: "生産機械実習", grade: 3, course: "D" }, { name: "材料力学", grade: 4, course: "D" }, { name: "熱力学", grade: 4, course: "D" },
+    { name: "流体力学", grade: 4, course: "D" }, { name: "機械力学", grade: 4, course: "D" }, { name: "メカトロニクス", grade: 4, course: "D" },
+    { name: "ロボット工学", grade: 4, course: "D" }, { name: "プロダクトデザイン実験", grade: 4, course: "D" }, { name: "プロダクトデザイン", grade: 5, course: "D" },
+    { name: "CAM/CAE", grade: 5, course: "D" }, { name: "生産システム工学", grade: 5, course: "D" }, { name: "感性工学", grade: 5, course: "D" },
+    { name: "プロダクトデザイン実習", grade: 5, course: "D" }, { name: "卒業研究", grade: 5, course: "D" }, { name: "エレクトロニクス概論", grade: 2, course: "E" },
+    { name: "電気設備", grade: 2, course: "E" }, { name: "電気回路1", grade: 2, course: "E" }, { name: "電子回路1", grade: 2, course: "E" },
+    { name: "電気電子材料1", grade: 2, course: "E" }, { name: "エレクトロニクス実験実習", grade: 2, course: "E" }, { name: "電気回路2", grade: 3, course: "E" },
+    { name: "電磁気学1", grade: 3, course: "E" }, { name: "電気電子材料2", grade: 3, course: "E" }, { name: "半導体工学1", grade: 3, course: "E" },
+    { name: "工学設計演習", grade: 3, course: "E" }, { name: "エレクトロニクス実験1", grade: 3, course: "E" }, { name: "電子回路2", grade: 4, course: "E" },
+    { name: "電気回路3", grade: 4, course: "E" }, { name: "電磁気学2", grade: 4, course: "E" }, { name: "電気電子材料3", grade: 4, course: "E" },
+    { name: "半導体工学2", grade: 4, course: "E" }, { name: "コンピュータ工学基礎", grade: 4, course: "E" }, { name: "制御工学1", grade: 4, course: "E" },
+    { name: "エレクトロニクス実験2", grade: 4, course: "E" }, { name: "制御工学2", grade: 5, course: "E" }, { name: "電気機器", grade: 5, course: "E" },
+    { name: "電力技術", grade: 5, course: "E" }, { name: "パワーエレクトロニクス", grade: 5, course: "E" }, { name: "信号処理", grade: 5, course: "E" },
+    { name: "電気化学", grade: 5, course: "E" }, { name: "センサー工学", grade: 5, course: "E" }, { name: "ワイヤレス技術", grade: 5, course: "E" },
+    { name: "エレクトロニクス実験3", grade: 5, course: "E" }, { name: "卒業研究", grade: 5, course: "E" }, { name: "メディアデザイン入門", grade: 2, course: "I" },
+    { name: "論理回路1", grade: 2, course: "I" }, { name: "マイクロコンピュータ", grade: 2, course: "I" }, { name: "プログラミング1", grade: 2, course: "I" },
+    { name: "工学基礎実習", grade: 2, course: "I" }, { name: "プログラミング2", grade: 3, course: "I" }, { name: "プログラミング3", grade: 3, course: "I" },
+    { name: "アルゴリズムとデータ構造1", grade: 3, course: "I" }, { name: "論理回路2", grade: 3, course: "I" }, { name: "電気電子回路1", grade: 3, course: "I" },
+    { name: "知識科学概論", grade: 3, course: "I" }, { name: "知能情報実験実習1", grade: 3, course: "I" }, { name: "アルゴリズムとデータ構造2", grade: 4, course: "I" },
+    { name: "電気電子回路2", grade: 4, course: "I" }, { name: "データベース工学", grade: 4, course: "I" }, { name: "マルチメディア情報処理", grade: 4, course: "I" },
+    { name: "情報通信ネットワーク", grade: 4, course: "I" }, { name: "コンピュータシステム", grade: 4, course: "I" }, { name: "知能情報実験実習2", grade: 4, course: "I" },
+    { name: "オートマトンと形式言語", grade: 5, course: "I" }, { name: "ソフトウェア工学", grade: 5, course: "I" }, { name: "知能情報実験実習3", grade: 5, course: "I" },
+    { name: "オペレーティングシステム", grade: 5, course: "I" }, { name: "人工知能", grade: 5, course: "I" }, { name: "情報理論", grade: 5, course: "I" },
+    { name: "コンピュータアーキテクチャ", grade: 5, course: "I" }, { name: "卒業研究", grade: 5, course: "I" }, { name: "応用専門概論", grade: 3, course: "common" },
+    { name: "応用専門PBL1", grade: 3, course: "common" }, { name: "応用専門PBL2", grade: 4, course: "common" }, { name: "インターンシップ", grade: 4, course: "common" },
+    { name: "生活と物質", grade: 4, course: "common" }, { name: "社会と環境", grade: 4, course: "common" }, { name: "物質プロセス基礎", grade: 5, course: "common" },
+    { name: "物質デザイン概論", grade: 5, course: "common" }, { name: "防災工学", grade: 4, course: "common" }, { name: "エルゴノミクス", grade: 4, course: "common" },
+    { name: "食品エンジニアリング", grade: 5, course: "common" }, { name: "コスメティックス", grade: 5, course: "common" }, { name: "バイオテクノロジー", grade: 5, course: "common" },
+    { name: "高純度化技術", grade: 5, course: "common" }, { name: "環境モニタリング", grade: 5, course: "common" }, { name: "エネルギー変換デバイス", grade: 5, course: "common" },
+    { name: "食と健康のセンサ", grade: 5, course: "common" }, { name: "環境対応デバイス", grade: 5, course: "common" }, { name: "社会基盤構造", grade: 5, course: "common" },
+    { name: "環境衛生工学", grade: 5, course: "common" }, { name: "維持管理工学", grade: 5, course: "common" }, { name: "水環境工学", grade: 5, course: "common" },
+    { name: "環境デザイン論", grade: 5, course: "common" }, { name: "インクルーシブデザイン", grade: 5, course: "common" }, { name: "空間情報学", grade: 5, course: "common" },
+    { name: "環境行動", grade: 5, course: "common" }
+];
+
+function loadCourses() {
+    const saved = localStorage.getItem('course_masters');
+    if (saved) {
+        ALL_COURSES = JSON.parse(saved);
+    } else {
+        ALL_COURSES = [...DEFAULT_COURSES];
+    }
+}
+
+function saveCoursesData() {
+    localStorage.setItem('course_masters', JSON.stringify(ALL_COURSES));
+    if (document.getElementById('settingsSection').classList.contains('hidden') === false) {
+        renderManageCourses(); // 管理用リストを更新
+    }
+}
+
+function initCourseSearch() {
+    const input = document.getElementById('className');
+    const suggestions = document.getElementById('courseSuggestions');
+    const searchBtn = document.getElementById('searchCourseBtn');
+    const filterSelect = document.getElementById('courseFilterSelect');
+
+    if (!input || !suggestions || !searchBtn || !filterSelect) return;
+
+    const performSearch = () => {
+        const query = input.value.trim().toLowerCase();
+        const filter = filterSelect.value;
+        const currentGrade = parseInt(document.getElementById('targetGrade').value);
+
+        let filtered = ALL_COURSES;
+
+        // 検索ワードでフィルタ
+        if (query) {
+            filtered = filtered.filter(c => c.name.toLowerCase().includes(query));
+        }
+
+        // コース（学科）でフィルタ
+        if (filter !== 'all') {
+            filtered = filtered.filter(c => c.course === filter);
+        }
+
+        // 結果が多い場合は絞る。クエリもフィルタもない場合は現在の学年を表示
+        if (!query && filter === 'all') {
+            filtered = filtered.filter(c => c.grade === currentGrade);
+        }
+
+        renderSuggestions(filtered.slice(0, 20));
+    };
+
+    // 入力イベントで検索
+    input.addEventListener('input', () => {
+        if (input.value.trim().length < 1) {
+            suggestions.classList.add('hidden');
+            return;
+        }
+        performSearch();
+    });
+
+    // フィルタ変更で再検索
+    filterSelect.addEventListener('change', performSearch);
+
+    // 検索ボタンクリックで全件表示（または空検索）
+    searchBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        performSearch();
+    });
+
+    // 外側クリックで閉じる
+    document.addEventListener('click', (e) => {
+        if (!input.contains(e.target) && !suggestions.contains(e.target) && !searchBtn.contains(e.target) && !filterSelect.contains(e.target)) {
+            suggestions.classList.add('hidden');
+        }
+    });
+}
+
+function renderSuggestions(courses) {
+    const suggestions = document.getElementById('courseSuggestions');
+    if (!courses || courses.length === 0) {
+        suggestions.classList.add('hidden');
+        return;
+    }
+
+    suggestions.innerHTML = '';
+    courses.forEach(course => {
+        const item = document.createElement('div');
+        item.className = 'suggestion-item';
+
+        let courseLabel = '';
+        switch (course.course) {
+            case 'common': courseLabel = '共通'; break;
+            case 'M': courseLabel = 'M'; break;
+            case 'D': courseLabel = 'D'; break;
+            case 'E': courseLabel = 'E'; break;
+            case 'I': courseLabel = 'I'; break;
+        }
+
+        item.innerHTML = `
+            <div>
+                <span class="suggestion-name">${course.name}</span>
+                <span style="font-size: 0.75rem; color: #666; margin-left: 8px;">(${courseLabel})</span>
+            </div>
+            <span class="suggestion-grade">${course.grade}年</span>
+        `;
+        item.onclick = () => selectCourse(course);
+        suggestions.appendChild(item);
+    });
+
+    suggestions.classList.remove('hidden');
+}
+
+function selectCourse(course) {
+    const input = document.getElementById('className');
+    const gradeSelect = document.getElementById('targetGrade');
+    const deptSelect = document.getElementById('departmentType');
+    const targetTypeSelect = document.getElementById('targetType');
+    const targetClassSelect = document.getElementById('targetClass');
+    const suggestions = document.getElementById('courseSuggestions');
+
+    input.value = course.name;
+
+    // 学科データがあれば本科にセット（CSVデータは本科1-5年用）
+    if (deptSelect) deptSelect.value = 'teacher';
+
+    // 学年セット
+    if (course.grade >= 1 && course.grade <= 5) {
+        gradeSelect.value = course.grade;
+    }
+
+    // コース・展開方法を推測
+    let targetType = 'class';
+    let targetClass = '';
+
+    if (course.course === 'common') {
+        targetType = 'grade';
+    } else {
+        targetType = 'class';
+        if (course.grade >= 2) {
+            targetClass = course.course; // "M", "D", "E", "I"
+        }
+    }
+
+    // UIを更新して選択肢を生成
+    targetTypeSelect.value = targetType;
+    if (typeof updateTargetClassVisibility === 'function') updateTargetClassVisibility();
+    if (typeof updateClassOptions === 'function') updateClassOptions();
+
+    // 選択肢生成後に値をセット
+    if (targetType === 'class' && targetClass) {
+        targetClassSelect.value = targetClass;
+    }
+
+    suggestions.classList.add('hidden');
+}
+
+
+// =============================
+// 教員リスト・ドラッグ＆ドロップ機能
+// =============================
+
+// H:\CODE\業務効率化\学生+ 教員\2025(教職員事務局).csv の抜粋
+// 教員リスト管理
+let ALL_TEACHERS = [];
+
+// 定数としてのデフォルトデータ（初期化用）
+const DEFAULT_TEACHERS = [
+    { "name": "井上　千鶴子", "dept": "一般（文系）" }, { "name": "小川　清次", "dept": "一般（文系）" }, { "name": "川村　珠巨", "dept": "一般（文系）" }, { "name": "西野　達雄", "dept": "一般（文系）" },
+    { "name": "坂井　二三絵", "dept": "一般（文系）" }, { "name": "中山　良子", "dept": "一般（文系）" }, { "name": "川光　大介", "dept": "一般（文系）" }, { "name": "谷野　圭亮", "dept": "一般（文系）" },
+    { "name": "松井　悠香", "dept": "一般（文系）" }, { "name": "北野　健一", "dept": "一般（理系）" }, { "name": "佐藤　修", "dept": "一般（理系）" }, { "name": "中田　裕一", "dept": "一般（理系）" },
+    { "name": "楢崎　亮", "dept": "一般（理系）" }, { "name": "橋爪　裕", "dept": "一般（理系）" }, { "name": "稗田　吉成", "dept": "一般（理系）" }, { "name": "松野　高典", "dept": "一般（理系）" },
+    { "name": "鬼頭　秀行", "dept": "一般（理系）" }, { "name": "室谷　文祥", "dept": "一般（理系）" }, { "name": "梶　真理香", "dept": "一般（理系）" }, { "name": "金井　友希美", "dept": "一般（理系）" },
+    { "name": "松永　博昭", "dept": "一般（理系）" }, { "name": "西田　博一", "dept": "一般（理系）" }, { "name": "石川　寿敏 (M)", "dept": "エネルギー機械" }, { "name": "君家　直之 (M)", "dept": "エネルギー機械" },
+    { "name": "上村　匡敬 (M)", "dept": "エネルギー機械" }, { "name": "久野　章仁 (A)", "dept": "エネルギー機械" }, { "name": "杉浦　公彦 (M)", "dept": "エネルギー機械" }, { "name": "塚本　晃久 (M)", "dept": "エネルギー機械" },
+    { "name": "西岡　求 (A)", "dept": "エネルギー機械" }, { "name": "平林　大介 (A)", "dept": "エネルギー機械" }, { "name": "中津　壮人 (M)", "dept": "エネルギー機械" }, { "name": "白柳　博章 (C)", "dept": "エネルギー機械" },
+    { "name": "鯵坂　誠之 (C)", "dept": "プロダクトデザイン" }, { "name": "岩本　いづみ (C)", "dept": "プロダクトデザイン" }, { "name": "里中　直樹 (H)", "dept": "プロダクトデザイン" }, { "name": "中谷　敬子 (H)", "dept": "プロダクトデザイン" },
+    { "name": "難波　邦彦 (M)", "dept": "プロダクトデザイン" }, { "name": "藪　厚生 (H)", "dept": "プロダクトデザイン" }, { "name": "倉橋　健介 (A)", "dept": "プロダクトデザイン" }, { "name": "古田　和久 (M)", "dept": "プロダクトデザイン" },
+    { "name": "勇　地有理 (M)", "dept": "プロダクトデザイン" }, { "name": "前田　一成 (H)", "dept": "プロダクトデザイン" }, { "name": "梅本　敏孝 (E)", "dept": "エレクトロニクス" }, { "name": "金田　忠裕 (H)", "dept": "エレクトロニクス" },
+    { "name": "重井　宣行 (E)", "dept": "エレクトロニクス" }, { "name": "辻元　英孝 (A)", "dept": "エレクトロニクス" }, { "name": "東田　卓 (A)", "dept": "エレクトロニクス" }, { "name": "前田　篤志 (E)", "dept": "エレクトロニクス" },
+    { "name": "川上　太知 (E)", "dept": "エレクトロニクス" }, { "name": "田村　生弥 (C)", "dept": "エレクトロニクス" }, { "name": "野田　達夫 (A)", "dept": "エレクトロニクス" }, { "name": "安藤　太一 (H)", "dept": "エレクトロニクス" },
+    { "name": "榎倉　浩志 (E)", "dept": "エレクトロニクス" }, { "name": "青木　一弘 (E)", "dept": "知能情報" }, { "name": "窪田　哲也 (E)", "dept": "知能情報" }, { "name": "土井　智晴 (H)", "dept": "知能情報" },
+    { "name": "新妻　弘崇 (E)", "dept": "知能情報" }, { "name": "早川　潔 (E)", "dept": "知能情報" }, { "name": "山野　高志 (C)", "dept": "知能情報" }, { "name": "和田　健 (H)", "dept": "知能情報" },
+    { "name": "中才　恵太朗 (E)", "dept": "知能情報" }, { "name": "吉田　晃基 (E)", "dept": "知能情報" }, { "name": "木村　祐太 (E)", "dept": "知能情報" }, { "name": "高橋　舞", "dept": "保健室" },
+    { "name": "有末　宏明", "dept": "非常勤講師" }, { "name": "上田　純子", "dept": "非常勤講師" }, { "name": "打田　剛生", "dept": "非常勤講師" }, { "name": "内田　晴彦", "dept": "非常勤講師" },
+    { "name": "大谷　壮介", "dept": "非常勤講師" }, { "name": "大坪　義一", "dept": "非常勤講師" }, { "name": "小形　美妃", "dept": "非常勤講師" }, { "name": "越智　敏明", "dept": "非常勤講師" },
+    { "name": "垣内　喜代三", "dept": "非常勤講師" }, { "name": "片山　登揚", "dept": "非常勤講師" }, { "name": "加藤　のん", "dept": "非常勤講師" }, { "name": "鎌倉　祥太郎", "dept": "非常勤講師" },
+    { "name": "川上　幸三", "dept": "非常勤講師" }, { "name": "北村　幸定", "dept": "非常勤講師" }, { "name": "木下　佐和子", "dept": "非常勤講師" }, { "name": "木村　安佐子", "dept": "非常勤講師" },
+    { "name": "京　鴻一", "dept": "非常勤講師" }, { "name": "楠本　藍梨", "dept": "非常勤講師" }, { "name": "黒田　良一", "dept": "非常勤講師" }, { "name": "小出　宏樹", "dept": "非常勤講師" },
+    { "name": "小森　勇人", "dept": "非常勤講師" }, { "name": "相根　心", "dept": "非常勤講師" }, { "name": "佐藤　亜紀子", "dept": "非常勤講師" }, { "name": "須﨑　昌已", "dept": "非常勤講師" },
+    { "name": "武知　薫子", "dept": "非常勤講師" }, { "name": "塚本　大智", "dept": "非常勤講師" }, { "name": "戸塚　譲次郎", "dept": "非常勤講師" }, { "name": "中井　勝博", "dept": "非常勤講師" },
+    { "name": "永田　 實", "dept": "非常勤講師" }, { "name": "新納　格", "dept": "非常勤講師" }, { "name": "西村　有理", "dept": "非常勤講師" }, { "name": "濱崎　雅孝", "dept": "非常勤講師" },
+    { "name": "早石　典史", "dept": "非常勤講師" }, { "name": "平井　三友", "dept": "非常勤講師" }, { "name": "福山　亮介", "dept": "非常勤講師" }, { "name": "増木　啓二", "dept": "非常勤講師" },
+    { "name": "松永　健聖", "dept": "非常勤講師" }, { "name": "真野　純司", "dept": "非常勤講師" }, { "name": "森口　雅弘", "dept": "非常勤講師" }, { "name": "安田　昌弘", "dept": "工学部" },
+    { "name": "野村　俊之", "dept": "工学部" }, { "name": "山田　伸武", "dept": "非常勤講師" }, { "name": "吉川　明里", "dept": "非常勤講師" }, { "name": "葭谷　安正", "dept": "非常勤講師" },
+    { "name": "吉本　隆光", "dept": "非常勤講師" }, { "name": "楼　　娟", "dept": "非常勤講師" }, { "name": "若竹　昌洋", "dept": "非常勤講師" }, { "name": "若林　悟", "dept": "非常勤講師" }
+];
+
+function loadTeachers() {
+    const saved = localStorage.getItem('school_teachers');
+    if (saved) {
+        ALL_TEACHERS = JSON.parse(saved);
+    } else {
+        ALL_TEACHERS = [...DEFAULT_TEACHERS];
+    }
+}
+
+function saveTeachersData() {
+    localStorage.setItem('school_teachers', JSON.stringify(ALL_TEACHERS));
+    renderTeacherList(); // ドラッグ用リストを更新
+    if (document.getElementById('settingsSection').classList.contains('hidden') === false) {
+        renderManageTeachers(); // 管理用リストを更新
+    }
+}
+
+function initTeacherDragAndDrop() {
+    const teacherInput = document.getElementById('classTeacher');
+    const teacherListItems = document.getElementById('teacherListItems');
+    const toggleBtn = document.getElementById('toggleTeacherListBtn');
+    const searchInput = document.getElementById('teacherSearchInput');
+    const suggestions = document.getElementById('teacherSuggestions');
+
+    if (!teacherInput || !teacherListItems || !toggleBtn) return;
+
+    // リストトグル
+    toggleBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const container = document.getElementById('teacherListContainer');
+        if (!container) return;
+
+        container.classList.toggle('hidden');
+        if (!container.classList.contains('hidden')) {
+            renderTeacherList();
+        }
+    });
+
+    // 入力時のサジェスト表示
+    teacherInput.addEventListener('input', () => {
+        const query = teacherInput.value.trim().toLowerCase();
+        if (query.length < 1) {
+            suggestions.classList.add('hidden');
+            return;
+        }
+
+        // 最後のカンマ以降のワードを取得（複数入力対応）
+        const lastPart = query.split(/[,、\s]+/).pop();
+        if (lastPart.length < 1) {
+            suggestions.classList.add('hidden');
+            return;
+        }
+
+        const filtered = ALL_TEACHERS.filter(t =>
+            t.name.toLowerCase().includes(lastPart) ||
+            (t.dept && t.dept.toLowerCase().includes(lastPart))
+        );
+
+        renderTeacherSuggestions(filtered.slice(0, 10));
+    });
+
+    // 検索（パネル内）
+    if (searchInput) {
+        searchInput.oninput = () => {
+            const query = searchInput.value.trim().toLowerCase();
+            const filtered = ALL_TEACHERS.filter(t =>
+                t.name.toLowerCase().includes(query) || (t.dept && t.dept.toLowerCase().includes(query))
+            );
+            renderTeacherList(filtered);
+        };
+    }
+
+    // 外側クリックでサジェストを閉じる
+    document.addEventListener('click', (e) => {
+        if (!teacherInput.contains(e.target) && suggestions && !suggestions.contains(e.target)) {
+            suggestions.classList.add('hidden');
+        }
+    });
+
+    // ドラッグ＆ドロップ
+    teacherInput.ondragover = (e) => {
+        e.preventDefault();
+        teacherInput.classList.add('drop-over');
+    };
+
+    teacherInput.ondragleave = () => {
+        teacherInput.classList.remove('drop-over');
+    };
+
+    teacherInput.ondrop = (e) => {
+        e.preventDefault();
+        teacherInput.classList.remove('drop-over');
+        const name = e.dataTransfer.getData('text/plain');
+        if (name) {
+            appendTeacherName(name);
+        }
+    };
+
+    // ペーストイベント処理
+    teacherInput.addEventListener('paste', (e) => {
+        e.preventDefault();
+        const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+        if (pastedText) {
+            handleTeacherPaste(pastedText);
+        }
+    });
+}
+
+function renderTeacherSuggestions(list) {
+    const suggestions = document.getElementById('teacherSuggestions');
+    if (!suggestions) return;
+
+    if (list.length === 0) {
+        suggestions.classList.add('hidden');
+        return;
+    }
+
+    suggestions.innerHTML = list.map(t => `
+        <div class="suggestion-item" onclick="appendTeacherName('${t.name}'); document.getElementById('teacherSuggestions').classList.add('hidden');">
+            <div>
+                <span class="suggestion-name">${t.name}</span>
+                <span style="font-size: 0.7rem; color: #666; margin-left: 8px;">(${t.dept || '-'})</span>
+            </div>
+        </div>
+    `).join('');
+
+    suggestions.classList.remove('hidden');
+}
+
+function appendTeacherName(name) {
+    const teacherInput = document.getElementById('classTeacher');
+    if (!teacherInput) return;
+
+    const currentVal = teacherInput.value.trim();
+    if (currentVal) {
+        // 現在の値をカンマで分割
+        let names = currentVal.split(/[,、\s]+/).map(n => n.trim()).filter(n => n !== '');
+
+        // 入力途中の部分をチェック
+        const lastName = names[names.length - 1];
+
+        // 最後の要素が完全な教員名（ALL_TEACHERSに含まれる）かチェック
+        const isComplete = ALL_TEACHERS.some(t => t.name === lastName);
+
+        if (!isComplete && lastName !== '') {
+            // 入力中の文字列がある場合は、それを置換
+            names[names.length - 1] = name;
+        } else {
+            // 完全な名前がある場合は、追加（重複チェック）
+            if (!names.includes(name)) {
+                names.push(name);
+            }
+        }
+
+        teacherInput.value = names.join(', ');
+    } else {
+        teacherInput.value = name;
+    }
+
+    // 次の入力の準備（カンマとスペース追加）
+    if (teacherInput.value && !teacherInput.value.endsWith(', ')) {
+        teacherInput.value += ', ';
+    }
+
+    // 入力イベントを発火させてサジェストを更新
+    teacherInput.dispatchEvent(new Event('input', { bubbles: true }));
+    teacherInput.focus();
+}
+
+/**
+ * Jaro-Winkler距離を計算（氏名のゆらぎ対応）
+ */
+function jaroWinklerDistance(s1, s2) {
+    const s1_lower = s1.toLowerCase();
+    const s2_lower = s2.toLowerCase();
+
+    if (s1_lower === s2_lower) return 1.0;
+    if (s1_lower.length === 0 || s2_lower.length === 0) return 0.0;
+
+    // Jaro距離を計算
+    const maxLen = Math.max(s1_lower.length, s2_lower.length);
+    const matchDistance = Math.floor(maxLen / 2) - 1;
+    if (matchDistance < 0) return 0.0;
+
+    let s1_matches = new Array(s1_lower.length).fill(false);
+    let s2_matches = new Array(s2_lower.length).fill(false);
+    let matches = 0;
+    let transpositions = 0;
+
+    for (let i = 0; i < s1_lower.length; i++) {
+        const start = Math.max(0, i - matchDistance);
+        const end = Math.min(i + matchDistance + 1, s2_lower.length);
+
+        for (let j = start; j < end; j++) {
+            if (s2_matches[j] || s1_lower[i] !== s2_lower[j]) continue;
+            s1_matches[i] = true;
+            s2_matches[j] = true;
+            matches++;
+            break;
+        }
+    }
+
+    if (matches === 0) return 0.0;
+
+    let k = 0;
+    for (let i = 0; i < s1_lower.length; i++) {
+        if (!s1_matches[i]) continue;
+        while (!s2_matches[k]) k++;
+        if (s1_lower[i] !== s2_lower[k]) transpositions++;
+        k++;
+    }
+
+    const jaro = (matches / s1_lower.length +
+        matches / s2_lower.length +
+        (matches - transpositions / 2) / matches) / 3.0;
+
+    // Winkler補正
+    let prefix = 0;
+    for (let i = 0; i < Math.min(4, Math.min(s1_lower.length, s2_lower.length)); i++) {
+        if (s1_lower[i] === s2_lower[i]) prefix++;
+        else break;
+    }
+
+    return jaro + prefix * 0.1 * (1 - jaro);
+}
+
+/**
+ * ペーストされたテキストから氏名を抽出
+ */
+function extractNamesFromText(text) {
+    // スペース、改行、タブ、カンマで分割
+    const names = text
+        .split(/[\s\n\t,、]/g)
+        .map(n => n.trim())
+        .filter(n => n.length > 0 && n.length < 30); // 妥当な長さの文字列のみ
+
+    return names;
+}
+
+/**
+ * 氏名をALL_TEACHERSから検索（ゆらぎ対応）
+ */
+function findTeacherByName(nameQuery) {
+    const query = nameQuery.trim();
+    if (query.length === 0) return null;
+
+    // 完全一致チェック
+    let found = ALL_TEACHERS.find(t => t.name === query);
+    if (found) return { teacher: found, similarity: 1.0 };
+
+    // ゆらぎを考慮した部分一致・類似度チェック
+    let bestMatch = null;
+    let bestSimilarity = 0;
+    const threshold = 0.75; // 75%以上の類似度で採用
+
+    for (const teacher of ALL_TEACHERS) {
+        // パターン1：完全に含まれる
+        if (teacher.name.includes(query) || query.includes(teacher.name)) {
+            const sim = Math.min(query.length, teacher.name.length) /
+                Math.max(query.length, teacher.name.length);
+            if (sim > bestSimilarity) {
+                bestMatch = { teacher, similarity: sim };
+                bestSimilarity = sim;
+            }
+        }
+
+        // パターン2：Jaro-Winkler距離
+        if (bestSimilarity < threshold) {
+            const sim = jaroWinklerDistance(query, teacher.name);
+            if (sim > bestSimilarity && sim >= 0.8) {
+                bestMatch = { teacher, similarity: sim };
+                bestSimilarity = sim;
+            }
+        }
+    }
+
+    if (bestMatch && bestSimilarity >= threshold) {
+        return bestMatch;
+    }
+
+    return null;
+}
+
+/**
+ * ペーストされたテキストを処理（複数氏名の自動検索・登録）
+ */
+function handleTeacherPaste(pastedText) {
+    const names = extractNamesFromText(pastedText);
+    if (names.length === 0) return;
+
+    // 処理対象の氏名
+    let processedNames = [];
+    let unknownNames = [];
+
+    // 各氏名を検索
+    names.forEach(name => {
+        const result = findTeacherByName(name);
+        if (result) {
+            processedNames.push(result.teacher.name);
+            console.log(`✓ "${name}" → "${result.teacher.name}" (類似度: ${(result.similarity * 100).toFixed(1)}%)`);
+        } else {
+            unknownNames.push(name);
+            console.log(`✗ "${name}" は登録されていません`);
+        }
+    });
+
+    // 確認ダイアログを表示（複数教員の場合、または未登録がいる場合）
+    if (unknownNames.length > 0 || names.length > 1) {
+        handleUnknownTeachers(unknownNames, processedNames);
+    } else if (processedNames.length === 1) {
+        // 1名だけで、かつ既知の教員の場合のみ直接入力
+        const teacherInput = document.getElementById('classTeacher');
+        teacherInput.value = processedNames[0];
+        teacherInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+}
+
+
+/**
+ * 未登録教員の処理（確認ダイアログ）
+ */
+function handleUnknownTeachers(unknownNames, foundNames) {
+    const unknownStr = unknownNames.join('、');
+
+    // 確認ダイアログ
+    const options = {
+        found: foundNames.join('、'),
+        unknown: unknownNames,
+        shouldRegister: false
+    };
+
+
+    // HTMLダイアログで確認
+    showTeacherPasteDialog(options);
+}
+
+/**
+ * 教員ペースト確認ダイアログを表示
+ */
+function showTeacherPasteDialog(options) {
+    let html = '<div style="font-size: 0.9rem; line-height: 1.6;">';
+
+    if (options.found) {
+        html += `<div style="margin-bottom: 1rem; padding: 0.5rem; background: #e8f5e9; border-radius: 4px; color: #2e7d32;">
+            <strong>✓ 見つかった教員:</strong><br>
+            ${options.found.replace(/、/g, '<br>')}
+        </div>`;
+    }
+
+    html += `<div style="margin-bottom: 1rem; padding: 0.5rem; background: #fff3e0; border-radius: 4px; color: #e65100;">
+        <strong>? 未登録の教員:</strong><br>
+        ${options.unknown.join('<br>')}
+    </div>`;
+
+    html += `<div style="margin-top: 1rem;">
+        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            <input type="checkbox" id="autoRegisterCheckbox" checked>
+            <span>未登録教員を自動登録する</span>
+        </label>
+    </div></div>`;
+
+    // ダイアログを作成
+    const dialog = document.createElement('div');
+    dialog.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; border: 2px solid #1976d2; border-radius: 8px; padding: 1.5rem; z-index: 10000; max-width: 500px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);';
+
+    dialog.innerHTML = `
+        <div style="margin-bottom: 1.5rem;">
+            <h3 style="margin: 0 0 1rem 0; color: #1976d2;">ペーストされた教員情報の処理</h3>
+            ${html}
+        </div>
+        <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+            <button onclick="document.getElementById('teacherPasteOverlay')?.remove(); document.getElementById('teacherPasteDialog')?.remove();" style="padding: 0.5rem 1rem; background: #e0e0e0; border: 1px solid #999; border-radius: 4px; cursor: pointer;">キャンセル</button>
+            <button id="confirmTeacherPasteBtn" onclick='confirmTeacherPaste(${JSON.stringify(options)})' style="padding: 0.5rem 1rem; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer;">確認して登録</button>
+
+        </div>
+    `;
+
+    // オーバーレイを追加
+    const overlay = document.createElement('div');
+    overlay.id = 'teacherPasteOverlay';
+    overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999;';
+    overlay.onclick = () => {
+        overlay.remove();
+        dialog.remove();
+    };
+
+    dialog.id = 'teacherPasteDialog';
+
+    document.body.appendChild(overlay);
+    document.body.appendChild(dialog);
+
+}
+
+/**
+ * 教員ペースト確認ダイアログの「確認して登録」ボタン処理
+ */
+window.confirmTeacherPaste = function (options) {
+    if (typeof options === 'string') {
+        try {
+            options = JSON.parse(decodeURIComponent(options));
+        } catch (e) {
+            console.error('Failed to parse options:', e);
+            return;
+        }
+    }
+    const autoRegister = document.getElementById('autoRegisterCheckbox')?.checked || false;
+
+    // 確認ダイアログを削除
+    document.getElementById('teacherPasteOverlay')?.remove();
+    document.getElementById('teacherPasteDialog')?.remove();
+
+
+    // 未登録教員を登録
+    if (autoRegister && options.unknown.length > 0) {
+        options.unknown.forEach(name => {
+            // 既に登録されていないかチェック
+            if (!ALL_TEACHERS.find(t => t.name === name)) {
+                addTeacherToList(name, '不明');
+            }
+        });
+    }
+
+    // 教員入力欄に登録
+    const allNames = [...options.found.split('、').filter(n => n.trim()), ...options.unknown];
+    const teacherInput = document.getElementById('classTeacher');
+    teacherInput.value = allNames.join(', ');
+    teacherInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    console.log('教員が登録されました:', allNames);
+}
+
+/**
+ * 新規教員をリストに追加
+ */
+function addTeacherToList(name, dept = '不明') {
+    const newTeacher = { name: name.trim(), dept: dept };
+    ALL_TEACHERS.push(newTeacher);
+
+    // localStorageに保存
+    saveTeachersData();
+    console.log(`教員 "${name}" を登録しました`);
+}
+
+function renderTeacherList(list = ALL_TEACHERS) {
+    const items = document.getElementById('teacherListItems');
+    if (!items) return;
+
+    items.innerHTML = list.map(t => `
+        <div class="teacher-item" draggable="true" ondragstart="handleTeacherDragStart(event, '${t.name}')">
+            <span>${t.name}</span>
+            <span class="teacher-dept">${t.dept}</span>
+        </div>
+    `).join('');
+}
+
+function handleTeacherDragStart(e, name) {
+    e.dataTransfer.setData('text/plain', name);
+    e.dataTransfer.effectAllowed = 'copy';
+}
+
+function closeTeacherList() {
+    const container = document.getElementById('teacherListContainer');
+    if (container) container.classList.add('hidden');
+}
+
+// グローバルスコープに教員処理関数を登録
+window.handleTeacherPaste = handleTeacherPaste;
+window.confirmTeacherPaste = confirmTeacherPaste;
+window.showTeacherPasteDialog = showTeacherPasteDialog;
+window.addTeacherToList = addTeacherToList;
+
+// =============================
+// 各種設定・管理機能
+// =============================
+
+let teacherSortConfig = { key: 'dept', asc: true };
+let courseSortConfig = { key: 'grade', asc: true };
+
+function switchSettingsTab(tab) {
+    const courseTab = document.getElementById('tabManageCourses');
+    const teacherTab = document.getElementById('tabManageTeachers');
+
+    const courseView = document.getElementById('settingsCoursesView');
+    const teacherView = document.getElementById('settingsTeachersView');
+
+    // Reset tabs
+    [courseTab, teacherTab].forEach(t => t?.classList.remove('active'));
+    [courseView, teacherView].forEach(v => v?.classList.add('hidden'));
+
+    if (tab === 'courses') {
+        courseTab.classList.add('active');
+        courseView.classList.remove('hidden');
+        renderManageCourses();
+    } else {
+        // Default to Teachers
+        teacherTab.classList.add('active');
+        teacherView.classList.remove('hidden');
+        renderManageTeachers();
+    }
+}
+
+function renderManageCourses() {
+    const tbody = document.getElementById('manageCoursesBody');
+    const searchInput = document.getElementById('courseMasterSearch');
+    if (!tbody) return;
+
+    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+
+    // フィルター
+    let filtered = ALL_COURSES.filter(c =>
+        c.name.toLowerCase().includes(searchTerm) ||
+        String(c.grade).includes(searchTerm) ||
+        c.course.toLowerCase().includes(searchTerm)
+    );
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center">${ALL_COURSES.length === 0 ? "授業候補が登録されていません" : "該当する授業がありません"}</td></tr>`;
+        return;
+    }
+
+    // ソート
+    filtered.sort((a, b) => {
+        let valA = a[courseSortConfig.key];
+        let valB = b[courseSortConfig.key];
+
+        let res = 0;
+        if (typeof valA === 'string') {
+            res = valA.localeCompare(valB, 'ja');
+        } else {
+            res = valA - valB;
+        }
+        return courseSortConfig.asc ? res : -res;
+    });
+
+    // 並び替えアイコン更新
+    updateSortIcons('course', courseSortConfig);
+
+    tbody.innerHTML = filtered.map((c, index) => {
+        const originalIndex = ALL_COURSES.findIndex(src => src.name === c.name && src.grade === c.grade && src.course === c.course);
+        const courseLabels = { 'common': '一般', 'M': 'M', 'D': 'D', 'E': 'E', 'I': 'I' };
+
+        return `
+            <tr>
+                <td>${c.grade}年</td>
+                <td>${courseLabels[c.course] || c.course}</td>
+                <td><strong>${c.name}</strong></td>
+                <td>
+                    <div style="display: flex; gap: 5px;">
+                        <button class="btn btn-outline-primary btn-sm btn-action" onclick="openCourseEditModal(${originalIndex})">✏️</button>
+                        <button class="btn btn-outline-danger btn-sm btn-action" onclick="deleteCourseMaster(${originalIndex})">🗑️</button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function sortCourseMaster(key) {
+    if (courseSortConfig.key === key) {
+        courseSortConfig.asc = !courseSortConfig.asc;
+    } else {
+        courseSortConfig.key = key;
+        courseSortConfig.asc = true;
+    }
+    renderManageCourses();
+}
+
+// 候補授業（マスター）編集モーダル
+function openCourseEditModal(index = -1) {
+    const modal = document.getElementById('courseEditModal');
+    const title = document.getElementById('courseEditModalTitle');
+    const idInput = document.getElementById('editingCourseIndex');
+    const nameInput = document.getElementById('editCourseName');
+    const gradeInput = document.getElementById('editCourseGrade');
+    const deptInput = document.getElementById('editCourseDept');
+
+    if (!modal) return;
+
+    if (index >= 0) {
+        const c = ALL_COURSES[index];
+        title.innerText = '候補授業の編集';
+        idInput.value = index;
+        nameInput.value = c.name;
+        gradeInput.value = c.grade;
+        deptInput.value = c.course;
+    } else {
+        title.innerText = '新規候補授業の追加';
+        idInput.value = -1;
+        nameInput.value = '';
+        gradeInput.value = 1;
+        deptInput.value = 'common';
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function closeCourseEditModal() {
+    const modal = document.getElementById('courseEditModal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function saveCourseMaster() {
+    const index = parseInt(document.getElementById('editingCourseIndex').value);
+    const name = document.getElementById('editCourseName').value.trim();
+    const grade = parseInt(document.getElementById('editCourseGrade').value);
+    const course = document.getElementById('editCourseDept').value;
+
+    if (!name) {
+        alert('授業名を入力してください');
+        return;
+    }
+
+    const courseData = { name, grade, course };
+
+    if (index >= 0) {
+        ALL_COURSES[index] = courseData;
+    } else {
+        ALL_COURSES.push(courseData);
+    }
+
+    saveCoursesData();
+    closeCourseEditModal();
+}
+
+function deleteCourseMaster(index) {
+    if (!confirm(`「${ALL_COURSES[index].name}」を候補リストから削除してもよろしいですか？`)) return;
+    ALL_COURSES.splice(index, 1);
+    saveCoursesData();
+}
+
+
+function renderManageTeachers() {
+    const tbody = document.getElementById('manageTeachersBody');
+    const searchInput = document.getElementById('teacherMasterSearch');
+    if (!tbody) return;
+
+    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+
+    // フィルター
+    let filtered = ALL_TEACHERS.filter(t =>
+        t.name.toLowerCase().includes(searchTerm) ||
+        (t.dept && t.dept.toLowerCase().includes(searchTerm))
+    );
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="3" class="text-center">${ALL_TEACHERS.length === 0 ? "教員が登録されていません" : "該当する教員がいません"}</td></tr>`;
+        return;
+    }
+
+    // ソート
+    filtered.sort((a, b) => {
+        let valA = a[teacherSortConfig.key] || '';
+        let valB = b[teacherSortConfig.key] || '';
+        const res = valA.localeCompare(valB, 'ja');
+        return teacherSortConfig.asc ? res : -res;
+    });
+
+    // 並び替えアイコン更新
+    updateSortIcons('teacher', teacherSortConfig);
+
+    tbody.innerHTML = filtered.map((t, index) => {
+        // 元の配列でのインデックスを探す（編集用）
+        const originalIndex = ALL_TEACHERS.findIndex(teach => teach.name === t.name && teach.dept === t.dept);
+
+        return `
+            <tr>
+                <td><strong>${t.name}</strong></td>
+                <td>${t.dept || '-'}</td>
+                <td>
+                    <div style="display: flex; gap: 5px;">
+                        <button class="btn btn-outline-primary btn-sm btn-action" onclick="openTeacherEditModal(${originalIndex})">✏️</button>
+                        <button class="btn btn-outline-danger btn-sm btn-action" onclick="deleteTeacher(${originalIndex})">🗑️</button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function sortTeacherMaster(key) {
+    if (teacherSortConfig.key === key) {
+        teacherSortConfig.asc = !teacherSortConfig.asc;
+    } else {
+        teacherSortConfig.key = key;
+        teacherSortConfig.asc = true;
+    }
+    renderManageTeachers();
+}
+
+function updateSortIcons(type, config) {
+    const icons = {
+        'course': { 'grade': 'sortIconGrade', 'course': 'sortIconCourse', 'name': 'sortIconCourseName' },
+        'teacher': { 'name': 'sortIconTeacherName', 'dept': 'sortIconTeacherDept' }
+    };
+
+    const typeIcons = icons[type];
+    for (const key in typeIcons) {
+        const el = document.getElementById(typeIcons[key]);
+        if (!el) continue;
+        if (key === config.key) {
+            el.textContent = config.asc ? '▲' : '▼';
+            el.style.color = 'var(--primary-blue)';
+        } else {
+            el.textContent = '⇅';
+            el.style.color = 'var(--neutral-400)';
+        }
+    }
+}
+
+// 教員編集モーダル
+function openTeacherEditModal(index = -1) {
+    const modal = document.getElementById('teacherEditModal');
+    const title = document.getElementById('teacherEditModalTitle');
+    const idInput = document.getElementById('editingTeacherIndex');
+    const nameInput = document.getElementById('editTeacherName');
+    const deptInput = document.getElementById('editTeacherDept');
+
+    if (!modal) return;
+
+    if (index >= 0) {
+        const t = ALL_TEACHERS[index];
+        title.innerText = '教員情報の編集';
+        idInput.value = index;
+        nameInput.value = t.name;
+        deptInput.value = t.dept;
+    } else {
+        title.innerText = '新規教員の登録';
+        idInput.value = -1;
+        nameInput.value = '';
+        deptInput.value = '';
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function closeTeacherEditModal() {
+    const modal = document.getElementById('teacherEditModal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function saveTeacher() {
+    const index = parseInt(document.getElementById('editingTeacherIndex').value);
+    const name = document.getElementById('editTeacherName').value.trim();
+    const dept = document.getElementById('editTeacherDept').value.trim();
+
+    if (!name) {
+        alert('氏名を入力してください');
+        return;
+    }
+
+    const teacherData = { name, dept };
+
+    if (index >= 0) {
+        ALL_TEACHERS[index] = teacherData;
+    } else {
+        ALL_TEACHERS.push(teacherData);
+    }
+
+    saveTeachersData();
+    closeTeacherEditModal();
+}
+
+function deleteTeacher(index) {
+    if (!confirm(`「${ALL_TEACHERS[index].name}」先生を削除してもよろしいですか？`)) return;
+    ALL_TEACHERS.splice(index, 1);
+    saveTeachersData();
+}
+
+window.switchSettingsTab = switchSettingsTab;
+window.renderManageTeachers = renderManageTeachers;
+window.renderManageCourses = renderManageCourses;
+window.openTeacherEditModal = openTeacherEditModal;
+window.closeTeacherEditModal = closeTeacherEditModal;
+window.saveTeacher = saveTeacher;
+window.deleteTeacher = deleteTeacher;
+window.sortTeacherMaster = sortTeacherMaster;
+
+window.openCourseEditModal = openCourseEditModal;
+window.closeCourseEditModal = closeCourseEditModal;
+window.saveCourseMaster = saveCourseMaster;
+window.deleteCourseMaster = deleteCourseMaster;
+window.sortCourseMaster = sortCourseMaster;
