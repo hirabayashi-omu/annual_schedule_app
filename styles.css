@@ -774,13 +774,13 @@ body {
 
 .class-input-form {
     background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(168, 85, 247, 0.05));
-    padding: 2rem;
+    padding: 1.5rem;
     border-radius: 12px;
     border: 1px solid rgba(99, 102, 241, 0.2);
 }
 
 .form-section {
-    margin-bottom: 2rem;
+    margin-bottom: 1.5rem;
 }
 
 .form-section:last-child {
@@ -803,28 +803,39 @@ body {
     align-items: end;
 }
 
+.form-row-single {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
 .form-group-wide {
     grid-column: span 2;
+}
+
+.form-group-full {
+    grid-column: 1 / -1;
 }
 
 .semester-schedule {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 2rem;
+    gap: 1rem;
 }
 
 .semester-group {
-    padding: 1.5rem;
+    padding: 1rem;
     background: white;
-    border-radius: 10px;
+    border-radius: 8px;
     border: 2px solid rgba(99, 102, 241, 0.15);
 }
 
 .semester-group h4 {
-    font-size: 1rem;
+    font-size: 0.95rem;
     font-weight: 700;
     color: var(--accent-color);
-    margin-bottom: 1rem;
+    margin-bottom: 0.75rem;
     padding-bottom: 0.5rem;
     border-bottom: 1px solid rgba(99, 102, 241, 0.2);
 }
@@ -867,6 +878,7 @@ body {
     font-size: 1rem;
     background: white;
     transition: all 0.3s ease;
+    min-width: 120px;
 }
 
 .form-input:focus,
@@ -1034,6 +1046,161 @@ body {
     .export-section {
         grid-template-columns: 1fr;
     }
+
+    /* モーダルレスポンシブ */
+    .modal {
+        padding: 8px;
+    }
+
+    .modal-content {
+        padding: 12px;
+        max-height: calc(100vh - 16px);
+    }
+
+    .class-input-form {
+        padding: 1rem;
+    }
+
+    .form-section {
+        margin-bottom: 1rem;
+    }
+
+    .form-section-title {
+        font-size: 0.95rem;
+        margin-bottom: 0.75rem;
+    }
+    .modal {
+        padding: 10px;
+    }
+
+    .modal-content {
+        padding: 16px;
+        max-height: calc(100vh - 20px);
+    }
+
+    .modal-header {
+        margin-bottom: 16px;
+    }
+
+    .modal-header h2 {
+        font-size: var(--font-size-lg);
+    }
+
+    .modal-body {
+        margin-bottom: 16px;
+    }
+
+    .modal-footer {
+        gap: 8px;
+        padding-top: 8px;
+    }
+
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+
+    .class-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+
+    .class-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .semester-schedule {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .modal {
+        padding: 8px;
+        align-items: flex-start;
+        justify-content: center;
+    }
+
+    .modal-content {
+        padding: 12px;
+        max-height: calc(100vh - 16px);
+        max-width: calc(100vw - 16px) !important;
+        margin-top: 8px;
+        width: calc(100vw - 16px) !important;
+    }
+
+    .modal-header {
+        margin-bottom: 12px;
+    }
+
+    .modal-header h2 {
+        font-size: var(--font-size-base);
+    }
+
+    .modal-body {
+        margin-bottom: 12px;
+        font-size: 0.9rem;
+    }
+
+    .modal-footer {
+        gap: 6px;
+        padding-top: 8px;
+    }
+
+    .form-section {
+        margin-bottom: 1rem;
+    }
+
+    .form-section-title {
+        font-size: 1rem;
+    }
+
+    .btn {
+        font-size: 0.9rem;
+        padding: var(--spacing-sm) var(--spacing-md);
+    }
+
+    .btn-sm {
+        padding: 4px 8px;
+        font-size: 0.75rem;
+    }
+
+    #classInputModal .modal-content {
+        max-width: calc(100vw - 16px) !important;
+        width: calc(100vw - 16px) !important;
+    }
+
+    #quickEditModal .modal-content {
+        max-width: calc(100vw - 16px) !important;
+        width: calc(100vw - 16px) !important;
+    }
+
+    #teacherEditModal .modal-content {
+        max-width: calc(100vw - 16px) !important;
+        width: calc(100vw - 16px) !important;
+    }
+
+    #courseEditModal .modal-content {
+        max-width: calc(100vw - 16px) !important;
+        width: calc(100vw - 16px) !important;
+    }
+
+    .close-modal-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 20px;
+    }
+
+    .semester-schedule {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+
+    .semester-group {
+        padding: 1rem;
+    }
 }
 
 /* ===========================
@@ -1091,6 +1258,8 @@ body {
     justify-content: center;
     align-items: center;
     z-index: 1000;
+    overflow: auto;
+    padding: 20px;
 }
 
 .modal.hidden {
@@ -1101,11 +1270,24 @@ body {
     background: white;
     padding: 20px;
     border-radius: 8px;
-    width: 90%;
-    max-width: 900px;
-    max-height: 90vh;
+    width: 100%;
+    max-width: 1000px;
+    max-height: calc(100vh - 40px);
     display: flex;
     flex-direction: column;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .modal-header {
@@ -1114,13 +1296,22 @@ body {
     align-items: center;
     margin-bottom: 20px;
     padding-bottom: 10px;
-    border-bottom: 1px solid #ddd;
+    border-bottom: 1px solid var(--neutral-200);
+    flex-shrink: 0;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: var(--font-size-xl);
+    color: var(--neutral-800);
+    flex: 1;
 }
 
 .modal-body {
     flex: 1;
     overflow-y: auto;
     margin-bottom: 20px;
+    border-radius: var(--radius-md);
 }
 
 .modal-footer {
@@ -1128,7 +1319,9 @@ body {
     justify-content: flex-end;
     gap: 10px;
     padding-top: 10px;
-    border-top: 1px solid #ddd;
+    border-top: 1px solid var(--neutral-200);
+    flex-shrink: 0;
+    flex-wrap: wrap;
 }
 
 .close-modal-btn {
@@ -1136,6 +1329,20 @@ body {
     border: none;
     font-size: 24px;
     cursor: pointer;
+    color: var(--neutral-500);
+    transition: all var(--transition-fast);
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+}
+
+.close-modal-btn:hover {
+    background: var(--neutral-100);
+    color: var(--neutral-700);
 }
 
 /* 日程表テーブル */

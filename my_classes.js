@@ -97,6 +97,52 @@ function initializeMyClasses() {
         updateCalendar();
     }
 
+    // 教員入力フィールドのEnterキーリスナー
+    const classTeacherInput = document.getElementById('classTeacher');
+    if (classTeacherInput) {
+        classTeacherInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addTeacherToList();
+            }
+        });
+    }
+
+    // ボタンのイベントリスナー設定
+    const toggleTeacherListBtn = document.getElementById('toggleTeacherListBtn');
+    if (toggleTeacherListBtn) {
+        console.log('Setting up toggleTeacherListBtn event listener in initializeMyClasses');
+        toggleTeacherListBtn.addEventListener('click', (e) => {
+            console.log('toggleTeacherListBtn clicked');
+            e.preventDefault();
+            const container = document.getElementById('teacherListContainer');
+            if (!container) {
+                console.error('teacherListContainer not found');
+                return;
+            }
+            container.classList.toggle('hidden');
+            if (!container.classList.contains('hidden')) {
+                renderTeacherList();
+            }
+        });
+    } else {
+        console.error('toggleTeacherListBtn not found during initialization');
+    }
+
+    const addTeacherBtn = document.getElementById('addTeacherBtn');
+    if (addTeacherBtn) {
+        console.log('Setting up addTeacherBtn event listener in initializeMyClasses');
+        // onclickを削除してリスナーを設定
+        addTeacherBtn.removeAttribute('onclick');
+        addTeacherBtn.addEventListener('click', (e) => {
+            console.log('addTeacherBtn clicked');
+            e.preventDefault();
+            addTeacherToList();
+        });
+    } else {
+        console.error('addTeacherBtn not found during initialization');
+    }
+
     // 検索・教員リスト機能の初期化
     if (typeof initCourseSearch === 'function') initCourseSearch();
     if (typeof initTeacherDragAndDrop === 'function') initTeacherDragAndDrop();
@@ -109,6 +155,130 @@ function initializeMyClasses() {
     console.log('授業管理機能の初期化完了');
 }
 
+/* =============================
+   複数教員管理機能
+   ============================= */
+
+// グローバル変数：編集中の教員リスト
+let selectedTeachers = [];
+
+/**
+ * HTML特殊文字をエスケープ
+ */
+function escapeHtml(text) {
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, m => map[m]);
+}
+
+/**
+ * 教員を追加リストに追加
+ */
+function addTeacherToList() {
+    const input = document.getElementById('classTeacher');
+    
+    // 入力フィールドが見つからない場合
+    if (!input) {
+        console.error('Error: #classTeacher element not found');
+        alert('入力フィールドが見つかりません');
+        return;
+    }
+    
+    const teacher = input.value.trim();
+    console.log('addTeacherToList called with:', teacher);
+
+    if (!teacher) {
+        console.log('Empty teacher name provided');
+        alert('教員名を入力してください');
+        return;
+    }
+
+    if (selectedTeachers.length >= 10) {
+        console.log('Maximum teachers reached');
+        alert('最大10人までご登録いただけます');
+        return;
+    }
+
+    if (selectedTeachers.includes(teacher)) {
+        console.log('Teacher already exists:', teacher);
+        alert('既に追加されています');
+        return;
+    }
+
+    selectedTeachers.push(teacher);
+    input.value = '';
+    console.log('Teacher added. Current list:', selectedTeachers);
+
+    updateTeachersDisplay();
+}
+
+/**
+ * 教員をリストから削除
+ */
+function removeTeacherFromList(teacher) {
+    selectedTeachers = selectedTeachers.filter(t => t !== teacher);
+    updateTeachersDisplay();
+}
+
+/**
+ * 教員リスト表示を更新
+ */
+function updateTeachersDisplay() {
+    const container = document.getElementById('teachersDisplay');
+    const badge = document.getElementById('teacherCountBadge');
+
+    if (selectedTeachers.length === 0) {
+        container.innerHTML = '<div class="empty-teacher-message" style="width: 100%; color: var(--neutral-500); font-size: 0.85rem;">教員を追加してください</div>';
+        badge.style.display = 'none';
+    } else {
+        container.innerHTML = selectedTeachers.map(teacher => `
+            <div style="
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 6px 12px;
+                background: linear-gradient(135deg, var(--primary-blue), var(--primary-blue-dark));
+                color: white;
+                border-radius: 20px;
+                font-size: 0.85rem;
+                font-weight: 500;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            ">
+                <span>${escapeHtml(teacher)}</span>
+                <button type="button" onclick="removeTeacherFromList('${teacher.replace(/'/g, "\\'")}')" 
+                    style="
+                        background: none;
+                        border: none;
+                        color: white;
+                        cursor: pointer;
+                        font-size: 1.2rem;
+                        padding: 0;
+                        margin: -2px;
+                        opacity: 0.8;
+                    " title="削除">✕</button>
+            </div>
+        `).join('');
+        
+        badge.textContent = `${selectedTeachers.length}人`;
+        badge.style.display = 'inline-block';
+    }
+}
+
+/**
+ * フォーム値をクリア＆教員リストをリセット
+ */
+function resetTeachersForm() {
+    selectedTeachers = [];
+    updateTeachersDisplay();
+    document.getElementById('classTeacher').value = '';
+}
+
+// ===========================
 // 開講期間による表示切り替え
 function updateSemesterVisibility() {
     const type = document.getElementById('semesterType').value;
@@ -357,6 +527,17 @@ function editMyClass(id) {
 
     cancelBtn.classList.remove('hidden');
 
+    // 教員リストを復元（複数教員対応）
+    if (cls.teachers && Array.isArray(cls.teachers)) {
+        selectedTeachers = cls.teachers.slice();
+    } else if (cls.teacher) {
+        // 互換性：古いバージョンでは単一の teacher フィールド
+        selectedTeachers = cls.teacher.split(/[,、]+/).map(t => t.trim()).filter(t => t);
+    } else {
+        selectedTeachers = [];
+    }
+    updateTeachersDisplay();
+
     // フォームへスクロールは不要（モーダルなので）
 }
 
@@ -403,6 +584,9 @@ function resetForm() {
     addBtn.classList.add('btn-primary');
 
     cancelBtn.classList.add('hidden');
+
+    // 教員リストをリセット
+    resetTeachersForm();
 }
 
 // 授業を追加・更新
@@ -413,7 +597,7 @@ function addMyClass() {
 
     const name = document.getElementById('className').value.trim();
     const location = document.getElementById('classLocation').value.trim();
-    const teacher = document.getElementById('classTeacher') ? document.getElementById('classTeacher').value.trim() : '';
+    const teachers = selectedTeachers.slice(); // 複数教員対応
     const classYear = parseInt(document.getElementById('classYear').value);
     const departmentType = document.getElementById('departmentType').value;
     const targetType = document.getElementById('targetType').value;
@@ -433,6 +617,11 @@ function addMyClass() {
         return;
     }
 
+    if (teachers.length === 0) {
+        alert('担当教員を最少1人追加してください');
+        return;
+    }
+
     // クラス別の場合のみクラスチェック
     if (targetType === 'class' && !targetClass) {
         alert('クラスを選択してください');
@@ -444,7 +633,8 @@ function addMyClass() {
         id: isEditMode ? parseInt(idInput.value) : Date.now(),
         name,
         location,
-        teacher,
+        teachers,  // 複数教員対応
+        teacher: teachers.join('、'),  // 互換性のため単一フィールドも保持
         classYear,
         departmentType,
         targetType,
@@ -2056,8 +2246,6 @@ function openClassInputModal(preset = null) {
                 const semSelect = document.getElementById('semesterType');
                 if (semSelect) {
                     semSelect.value = preset.semester === 'first' ? 'first' : 'second';
-                    // もし currentTimetableSemester が 'first' なら first のみ、等の制御は好みだが、
-                    // ここでは「前期のみ」「後期のみ」を選択状態にする
                     updateSemesterVisibility();
                 }
             }
@@ -2379,49 +2567,37 @@ function saveTeachersData() {
 
 function initTeacherDragAndDrop() {
     const teacherInput = document.getElementById('classTeacher');
-    const teacherListItems = document.getElementById('teacherListItems');
-    const toggleBtn = document.getElementById('toggleTeacherListBtn');
-    const searchInput = document.getElementById('teacherSearchInput');
     const suggestions = document.getElementById('teacherSuggestions');
 
-    if (!teacherInput || !teacherListItems || !toggleBtn) return;
-
-    // リストトグル
-    toggleBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        const container = document.getElementById('teacherListContainer');
-        if (!container) return;
-
-        container.classList.toggle('hidden');
-        if (!container.classList.contains('hidden')) {
-            renderTeacherList();
-        }
-    });
+    if (!teacherInput) return;
 
     // 入力時のサジェスト表示
-    teacherInput.addEventListener('input', () => {
-        const query = teacherInput.value.trim().toLowerCase();
-        if (query.length < 1) {
-            suggestions.classList.add('hidden');
-            return;
-        }
+    if (suggestions) {
+        teacherInput.addEventListener('input', () => {
+            const query = teacherInput.value.trim().toLowerCase();
+            if (query.length < 1) {
+                suggestions.classList.add('hidden');
+                return;
+            }
 
-        // 最後のカンマ以降のワードを取得（複数入力対応）
-        const lastPart = query.split(/[,、\s]+/).pop();
-        if (lastPart.length < 1) {
-            suggestions.classList.add('hidden');
-            return;
-        }
+            // 最後のカンマ以降のワードを取得（複数入力対応）
+            const lastPart = query.split(/[,、\s]+/).pop();
+            if (lastPart.length < 1) {
+                suggestions.classList.add('hidden');
+                return;
+            }
 
-        const filtered = ALL_TEACHERS.filter(t =>
-            t.name.toLowerCase().includes(lastPart) ||
-            (t.dept && t.dept.toLowerCase().includes(lastPart))
-        );
+            const filtered = ALL_TEACHERS.filter(t =>
+                t.name.toLowerCase().includes(lastPart) ||
+                (t.dept && t.dept.toLowerCase().includes(lastPart))
+            );
 
-        renderTeacherSuggestions(filtered.slice(0, 10));
-    });
+            renderTeacherSuggestions(filtered.slice(0, 10));
+        });
+    }
 
     // 検索（パネル内）
+    const searchInput = document.getElementById('teacherSearchInput');
     if (searchInput) {
         searchInput.oninput = () => {
             const query = searchInput.value.trim().toLowerCase();
@@ -2433,39 +2609,46 @@ function initTeacherDragAndDrop() {
     }
 
     // 外側クリックでサジェストを閉じる
-    document.addEventListener('click', (e) => {
-        if (!teacherInput.contains(e.target) && suggestions && !suggestions.contains(e.target)) {
-            suggestions.classList.add('hidden');
-        }
-    });
+    if (teacherInput && suggestions) {
+        document.addEventListener('click', (e) => {
+            if (!teacherInput.contains(e.target) && !suggestions.contains(e.target)) {
+                suggestions.classList.add('hidden');
+            }
+        });
+    }
 
     // ドラッグ＆ドロップ
-    teacherInput.ondragover = (e) => {
-        e.preventDefault();
-        teacherInput.classList.add('drop-over');
-    };
+    if (teacherInput) {
+        teacherInput.ondragover = (e) => {
+            e.preventDefault();
+            teacherInput.classList.add('drop-over');
+        };
 
-    teacherInput.ondragleave = () => {
-        teacherInput.classList.remove('drop-over');
-    };
+        teacherInput.ondragleave = () => {
+            teacherInput.classList.remove('drop-over');
+        };
 
-    teacherInput.ondrop = (e) => {
-        e.preventDefault();
-        teacherInput.classList.remove('drop-over');
-        const name = e.dataTransfer.getData('text/plain');
-        if (name) {
-            appendTeacherName(name);
-        }
-    };
+        teacherInput.ondrop = (e) => {
+            e.preventDefault();
+            teacherInput.classList.remove('drop-over');
+            const name = e.dataTransfer.getData('text/plain');
+            if (name) {
+                appendTeacherName(name);
+            }
+        };
 
-    // ペーストイベント処理
-    teacherInput.addEventListener('paste', (e) => {
-        e.preventDefault();
-        const pastedText = (e.clipboardData || window.clipboardData).getData('text');
-        if (pastedText) {
-            handleTeacherPaste(pastedText);
-        }
-    });
+        // ペーストイベント処理
+        teacherInput.addEventListener('paste', (e) => {
+            e.preventDefault();
+            const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+            if (pastedText) {
+                handleTeacherPaste(pastedText);
+            }
+        });
+    }
+
+    // 追加ボタンのイベントリスナー（重複登録を避けるため削除）
+    // 注：このコードはinitializeMyClasses内に移動済み
 }
 
 function renderTeacherSuggestions(list) {
@@ -2777,7 +2960,7 @@ window.confirmTeacherPaste = function (options) {
         options.unknown.forEach(name => {
             // 既に登録されていないかチェック
             if (!ALL_TEACHERS.find(t => t.name === name)) {
-                addTeacherToList(name, '不明');
+                registerNewTeacher(name, '不明');
             }
         });
     }
@@ -2792,9 +2975,13 @@ window.confirmTeacherPaste = function (options) {
 }
 
 /**
- * 新規教員をリストに追加
+ * 新規教員をマスターリストに登録
  */
-function addTeacherToList(name, dept = '不明') {
+function registerNewTeacher(name, dept = '不明') {
+    if (!name || typeof name !== 'string') {
+        console.warn('無効な教員名です:', name);
+        return;
+    }
     const newTeacher = { name: name.trim(), dept: dept };
     ALL_TEACHERS.push(newTeacher);
 
