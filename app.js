@@ -1679,15 +1679,23 @@ function createDayCell(date, target, laneMap = new Map(), customLaneCount = 0) {
             return;
         }
 
-        // オーバライドチェック
-        const isOverridden = classOverrides.some(ov =>
+        // オーバライドチェック：削除されているか、移動済みなのかを確認
+        const isDeleted = classOverrides.some(ov =>
             String(ov.id) === String(item.id) &&
             ov.type === 'excel' &&
             ov.date === dateStr &&
-            (ov.action === 'delete' || ov.action === 'move')
+            ov.action === 'delete'
+        );
+        
+        const isMoved = classOverrides.some(ov =>
+            String(ov.id) === String(item.id) &&
+            ov.type === 'excel' &&
+            ov.date === dateStr &&
+            ov.action === 'move' &&
+            ov.data  // 「移動済み（データあり）」の記録が存在する
         );
 
-        if (isOverridden) return;
+        if (isDeleted || isMoved) return;
 
         const eventItem = document.createElement('div');
         eventItem.className = 'event-item';
@@ -1730,12 +1738,19 @@ function createDayCell(date, target, laneMap = new Map(), customLaneCount = 0) {
     });
 
     // この日に追加（移動）されたExcelイベントを表示
+    // 条件：(1) moveアクション (2) dataあり（実データ保持） (3) この日で削除されていない
     const addedExcelOverrides = classOverrides.filter(ov =>
         ov.date === dateStr &&
         ov.action === 'move' &&
         ov.type === 'excel' &&
         ov.data &&
-        !classOverrides.some(dov => dov.date === dateStr && String(dov.id) === String(ov.id) && dov.type === 'excel' && dov.action === 'delete')
+        // この日で削除されていないことを確認
+        !classOverrides.some(dov => 
+            String(dov.id) === String(ov.id) && 
+            dov.date === dateStr && 
+            dov.type === 'excel' && 
+            dov.action === 'delete'
+        )
     );
 
     addedExcelOverrides.forEach(ov => {
@@ -1794,6 +1809,12 @@ function createDayCell(date, target, laneMap = new Map(), customLaneCount = 0) {
 
     dayCell.appendChild(eventsContainer);
 
+    // 自分の授業を追加（my_classes.jsから）
+    // ※ こここイベントコンテナ作成後に呼ぶことで、他のイベントとの二重追加を防ぐ
+    if (typeof addMyClassesToDayCell === 'function') {
+        addMyClassesToDayCell(dayCell, date, dayEvents);
+    }
+
     // セルクリックで新規追加
     dayCell.addEventListener('click', (e) => {
         // イベントアイテムやその中のボタンをクリックした時は反応しない
@@ -1802,11 +1823,6 @@ function createDayCell(date, target, laneMap = new Map(), customLaneCount = 0) {
         const newId = 'custom-' + Date.now();
         editCalendarEvent('custom', newId, dateStr);
     });
-
-    // 自分の授業を追加（my_classes.jsから）
-    if (typeof addMyClassesToDayCell === 'function') {
-        addMyClassesToDayCell(dayCell, date, dayEvents);
-    }
 
     // イベントの並び替え：参加予定（ピン付き）を優先して上に、期間予定はレーンを維持
     const finalContainer = dayCell.querySelector('.day-events');
@@ -1994,11 +2010,12 @@ function moveCalendarEvent(eventData, targetDate, isCopy = false) {
             }
         }
     } else {
-        // 移動先にある同一アイテムのオーバライドがあれば消去（上書き）
+        // 移動先にある同一アイテムのオーバライドをすべて消去
         classOverrides = classOverrides.filter(ov =>
             !(String(ov.id) === String(id) && ov.date === targetDate && ov.type === type && (type !== 'myclass' || String(ov.period) === String(period)))
         );
 
+        // 常にmoveオーバライドを追加（元に戻したかどうかは削除時に判定）
         if (movingData) {
             classOverrides.push({
                 type: type,
@@ -2042,6 +2059,17 @@ function deleteCalendarEvent(e, type, id, date, period = null) {
             !(ov.type === 'custom' && String(ov.id) === String(id))
         );
     } else {
+        // 削除する前に、同じ日付のmoveオーバライドをすべてクリア
+        // （移動記録が残っていると、削除レコードと競合する可能性があるため）
+        classOverrides = classOverrides.filter(ov =>
+            !(String(ov.id) === String(id) && 
+              ov.date === date && 
+              ov.type === type && 
+              ov.action === 'move' &&
+              (type !== 'myclass' || String(ov.period) === String(period)))
+        );
+        
+        // 削除レコードを追加
         classOverrides.push({
             type: type,
             id: id,
@@ -2385,6 +2413,8 @@ window.handleQuickEditSubmit = handleQuickEditSubmit;
  */
 function saveAllToLocalExplicit() {
     saveAllToLocal();
+    localStorage.setItem('lastBackupTime', new Date().toLocaleString());
+    updateBackupInfo();
     alert('すべてのデータを現在のブラウザ（LocalStorage）に保存しました。');
 }
 window.saveAllToLocalExplicit = saveAllToLocalExplicit;

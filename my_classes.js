@@ -211,6 +211,12 @@ function addTeacherToList() {
     // カンマ、読点、スペースで分割して各名前をトリム
     const names = value.split(/[,、\s]+/).map(n => n.trim()).filter(n => n !== '');
 
+    // フィルタリング後に名前がない場合
+    if (names.length === 0) {
+        alert('有効な教員名が入力されていません');
+        return;
+    }
+
     let added = 0;
     let skipped = 0;
 
@@ -553,10 +559,10 @@ function editMyClass(id) {
 
     // 教員リストを復元（複数教員対応）
     if (cls.teachers && Array.isArray(cls.teachers)) {
-        selectedTeachers = cls.teachers.slice();
+        selectedTeachers = cls.teachers.slice().filter(t => typeof t === 'string' && t.trim() !== '');
     } else if (cls.teacher) {
         // 互換性：古いバージョンでは単一の teacher フィールド
-        selectedTeachers = cls.teacher.split(/[,、]+/).map(t => t.trim()).filter(t => t);
+        selectedTeachers = cls.teacher.split(/[,、]+/).map(t => t.trim()).filter(t => t !== '');
     } else {
         selectedTeachers = [];
     }
@@ -1130,16 +1136,25 @@ function generateClassEvents(year, options = {}) {
             // 曜日が一致する場合のみ追加
             if (String(schedule.weekday) === String(effectiveWeekday)) {
 
-                // オーバライドチェック（削除または移動済みか）
-                const isOverridden = classOverrides.some(ov =>
+                // オーバライドチェック：削除されているか、移動済みなのかを確認
+                const isDeleted = classOverrides.some(ov =>
                     String(ov.id) === String(cls.id) &&
                     ov.type === 'myclass' &&
                     ov.date === dateStrKey &&
-                    (ov.action === 'delete' || ov.action === 'move') &&
-                    (!ov.period || ov.period === 'null' || ov.period === 'undefined' || String(ov.period) === String(schedule.period))
+                    ov.action === 'delete' &&
+                    String(ov.period) === String(schedule.period)
+                );
+                
+                const isMoved = classOverrides.some(ov =>
+                    String(ov.id) === String(cls.id) &&
+                    ov.type === 'myclass' &&
+                    ov.date === dateStrKey &&
+                    ov.action === 'move' &&
+                    ov.data &&  // 「移動済み（データあり）」の記録
+                    String(ov.period) === String(schedule.period)
                 );
 
-                if (isOverridden) return;
+                if (isDeleted || isMoved) return;
 
                 // 担当除外チェック
                 if (!includeExclusions) {
@@ -1277,6 +1292,11 @@ function generateClassEvents(year, options = {}) {
 
             // 移動先での制約チェック
             const allItemsForTarget = sourceData.filter(d => formatDateKey(d.date) === dateStr);
+            
+            // 移動先の曜日カウント情報を抽出
+            const weekdayCountItem = allItemsForTarget.find(d => d.weekdayCount);
+            const countStr = weekdayCountItem ? weekdayCountItem.weekdayCount : "";
+            
             const morningMarkers = ["午前", "午後打ち切り", "●"];
             const afternoonMarkers = ["午後", "午前打ち切り"];
 
@@ -1504,18 +1524,25 @@ function addMyClassesToDayCell(dayCell, date, dayEvents) {
                     : `[${departmentShort}${cls.targetGrade}${cls.targetClass}]`;
 
             const dateStr_key = formatDateKey(date);
-            const isOverridden = classOverrides.some(ov =>
+            // 削除されているか、移動済みなのかを確認
+            const isDeleted = classOverrides.some(ov =>
                 String(ov.id) === String(cls.id) &&
                 ov.type === 'myclass' &&
                 ov.date === dateStr_key &&
-                (ov.action === 'delete' || ov.action === 'move') &&
-                (!ov.period || ov.period === 'null' || ov.period === 'undefined' || String(ov.period) === String(schedule.period))
+                ov.action === 'delete' &&
+                String(ov.period) === String(schedule.period)
+            );
+            
+            const isMoved = classOverrides.some(ov =>
+                String(ov.id) === String(cls.id) &&
+                ov.type === 'myclass' &&
+                ov.date === dateStr_key &&
+                ov.action === 'move' &&
+                ov.data &&  // 「移動済み（データあり）」の記録
+                String(ov.period) === String(schedule.period)
             );
 
-
-
-
-            if (isOverridden) return;
+            if (isDeleted || isMoved) return;
 
             // 担当チェック（除外リストを確認）
             let assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
@@ -1566,11 +1593,12 @@ function addMyClassesToDayCell(dayCell, date, dayEvents) {
         ov.action === 'move' &&
         ov.type === 'myclass' &&
         ov.data &&
+        // この日で削除されていないことを確認
         !classOverrides.some(dov =>
             dov.date === dateStr_iso &&
             String(dov.id) === String(ov.id) &&
             dov.type === 'myclass' &&
-            (dov.action === 'delete' || (dov.action === 'move' && !dov.data)) &&
+            dov.action === 'delete' &&
             String(dov.period) === String(ov.period)
         )
     );
@@ -1681,10 +1709,13 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
 // 日程表を表示
 function showClassSchedule(classId = null, options = {}) {
     console.log('日程表表示処理を開始します...');
+    
+    // 個別授業の場合は、デフォルトで他のイベントを非表示
+    const isIndividualClass = !!classId;
     options = {
-        showAnnual: true,
+        showAnnual: !isIndividualClass,
         showMyClass: true,
-        showCustom: true,
+        showCustom: !isIndividualClass,
         ...options
     };
 
@@ -1739,10 +1770,15 @@ function showClassSchedule(classId = null, options = {}) {
             if (csvBtn) delete csvBtn.dataset.classId;
         }
     }
-
-    // フィルターの初期化
-    if (typeof initializeScheduleFilters === 'function') {
+    // フィルターの初期化（全日程表の場合のみ）
+    if (!classId && typeof initializeScheduleFilters === 'function') {
         initializeScheduleFilters(targetYear, classId, options);
+    }
+
+    // 個別授業の場合はフィルターコンテナを非表示
+    const filterContainer = document.getElementById('filterControlsContainer');
+    if (filterContainer) {
+        filterContainer.style.display = classId ? 'none' : 'flex';
     }
 
     // 1. 各ソースからデータを収集
@@ -2428,7 +2464,15 @@ function addScheduleEventListeners() {
     filters.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
-            el.onclick = () => showClassSchedule(currentScheduleClassId);
+            el.addEventListener('change', () => {
+                // チェックボックスの状態を取得して options に反映
+                const options = {
+                    showAnnual: document.getElementById('filterAnnualEvents').checked,
+                    showMyClass: document.getElementById('filterMyClasses').checked,
+                    showCustom: document.getElementById('filterCustomEvents').checked
+                };
+                showClassSchedule(currentScheduleClassId, options);
+            });
         }
     });
 
@@ -3533,9 +3577,12 @@ window.confirmTeacherPaste = function (options) {
     }
 
     // 教員入力欄に登録
-    const allNames = [...options.found.split('、').filter(n => n.trim()), ...options.unknown];
+    const allNames = [...options.found.split('、').filter(n => n.trim() !== ''), ...options.unknown];
+    const cleanedNames = allNames.filter(n => typeof n === 'string' && n.trim() !== '');
+    const uniqueNames = [...new Set(cleanedNames)]; // 重複排除
+    const finalNames = uniqueNames.slice(0, 10); // 最大10個まで
     const teacherInput = document.getElementById('classTeacher');
-    teacherInput.value = allNames.join(', ');
+    teacherInput.value = finalNames.join(', ');
     teacherInput.dispatchEvent(new Event('input', { bubbles: true }));
 
     console.log('教員が登録されました:', allNames);
@@ -3549,12 +3596,17 @@ function registerNewTeacher(name, dept = '不明') {
         console.warn('無効な教員名です:', name);
         return;
     }
-    const newTeacher = { name: name.trim(), dept: dept };
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+        console.warn('空の教員名は登録できません');
+        return;
+    }
+    const newTeacher = { name: trimmedName, dept: dept.trim() };
     ALL_TEACHERS.push(newTeacher);
 
     // localStorageに保存
     saveTeachersData();
-    console.log(`教員 "${name}" を登録しました`);
+    console.log(`教員 "${trimmedName}" を登録しました`);
 }
 
 function renderTeacherList(list = ALL_TEACHERS) {
