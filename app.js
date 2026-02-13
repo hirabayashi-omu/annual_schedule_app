@@ -1707,7 +1707,7 @@ function createDayCell(date, target, laneMap = new Map(), customLaneCount = 0) {
 
         // 参加状況チェック
         const participateOv = classOverrides.find(ov =>
-            String(ov.id) === String(item.id) && ov.date === dateStr && ov.type === 'excel' && ov.data
+            String(ov.id) === String(item.id) && ov.date === dateStr && ov.type === 'excel' && ov.action === 'move' && ov.data
         );
 
         let isParticipating = false;
@@ -1867,7 +1867,8 @@ function handleEventDragStart(e) {
 
     // 'application/json' ではなく 'text/plain' を使用（一部のブラウザでの互換性のため）
     e.dataTransfer.setData('text/plain', JSON.stringify(data));
-    e.dataTransfer.effectAllowed = 'move';
+    // Ctrlキー/Cmdキーでコピー、そうでなければ移動
+    e.dataTransfer.effectAllowed = (e.ctrlKey || e.metaKey) ? 'copy' : 'move';
     el.classList.add('dragging');
 
     // ドラッグ中のゴーストイメージを少し透明に
@@ -2015,16 +2016,47 @@ function moveCalendarEvent(eventData, targetDate, isCopy = false) {
             !(String(ov.id) === String(id) && ov.date === targetDate && ov.type === type && (type !== 'myclass' || String(ov.period) === String(period)))
         );
 
-        // 常にmoveオーバライドを追加（元に戻したかどうかは削除時に判定）
-        if (movingData) {
-            classOverrides.push({
-                type: type,
-                id: id,
-                date: targetDate,
-                action: 'move',
-                period: period,
-                data: movingData
-            });
+        // コピーの場合：新規IDを生成、移動の場合：元のIDを使用
+        if (isCopy) {
+            if (type === 'myclass') {
+                // 授業のコピー：新規IDを生成
+                const newId = 'copy-' + type + '-' + Date.now();
+                if (movingData) {
+                    classOverrides.push({
+                        type: type,
+                        id: newId,
+                        date: targetDate,
+                        action: 'move',
+                        period: period,
+                        data: JSON.parse(JSON.stringify(movingData))
+                    });
+                }
+            } else if (type === 'excel') {
+                // Excelイベントのコピー：新しく追加されたイベントとして記録
+                const newId = 'copy-' + id + '-' + Date.now();
+                if (movingData) {
+                    classOverrides.push({
+                        type: type,
+                        id: newId,
+                        date: targetDate,
+                        action: 'move',
+                        period: period,
+                        data: JSON.parse(JSON.stringify(movingData))
+                    });
+                }
+            }
+        } else {
+            // 移動の場合：元のIDで移動先に記録を追加
+            if (movingData) {
+                classOverrides.push({
+                    type: type,
+                    id: id,
+                    date: targetDate,
+                    action: 'move',
+                    period: period,
+                    data: movingData
+                });
+            }
         }
     }
 
@@ -3186,11 +3218,19 @@ function showEventContextMenu(e, type, id, date, period = null) {
 
     // 現在の参加状況を確認
     let isParticipating = false;
-    if (type === 'custom') {
+    if (type === 'myclass') {
+        // 授業タイプ：assignmentExclusionsで管理
+        // dateはISO形式の文字列（YYYY-MM-DD）として渡される
+        const dateKey = date;
+        const assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
+        const classExclusions = assignmentExclusions[id] || [];
+        // 除外リストに含まれていなければ参加中（担当中）
+        isParticipating = !classExclusions.includes(dateKey);
+    } else if (type === 'custom') {
         const ov = classOverrides.find(ov => ov.type === 'custom' && String(ov.id) === String(id));
         isParticipating = ov && ov.data && (ov.data.isParticipating !== undefined ? ov.data.isParticipating : (ov.data.event && (ov.data.event.includes('教職員会議') || ov.data.event.includes('コース会議') || ov.data.event.includes('体験入学') || ov.data.event.includes('入試') || ov.data.event.includes('入学試験'))));
     } else if (type === 'excel') {
-        const ov = classOverrides.find(ov => ov.type === 'excel' && String(ov.id) === String(id) && ov.date === date && ov.data);
+        const ov = classOverrides.find(ov => ov.type === 'excel' && String(ov.id) === String(id) && ov.date === date && ov.action === 'move' && ov.data);
         if (ov) {
             isParticipating = ov.data.isParticipating !== undefined ? ov.data.isParticipating : (ov.data.event && (ov.data.event.includes('教職員会議') || ov.data.event.includes('コース会議') || ov.data.event.includes('体験入学') || ov.data.event.includes('入試') || ov.data.event.includes('入学試験')));
         } else {
@@ -3230,42 +3270,86 @@ function handleContextAction(action) {
     if (action === 'participate' || action === 'not_participate') {
         const isEnable = action === 'participate';
 
-        if (type === 'excel') {
-            // Excel行事の参加切り替え
-            classOverrides = classOverrides.filter(ov =>
-                !(String(ov.id) === String(id) && ov.date === date && ov.type === 'excel')
-            );
-
-            let baseData = null;
-            const item = scheduleData.find(i => String(i.id) === String(id));
-            if (item) {
-                baseData = {
-                    event: item.event,
-                    type: item.type,
-                    location: item.location || '',
-                    memo: item.memo || '',
-                    isParticipating: isEnable
-                };
-            } else {
-                baseData = { event: 'Unknown', isParticipating: isEnable };
+        if (type === 'myclass') {
+            // 授業の参加切り替え：assignmentExclusionsで管理
+            let assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
+            // dateはISO形式の文字列（YYYY-MM-DD）として渡される
+            const dateKey = date;
+            
+            if (!assignmentExclusions[id]) {
+                assignmentExclusions[id] = [];
             }
 
-            classOverrides.push({
-                type: 'excel',
-                id: id,
-                date: date,
-                action: 'move',
-                data: baseData
-            });
+            if (isEnable) {
+                // 参加する場合：除外リストから削除
+                assignmentExclusions[id] = assignmentExclusions[id].filter(d => d !== dateKey);
+            } else {
+                // 非参加にする場合：除外リストに追加
+                if (!assignmentExclusions[id].includes(dateKey)) {
+                    assignmentExclusions[id].push(dateKey);
+                }
+            }
+
+            localStorage.setItem('assignmentExclusions', JSON.stringify(assignmentExclusions));
+        } else if (type === 'excel') {
+            // Excel行事の参加切り替え
+            // 既存のオーバーライド（特に移動後のデータ）を保存してから処理
+            let existingOverride = classOverrides.find(ov =>
+                String(ov.id) === String(id) && ov.date === date && ov.type === 'excel' && ov.action === 'move' && ov.data
+            );
+
+            // 移動後の予定の場合、既存データを保持して isParticipating だけ更新
+            if (existingOverride) {
+                existingOverride.data.isParticipating = isEnable;
+            } else {
+                // 移動後でない場合：新規でオーバーライドを作成
+                classOverrides = classOverrides.filter(ov =>
+                    !(String(ov.id) === String(id) && ov.date === date && ov.type === 'excel' && ov.action === 'delete')
+                );
+
+                let baseData = null;
+                const item = scheduleData.find(i => String(i.id) === String(id));
+                if (item) {
+                    baseData = {
+                        event: item.event,
+                        type: item.type,
+                        location: item.location || '',
+                        memo: item.memo || '',
+                        isParticipating: isEnable
+                    };
+                } else {
+                    baseData = { event: 'Unknown', isParticipating: isEnable };
+                }
+
+                classOverrides.push({
+                    type: 'excel',
+                    id: id,
+                    date: date,
+                    action: 'move',
+                    data: baseData
+                });
+            }
+
+            saveAllToLocal();
         } else if (type === 'custom') {
             const ov = classOverrides.find(o => o.type === 'custom' && String(o.id) === String(id));
             if (ov && ov.data) {
                 ov.data.isParticipating = isEnable;
             }
+
+            saveAllToLocal();
         }
 
-        saveAllToLocal();
+        // カレンダーを更新
         updateCalendar();
+
+        // 日程表が開いている場合は再描画
+        const classScheduleModal = document.getElementById('classScheduleModal');
+        if (classScheduleModal && !classScheduleModal.classList.contains('hidden')) {
+            if (typeof showClassSchedule === 'function') {
+                showClassSchedule();
+            }
+        }
     } else if (action === 'edit') {
         editCalendarEvent(type, id, date, period);
     } else if (action === 'delete') {

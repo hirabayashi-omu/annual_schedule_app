@@ -1547,12 +1547,12 @@ function addMyClassesToDayCell(dayCell, date, dayEvents) {
             // 担当チェック（除外リストを確認）
             let assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
             let classExclusions = assignmentExclusions[cls.id] || [];
-            const assignedMark = !classExclusions.includes(dateStr_key) ? ' [担]' : '';
+            const isAssigned = !classExclusions.includes(dateStr_key);
 
 
             const eventItem = document.createElement('div');
             eventItem.className = 'event-item my-class';
-            if (assignedMark) eventItem.classList.add('is-participating');
+            if (isAssigned) eventItem.classList.add('is-participating');
             eventItem.draggable = true;
             eventItem.dataset.classId = cls.id;
             eventItem.dataset.type = 'myclass';
@@ -1563,7 +1563,7 @@ function addMyClassesToDayCell(dayCell, date, dayEvents) {
             if (effectiveResult.isTruncated) eventItem.classList.add('truncated-event');
 
             eventItem.innerHTML = `
-                <span class="event-text">${times.start}～${times.end} ${cls.name} (${displayPeriod})${truncatedLabel}${assignedMark}</span>
+                <span class="event-text">${times.start}～${times.end} ${cls.name} (${displayPeriod})${truncatedLabel}</span>
                 <button class="event-delete-btn" onclick="deleteCalendarEvent(event, 'myclass', '${cls.id}', '${dateStr_key}', '${schedule.period}')" title="この日だけ削除">×</button>
             `;
 
@@ -1647,11 +1647,12 @@ function addMyClassesToDayCell(dayCell, date, dayEvents) {
         // 担当チェック（除外リストを確認）
         let assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
         let classExclusions = assignmentExclusions[cls.id] || [];
-        const assignedMark = !classExclusions.includes(dateStr_iso) ? ' [担]' : '';
+        const isAssigned = !classExclusions.includes(dateStr_iso);
 
 
         const eventItem = document.createElement('div');
         eventItem.className = 'event-item my-class moved';
+        if (isAssigned) eventItem.classList.add('is-participating');
         eventItem.draggable = true;
         eventItem.dataset.classId = cls.id;
         eventItem.dataset.type = 'myclass';
@@ -1659,7 +1660,7 @@ function addMyClassesToDayCell(dayCell, date, dayEvents) {
         eventItem.dataset.period = ov.period;
 
         eventItem.innerHTML = `
-            <span class="event-text">${timeDisplay}${cls.name}${assignedMark}</span>
+            <span class="event-text">${timeDisplay}${cls.name}</span>
             <button class="event-delete-btn" onclick="deleteCalendarEvent(event, 'myclass', '${cls.id}', '${dateStr_iso}', '${ov.period}')" title="この日だけ削除">×</button>
         `;
 
@@ -2237,10 +2238,12 @@ function isDatePinned(date, classId) {
             const ov = classOverrides.find(o =>
                 (o.type === 'excel' || o.type === 'custom') &&
                 String(o.id) === String(item.id) &&
-                (o.date === dateKey || (o.startDate <= dateKey && o.endDate >= dateKey))
+                (o.date === dateKey || (o.startDate <= dateKey && o.endDate >= dateKey)) &&
+                o.action === 'move' &&
+                o.data
             );
 
-            if (ov && ov.data && ov.data.isParticipating !== undefined) {
+            if (ov && ov.data.isParticipating !== undefined) {
                 return ov.data.isParticipating;
             }
 
