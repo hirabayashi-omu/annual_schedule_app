@@ -12,6 +12,7 @@
 
     <!-- SheetJS for Excel Reading -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <script src="work_settings.js"></script>
 </head>
 
 <body>
@@ -50,6 +51,14 @@
             <button id="navSettingsBtn" class="nav-btn" data-tooltip="名簿や候補などの各種設定">
                 <span class="nav-icon">⚙️</span>
                 <span class="nav-label">各種設定</span>
+            </button>
+            <button id="navWorkBtn" class="nav-btn" data-tooltip="勤務時間・パターンの設定">
+                <span class="nav-icon">&#x231B;</span>
+                <span class="nav-label">勤務設定</span>
+            </button>
+            <button id="navHelpBtn" class="nav-btn" data-tooltip="使い方の説明を表示">
+                <span class="nav-icon">&#x2753;</span>
+                <span class="nav-label">使い方</span>
             </button>
         </nav>
 
@@ -118,12 +127,13 @@
                     <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls">
                 </div>
 
-                <div id="fileSelected" class="file-selected hidden">
-                    <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-                        <div>
-                            <span>✓ </span>
-                            <strong id="fileName"></strong>
-                            <span id="fileSize"></span>
+                <!-- データ操作アクション (常に表示) -->
+                <div class="data-actions-container"
+                    style="margin-top: 20px; padding: 15px; background: var(--neutral-50); border-radius: var(--radius-md); border: 1px solid var(--neutral-200);">
+                    <div
+                        style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                        <div style="font-weight: 600; color: var(--neutral-700);">
+                            <span style="margin-right: 5px;">&#x1F4BE;</span> データ管理
                         </div>
                         <div style="display: flex; gap: 8px;">
                             <button class="btn btn-outline-primary btn-sm" onclick="downloadBackup()"
@@ -142,10 +152,20 @@
                     </div>
                 </div>
 
+                <div id="fileSelected" class="file-selected hidden"
+                    style="background: var(--primary-blue-light); border: 1px solid var(--primary-blue);">
+                    <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
+                        <span style="color: var(--primary-blue); font-weight: bold;">✓ 最終取込:</span>
+                        <strong id="fileName"></strong>
+                        <span id="fileSize" style="font-size: 0.85rem; color: var(--neutral-600);"></span>
+                    </div>
+                </div>
+
                 <!-- 読み込み済み年度の管理リスト -->
                 <div id="cachedYearsContainer" class="mt-lg hidden"
                     style="border-top: 1px solid var(--neutral-200); padding-top: 15px;">
-                    <h3 style="font-size: 0.95rem; margin-bottom: 10px; color: var(--neutral-600);">&#x1F4CA; 読み込み済みの年度データ</h3>
+                    <h3 style="font-size: 0.95rem; margin-bottom: 10px; color: var(--neutral-600);">&#x1F4CA;
+                        読み込み済みの年度データ</h3>
                     <div class="table-container">
                         <table class="manage-table" style="font-size: 0.85rem;">
                             <thead>
@@ -168,15 +188,6 @@
                 </div>
             </section>
 
-            <!-- 読み込み済みデータ一覧 -->
-            <section class="card">
-                <div class="card-header">
-                    <h2>&#x1F4CA; 読み込み済みの年度データ</h2>
-                </div>
-                <div id="cachedYearList" class="data-list-container">
-                    <!-- JSで生成 -->
-                </div>
-            </section>
 
 
             <!-- エクスポートセクション -->
@@ -308,7 +319,8 @@
 
                 <!-- バックアップ履歴 -->
                 <div style="border-top: 1px solid var(--neutral-200); padding-top: 15px;">
-                    <h3 style="font-size: 0.95rem; margin-bottom: 12px; color: var(--neutral-700);">&#x1F4CB; バックアップ情報</h3>
+                    <h3 style="font-size: 0.95rem; margin-bottom: 12px; color: var(--neutral-700);">&#x1F4CB; バックアップ情報
+                    </h3>
                     <div id="backupInfoContainer"
                         style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
                         <div
@@ -459,6 +471,125 @@
             </div>
         </div>
     </section>
+
+    <!-- 勤務設定セクション (デフォルト非表示) -->
+    <section id="workSection" class="card hidden">
+        <div class="card-header">
+            <div class="card-icon">&#x231B;</div>
+            <h2>勤務パターンの設定</h2>
+        </div>
+
+        <div class="work-settings-container" style="padding: 15px;">
+            <!-- 勤務パターンの凡例 -->
+            <div
+                style="background: var(--neutral-50); padding: 20px; border-radius: var(--radius-md); margin-bottom: 30px; border: 1px solid var(--neutral-200); box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);">
+                <h3
+                    style="font-size: 1.1rem; margin-bottom: 15px; color: var(--neutral-800); display: flex; align-items: center; gap: 10px; font-weight: 700;">
+                    <span
+                        style="background: var(--primary-blue); color: white; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 0.9rem;">?</span>
+                    勤務区分（シフト）の定義
+                </h3>
+                <div
+                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; font-size: 0.95rem;">
+                    <div
+                        style="padding: 12px; background: white; border-radius: 6px; border: 1px solid var(--neutral-200); border-left: 5px solid #3b82f6; display: flex; justify-content: space-between;">
+                        <span style="font-weight: 700; color: #1e40af;">A勤務</span> <span>08:00 ～ 16:30</span>
+                    </div>
+                    <div
+                        style="padding: 12px; background: white; border-radius: 6px; border: 1px solid var(--neutral-200); border-left: 5px solid #6366f1; display: flex; justify-content: space-between;">
+                        <span style="font-weight: 700; color: #3730a3;">B勤務</span> <span>08:45 ～ 17:15</span>
+                    </div>
+                    <div
+                        style="padding: 12px; background: white; border-radius: 6px; border: 1px solid var(--neutral-200); border-left: 5px solid #8b5cf6; display: flex; justify-content: space-between;">
+                        <span style="font-weight: 700; color: #5b21b6;">C勤務</span> <span>09:30 ～ 18:00</span>
+                    </div>
+                    <div
+                        style="padding: 12px; background: white; border-radius: 6px; border: 1px solid var(--neutral-200); border-left: 5px solid #a855f7; display: flex; justify-content: space-between;">
+                        <span style="font-weight: 700; color: #7e22ce;">D勤務</span> <span>10:30 ～ 19:00</span>
+                    </div>
+                    <div
+                        style="padding: 12px; background: white; border-radius: 6px; border: 1px solid var(--neutral-200); border-left: 5px solid #d946ef; display: flex; justify-content: space-between;">
+                        <span style="font-weight: 700; color: #a21caf;">E勤務</span> <span>11:30 ～ 20:00</span>
+                    </div>
+                    <div
+                        style="padding: 12px; background: white; border-radius: 6px; border: 1px solid var(--neutral-200); border-left: 5px solid var(--neutral-400); display: flex; justify-content: space-between;">
+                        <span style="font-weight: 700; color: var(--neutral-700);">その他</span> <span
+                            style="font-size: 0.85rem; color: var(--neutral-500);">自由入力（休憩込8.5h）</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 期間ごとの設定 -->
+            <div id="workPeriodConfigContainer" style="display: grid; gap: 40px;">
+                <!-- JavaScriptで各曜日の設定カードが生成される場所 -->
+            </div>
+
+            <div
+                style="text-align: center; margin-top: 40px; padding-top: 30px; border-top: 1px solid var(--neutral-200);">
+                <button class="btn btn-primary btn-lg" onclick="saveWorkSettings()"
+                    style="width: 300px; height: 55px; font-size: 1.1rem; box-shadow: var(--shadow-md);">
+                    <span>&#x1F4BE; 勤務設定を保存する</span>
+                </button>
+                <p style="margin-top: 12px; font-size: 0.85rem; color: var(--neutral-500);">※ 保存するとカレンダーに反映されます</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- 使い方セクション (デフォルト非表示) -->
+    <section id="helpSection" class="card hidden">
+        <div class="card-header">
+            <div class="card-icon">&#x2753;</div>
+            <h2>アプリの使い方ガイド</h2>
+        </div>
+        <div class="help-content" style="padding: 10px; line-height: 1.6;">
+            <div class="help-item" style="margin-bottom: 25px;">
+                <h3
+                    style="border-left: 4px solid var(--primary-blue); padding-left: 12px; margin-bottom: 12px; color: var(--neutral-800);">
+                    📅 カレンダー画面</h3>
+                <ul style="list-style: none; padding-left: 5px;">
+                    <li style="margin-bottom: 8px;"><strong>・行事の表示:</strong>
+                        読み込んだExcelデータが自動配置されます。ピン留め（📌）された行事は太字で強調されます。</li>
+                    <li style="margin-bottom: 8px;"><strong>・📌ピン留め操作:</strong> 行事を右クリック（スマホは長押し）で「参加/非参加」を切り替えられます。
+                    </li>
+                    <li style="margin-bottom: 8px;"><strong>・ドラッグ＆ドロップ:</strong> 予定を掴んで別の日に移動できます。</li>
+                    <li style="margin-bottom: 8px;"><strong>・休暇のヒント:</strong>
+                        自分の予定がない平日は自動で<strong>グレーアウト</strong>され、年休の相談がしやすい日として表示されます。</li>
+                </ul>
+            </div>
+
+            <div class="help-item" style="margin-bottom: 25px;">
+                <h3
+                    style="border-left: 4px solid var(--success-600); padding-left: 12px; margin-bottom: 12px; color: var(--neutral-800);">
+                    📁 ファイル操作</h3>
+                <ul style="list-style: none; padding-left: 5px;">
+                    <li style="margin-bottom: 8px;"><strong>・Excel読込:</strong> 配布された行事予定表をドラッグ＆ドロップするだけで解析されます。</li>
+                    <li style="margin-bottom: 8px;"><strong>・バックアップ:</strong> 自分で入力した授業やピンの設定をファイル(JSON)として保存・復元できます。
+                    </li>
+                    <li style="margin-bottom: 8px;"><strong>・データ管理:</strong> 年度ごとのデータを個別に削除したり、すべて初期化したりできます。</li>
+                </ul>
+            </div>
+
+            <div class="help-item" style="margin-bottom: 25px;">
+                <h3
+                    style="border-left: 4px solid var(--secondary-purple); padding-left: 12px; margin-bottom: 12px; color: var(--neutral-800);">
+                    📖 授業設定</h3>
+                <ul style="list-style: none; padding-left: 5px;">
+                    <li style="margin-bottom: 8px;"><strong>・自コマ登録:</strong> 自分の担当授業を登録すると、カレンダーに自動で表示されます。</li>
+                    <li style="margin-bottom: 8px;"><strong>・時間割自動生成:</strong> 登録した授業から、前後期の時間割が自動的に作られます。</li>
+                </ul>
+            </div>
+
+            <div class="help-item">
+                <h3
+                    style="border-left: 4px solid var(--neutral-600); padding-left: 12px; margin-bottom: 12px; color: var(--neutral-800);">
+                    ⚙️ 各種設定</h3>
+                <ul style="list-style: none; padding-left: 5px;">
+                    <li style="margin-bottom: 8px;"><strong>・教員・授業マスタ:</strong> 登録時に入力補助（サジェスト）として使われるリストを自由に編集できます。
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </section>
     </div>
 
 
@@ -508,7 +639,8 @@
                                     <input type="text" id="className" placeholder="例：データ構造とアルゴリズム" class="form-input"
                                         style="flex: 1;">
                                     <button id="searchCourseBtn" class="btn btn-outline-primary btn-sm"
-                                        style="padding: 8px 12px; white-space: nowrap;" title="科目一覧から検索">&#x1F50D; 検索</button>
+                                        style="padding: 8px 12px; white-space: nowrap;" title="科目一覧から検索">&#x1F50D;
+                                        検索</button>
                                 </div>
                                 <div id="courseSuggestions" class="course-suggestions hidden"></div>
                             </div>
@@ -952,6 +1084,7 @@
                             <tr>
                                 <th style="width: 120px;">日付</th>
                                 <th style="width: 60px;">曜</th>
+                                <th>参考行事</th>
                                 <th>状況・備考</th>
                             </tr>
                         </thead>

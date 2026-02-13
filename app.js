@@ -93,6 +93,37 @@ const HOLIDAY_NAMES = [
     '振替休日', '国民の休日'
 ];
 
+// デフォルトでピン留め（📌）されるキーワードのリスト
+const DEFAULT_PINNED_KEYWORDS = [
+    '教職員会議',
+    'コース会議',
+    '体験入学',
+    '入試',
+    '入学試験',
+    '前期中間試験',
+    '前期末試験',
+    '後期中間試験',
+    '学年末試験'
+];
+
+/**
+ * テキストがデフォルトでピン留めされるキーワードを含むかチェック
+ */
+function containsPinnedKeyword(text) {
+    if (!text) return false;
+
+    // 「入試」が含まれていても、「説明」や「広報」が含まれる場合はデフォルトでピン留めしない
+    // （例：入試説明会、入試広報など、準備や当日の試験本体ではない広報的なイベントを想定）
+    if (text.includes('入試')) {
+        if (text.includes('説明') || text.includes('広報')) {
+            return false;
+        }
+    }
+
+    return DEFAULT_PINNED_KEYWORDS.some(keyword => text.includes(keyword));
+}
+window.containsPinnedKeyword = containsPinnedKeyword;
+
 /**
  * イベントテキストが祝日名のみかどうかをチェック
  */
@@ -373,6 +404,11 @@ document.addEventListener('DOMContentLoaded', () => {
     backupFileInput.onchange = restoreFromBackup;
     document.body.appendChild(backupFileInput);
 
+    // 勤務設定の初期化（カレンダー描画前に確実にロード）
+    if (typeof initWorkSettings === 'function') {
+        initWorkSettings();
+    }
+
     // 初回表示のために必ず一度年度リストを更新
     updateAvailableYearsAndMonths();
     updateBackupInfo(); // バックアップ情報の初期表示
@@ -451,11 +487,14 @@ window.downloadBackup = downloadBackup;
 /**
  * バックアップから復元
  */
+/**
+ * バックアップから復元
+ */
 async function restoreFromBackup(e) {
     const file = e.target.files[0];
     if (!file) return;
 
-    const restoreType = document.getElementById('restoreTypeSelect').value;
+    const restoreType = document.getElementById('restoreTypeSelect') ? document.getElementById('restoreTypeSelect').value : 'all';
 
     try {
         const text = await file.text();
@@ -468,39 +507,71 @@ async function restoreFromBackup(e) {
 
         let restartNeeded = false;
 
-        // スケジュールの復元
-        if (data.scheduleCache && (restoreType === 'all' || restoreType === 'schedule' || restoreType === 'merge')) {
-            if (restoreType === 'merge') {
-                scheduleCache = { ...scheduleCache, ...data.scheduleCache };
-            } else {
-                scheduleCache = data.scheduleCache;
+        // スケジュールの復元（新形式: scheduleCache または 旧形式: scheduleData）
+        if ((data.scheduleCache || data.scheduleData) && (restoreType === 'all' || restoreType === 'schedule' || restoreType === 'merge')) {
+            if (data.scheduleCache) {
+                if (restoreType === 'merge') {
+                    scheduleCache = { ...scheduleCache, ...data.scheduleCache };
+                } else {
+                    scheduleCache = data.scheduleCache;
+                }
+            } else if (data.scheduleData) {
+                // 旧形式からの移行: 単一の年度としてキャッシュに入れる
+                const restoredData = data.scheduleData.map(item => ({
+                    ...item,
+                    date: new Date(item.date)
+                }));
+                if (restoredData.length > 0) {
+                    const year = getFiscalYear(restoredData[0].date);
+                    scheduleCache[year] = {
+                        data: restoredData,
+                        fileName: data.fileName || '復元データ',
+                        timestamp: Date.now()
+                    };
+                }
             }
+
             saveScheduleToStorage();
             rebuildScheduleDataFromCache();
             restartNeeded = true;
         }
 
-        // 授業データの復元
-        if (data.myClasses && (restoreType === 'all' || restoreType === 'classes' || restoreType === 'merge')) {
+        // 授業・予定操作データの復元
+        if ((data.myClasses || data.classOverrides) && (restoreType === 'all' || restoreType === 'classes' || restoreType === 'merge')) {
             if (restoreType === 'merge') {
-                myClasses = [...myClasses, ...data.myClasses];
-                classOverrides = [...classOverrides, ...data.classOverrides];
-                // 重複IDの調整が必要かもしれないが、簡易的にマージ
+                if (data.myClasses) myClasses = [...myClasses, ...data.myClasses];
+                if (data.classOverrides) classOverrides = [...classOverrides, ...data.classOverrides];
             } else {
-                myClasses = data.myClasses;
-                classOverrides = data.classOverrides;
+                if (data.myClasses) myClasses = data.myClasses;
+                if (data.classOverrides) classOverrides = data.classOverrides;
             }
+
+            // 除外リストの復元
             if (data.assignmentExclusions) {
-                localStorage.setItem('assignmentExclusions', JSON.stringify(data.assignmentExclusions));
+                let currentExclusions = {};
+                if (restoreType === 'merge') {
+                    try {
+                        currentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
+                    } catch (e) { }
+                    // マージ処理
+                    Object.keys(data.assignmentExclusions).forEach(id => {
+                        if (!currentExclusions[id]) currentExclusions[id] = [];
+                        currentExclusions[id] = [...new Set([...currentExclusions[id], ...data.assignmentExclusions[id]])];
+                    });
+                } else {
+                    currentExclusions = data.assignmentExclusions;
+                }
+                localStorage.setItem('assignmentExclusions', JSON.stringify(currentExclusions));
             }
+
             saveMyClasses();
             restartNeeded = true;
         }
 
         // 設定の復元
-        if (data.teacherMaster && (restoreType === 'all' || restoreType === 'settings' || restoreType === 'merge')) {
-            localStorage.setItem('teacherMaster', JSON.stringify(data.teacherMaster));
-            localStorage.setItem('courseMaster', JSON.stringify(data.courseMaster));
+        if ((data.teacherMaster || data.courseMaster) && (restoreType === 'all' || restoreType === 'settings' || restoreType === 'merge')) {
+            if (data.teacherMaster) localStorage.setItem('teacherMaster', JSON.stringify(data.teacherMaster));
+            if (data.courseMaster) localStorage.setItem('courseMaster', JSON.stringify(data.courseMaster));
             restartNeeded = true;
         }
 
@@ -512,7 +583,7 @@ async function restoreFromBackup(e) {
         }
     } catch (err) {
         console.error('Restore error:', err);
-        alert('ファイルの読み込みに失敗しました。JSON形式が正しいか確認してください。');
+        alert('ファイルの読み込みに失敗しました: ' + err.message);
     }
     e.target.value = ''; // リセット
 }
@@ -697,17 +768,49 @@ window.deleteCachedYear = deleteCachedYear;
 // 旧表示用関数は削除
 
 /**
- * （旧）インポートしたスケジュールデータを全削除
+ * インポートした全てのデータを完全に削除（初期状態に戻す）
  */
 function clearScheduleData() {
-    // ... (existing logic or deprecated)
-    if (!confirm('全てのインポートデータを削除しますか？')) return;
+    if (!confirm('全てのデータ（インポートした行事、独自の授業登録、ピン留め設定など）を完全に削除しますか？\nこの操作は取り消せません。')) return;
+
+    // 1. 各種データ構造をリセット
     scheduleCache = {};
-    saveScheduleToStorage();
-    rebuildScheduleDataFromCache();
+    scheduleData = [];
+    myClasses = [];
+    classOverrides = [];
+
+    // assignments / exclusions などの個別設定もリセット
+    const assignmentExclusions = {};
+    localStorage.setItem('assignmentExclusions', JSON.stringify(assignmentExclusions));
+
+    // 2. localStorage から各キーを削除または空にする
+    localStorage.removeItem('cachedScheduleData');
+    localStorage.removeItem('myClasses');
+    localStorage.removeItem('classOverrides');
+    localStorage.removeItem('teacherMaster'); // 必要あればマスタもリセット
+    localStorage.removeItem('courseMaster');
+
+    // 3. UIの更新
+    saveAllToLocal(); // 空になった myClasses, classOverrides を保存
+    saveScheduleToStorage(); // 空になった scheduleCache を保存
+    rebuildScheduleDataFromCache(); // scheduleData を空にする
+
     updateAvailableYearsAndMonths();
+    updateStats();
     updateCalendar();
-    renderCachedYearList();
+
+    if (typeof renderMyClassesList === 'function') renderMyClassesList();
+    if (typeof renderCachedYearList === 'function') renderCachedYearList();
+
+    // 画面表示制御のリセット
+    // controlsSection (ファイルの読み込みエリア) は隠さない
+    const sections = ['calendarSection', 'myClassesSection', 'exportSection', 'fileSelected', 'cachedYearsContainer'];
+    sections.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+    });
+
+    alert('全てのデータを消去しました。');
 }
 window.clearScheduleData = clearScheduleData;
 
@@ -719,11 +822,15 @@ function initNavigation() {
     const navImportBtn = document.getElementById('navImportBtn');
     const navClassBtn = document.getElementById('navClassBtn');
     const navSettingsBtn = document.getElementById('navSettingsBtn');
+    const navWorkBtn = document.getElementById('navWorkBtn');
+    const navHelpBtn = document.getElementById('navHelpBtn');
 
     const calendarView = document.getElementById('calendarView');
     const importContainer = document.getElementById('importContainer');
     const myClassesSection = document.getElementById('myClassesSection');
     const settingsSection = document.getElementById('settingsSection');
+    const workSection = document.getElementById('workSection');
+    const helpSection = document.getElementById('helpSection');
 
     function setActiveTab(tab) {
         // Reset all buttons
@@ -731,17 +838,24 @@ function initNavigation() {
         navImportBtn.classList.remove('active');
         navClassBtn.classList.remove('active');
         if (navSettingsBtn) navSettingsBtn.classList.remove('active');
+        if (navWorkBtn) navWorkBtn.classList.remove('active');
+        if (navHelpBtn) navHelpBtn.classList.remove('active');
 
         // Hide all views
         calendarView.classList.add('hidden');
         importContainer.classList.add('hidden');
         myClassesSection.classList.add('hidden');
         if (settingsSection) settingsSection.classList.add('hidden');
+        if (workSection) workSection.classList.add('hidden');
+        if (helpSection) helpSection.classList.add('hidden');
 
         // Remove direct style display manipulations if any
         calendarView.style.display = '';
         importContainer.style.display = '';
         myClassesSection.style.display = '';
+        if (settingsSection) settingsSection.style.display = '';
+        if (workSection) workSection.style.display = '';
+        if (helpSection) helpSection.style.display = '';
 
         switch (tab) {
             case 'calendar':
@@ -763,6 +877,15 @@ function initNavigation() {
                 if (typeof renderManageTeachers === 'function') renderManageTeachers();
                 if (typeof renderManageCourses === 'function') renderManageCourses();
                 break;
+            case 'work':
+                if (navWorkBtn) navWorkBtn.classList.add('active');
+                if (workSection) workSection.classList.remove('hidden');
+                if (typeof renderWorkPeriodConfig === 'function') renderWorkPeriodConfig();
+                break;
+            case 'help':
+                if (navHelpBtn) navHelpBtn.classList.add('active');
+                if (helpSection) helpSection.classList.remove('hidden');
+                break;
         }
     }
 
@@ -771,6 +894,12 @@ function initNavigation() {
     navClassBtn.addEventListener('click', () => setActiveTab('class'));
     if (navSettingsBtn) {
         navSettingsBtn.addEventListener('click', () => setActiveTab('settings'));
+    }
+    if (navWorkBtn) {
+        navWorkBtn.addEventListener('click', () => setActiveTab('work'));
+    }
+    if (navHelpBtn) {
+        navHelpBtn.addEventListener('click', () => setActiveTab('help'));
     }
 
     // Initialize with Calendar view
@@ -1125,8 +1254,20 @@ function parseScheduleData(workbook) {
         });
     });
 
+    // 重複チェック（同じ日付、同じ内容、同じ曜日カウントの予定を排除）
+    const seen = new Set();
+    const uniqueData = [];
+    allData.forEach(item => {
+        // キーにタイプを含めないことで、本科と専攻科で内容が同じ場合は1つにまとめる
+        const key = `${item.date.getTime()}-${item.event}-${item.weekdayCount}`;
+        if (!seen.has(key)) {
+            uniqueData.push(item);
+            seen.add(key);
+        }
+    });
+
     // 日付順にソートし、IDを付与
-    return allData.sort((a, b) => a.date - b.date).map((item, index) => {
+    return uniqueData.sort((a, b) => a.date - b.date).map((item, index) => {
         item.id = `excel_${index}`;
         return item;
     });
@@ -1380,7 +1521,7 @@ function updateStats() {
     }
 }
 
-function updateCalendar() {
+window.updateCalendar = function updateCalendar() {
     const target = document.getElementById('targetSelect').value;
     const calendarGrid = document.getElementById('calendarGrid');
     const calendarTitle = document.getElementById('calendarTitle');
@@ -1417,28 +1558,156 @@ function updateCalendar() {
         calendarGrid.appendChild(emptyDay);
     }
 
-    // 期間予定（カスタム予定）の表示位置を固定するためのレーン割り当て
-    const laneMap = new Map(); // id -> laneIndex
-    const customEventsForMonth = classOverrides.filter(ov =>
-        ov.type === 'custom' && ov.action === 'add' && ov.data
-    );
+    // 全ての表示イベント（カスタム + Excel）を取得してレーン割り当てを行う
+    const allDisplayEvents = [];
 
-    // 開始日でソート、次に期間の長さでソート
-    customEventsForMonth.sort((a, b) => {
-        const startA = a.startDate || a.date;
-        const startB = b.startDate || b.date;
-        if (startA !== startB) return startA.localeCompare(startB);
-        const endA = a.endDate || a.date;
-        const endB = b.endDate || b.date;
-        return endB.localeCompare(endA); // 長い方を優先
+    // 1. カスタム予定
+    classOverrides.filter(ov => ov.type === 'custom' && ov.action === 'add' && ov.data).forEach(ov => {
+        allDisplayEvents.push({
+            id: String(ov.id),
+            startDate: ov.startDate || ov.date,
+            endDate: ov.endDate || ov.date || ov.startDate,
+            date: ov.date,
+            type: 'custom',
+            data: ov.data,
+            original: ov
+        });
     });
 
-    const lanes = []; // [Set(dateStr), Set(dateStr), ...] 各レーンが塞がっている日付の集合
-    customEventsForMonth.forEach(ov => {
-        const startDate = ov.startDate || ov.date;
-        const endDate = ov.endDate || ov.date || ov.startDate;
+    // 2. Excel予定（年間行事）
+    // 月の日付範囲を取得
+    const monthStart = new Date(currentYear, currentMonth - 1, 1);
+    const monthEnd = new Date(currentYear, currentMonth, 0);
 
-        // 該当イベントがカバーする日付リストを作成
+    // scheduleData からこの月の分を取得
+    scheduleData.forEach(item => {
+        if (!item.event || item.event.trim() === '') return;
+        const d = item.date;
+        if (d < monthStart || d > monthEnd) return;
+        const dStr = formatDateKey(d);
+
+        // オーバーライド（削除・移動）チェック
+        const isDeleted = classOverrides.some(ov => String(ov.id) === String(item.id) && ov.type === 'excel' && ov.date === dStr && ov.action === 'delete');
+        const isMoved = classOverrides.some(ov => String(ov.id) === String(item.id) && ov.type === 'excel' && ov.date === dStr && ov.action === 'move' && ov.data);
+        if (isDeleted || isMoved) return;
+
+        allDisplayEvents.push({
+            id: String(item.id),
+            startDate: dStr,
+            endDate: dStr,
+            date: dStr,
+            type: 'excel',
+            data: { event: item.event, type: item.type },
+            original: item
+        });
+    });
+
+    // 3. 移動済みExcel予定
+    classOverrides.filter(ov => ov.type === 'excel' && ov.action === 'move' && ov.data).forEach(ov => {
+        const d = parseDateKey(ov.date);
+        if (d < monthStart || d > monthEnd) return;
+        allDisplayEvents.push({
+            id: String(ov.id),
+            startDate: ov.date,
+            endDate: ov.date,
+            date: ov.date,
+            type: 'excel-moved',
+            data: ov.data,
+            original: ov
+        });
+    });
+
+    // 4. 授業（曜日ベース＋追加分）
+    if (typeof getDisplayableClassesForDate === 'function') {
+        const tempDate = new Date(monthStart);
+        while (tempDate <= monthEnd) {
+            const dateStr = formatDateKey(tempDate);
+            const dayEvents = scheduleData.filter(item => item.date.toDateString() === tempDate.toDateString());
+            const classesOnDay = getDisplayableClassesForDate(tempDate, dayEvents);
+            classesOnDay.forEach(cls => {
+                allDisplayEvents.push({
+                    id: String(cls.id),
+                    startDate: dateStr,
+                    endDate: dateStr,
+                    date: dateStr,
+                    type: 'myclass',
+                    data: cls,
+                    period: cls.originalPeriod, // レーン割当のキーに使用
+                    original: cls
+                });
+            });
+            tempDate.setDate(tempDate.getDate() + 1);
+        }
+    }
+
+    // ソート関数：期間予定 -> 時刻なし -> 開始時間順
+    const getSortPriority = (ov) => {
+        const isPeriod = ov.startDate !== ov.endDate;
+        if (isPeriod) return 0;
+        const item = ov.data;
+        const isClass = ov.type === 'myclass';
+        const hasTime = !!(item.startTime || (item.isLeaveCard && item.leaveType) || isClass);
+        if (!hasTime) return 1;
+        return 2;
+    };
+
+    const getEffectiveTime = (ov) => {
+        const item = ov.data;
+        const PERIOD_TIMES_LOCAL = window.PERIOD_TIMES || (typeof PERIOD_TIMES !== 'undefined' ? PERIOD_TIMES : {});
+
+        if (item.isLeaveCard && typeof getWorkTimeForDate === 'function') {
+            const d = parseDateKey(ov.date);
+            const work = getWorkTimeForDate(d, true);
+            if (work && work.start) {
+                if (item.leaveType === 'early' || item.leaveType === 'full') return work.start;
+                if (item.leaveType === 'late') return addMinutes(work.end, -(item.leaveHours * 60 + (item.leaveExtra || 0)));
+            }
+        }
+
+        if (ov.type === 'myclass') {
+            const pKey = item.displayPeriod || ov.period;
+            let times = PERIOD_TIMES_LOCAL[pKey];
+            if (!times && typeof pKey === 'string' && pKey.includes('-')) {
+                const firstP = pKey.split('-')[0];
+                times = PERIOD_TIMES_LOCAL[firstP];
+            }
+            if (times && times.start) return times.start;
+        }
+
+        return item.startTime || '00:00';
+    };
+
+    allDisplayEvents.sort((a, b) => {
+        const pA = getSortPriority(a);
+        const pB = getSortPriority(b);
+        if (pA !== pB) return pA - pB;
+
+        const startA = a.startDate;
+        const startB = b.startDate;
+        if (startA !== startB) return startA.localeCompare(startB);
+
+        const timeA = getEffectiveTime(a);
+        const timeB = getEffectiveTime(b);
+        if (timeA !== timeB) return timeA.localeCompare(timeB);
+
+        const durationA = (parseDateKey(a.endDate) - parseDateKey(a.startDate));
+        const durationB = (parseDateKey(b.endDate) - parseDateKey(b.startDate));
+        return durationB - durationA; // 長い方を優先
+    });
+
+    const getLaneKey = (ov) => {
+        const id = ov.id;
+        const date = ov.date || ov.startDate;
+        const period = ov.period;
+        return period ? `${id}-${period}-${date}` : `${id}-${date}`;
+    };
+
+    const laneMap = new Map();
+    const lanes = [];
+
+    allDisplayEvents.forEach(ov => {
+        const startDate = ov.startDate;
+        const endDate = ov.endDate;
         const coveredDates = [];
         const curr = parseDateKey(startDate);
         const last = parseDateKey(endDate);
@@ -1447,7 +1716,6 @@ function updateCalendar() {
             curr.setDate(curr.getDate() + 1);
         }
 
-        // 空いているレーンを探す
         let targetLane = -1;
         for (let i = 0; i < lanes.length; i++) {
             const hasOverlap = coveredDates.some(d => lanes[i].has(d));
@@ -1463,7 +1731,7 @@ function updateCalendar() {
         }
 
         coveredDates.forEach(d => lanes[targetLane].add(d));
-        laneMap.set(String(ov.id), targetLane);
+        laneMap.set(getLaneKey(ov), targetLane);
     });
 
     // 各日付セル
@@ -1485,6 +1753,16 @@ function createDayCell(date, target, laneMap = new Map(), customLaneCount = 0) {
     dayCell.addEventListener('dragleave', handleDayDragLeave);
     dayCell.addEventListener('drop', handleDayDrop);
 
+    // 年休カード作成用メニュー（右クリック）
+    dayCell.oncontextmenu = (e) => {
+        // イベントアイテムや勤務バッジ上なら通常のメニューが出るので、背景クリック時のみ
+        if (e.target.closest('.day-event-item') || e.target.closest('.day-work-badge')) return;
+
+        if (typeof showAnnualLeaveMenu === 'function') {
+            showAnnualLeaveMenu(e, dateStr);
+        }
+    };
+
     // 祝日チェック
     const holidaysMap = getHolidaysForYear(date.getFullYear());
     const holidayName = getHolidayName(date, holidaysMap);
@@ -1501,13 +1779,12 @@ function createDayCell(date, target, laneMap = new Map(), customLaneCount = 0) {
     dayNumber.textContent = date.getDate();
     dayCell.appendChild(dayNumber);
 
-    // 祝日名表示
+    // 祝日名表示（下の badgesContainer 内で一括表示するため、ここでは不要）
+    /*
     if (isHolidayDay) {
-        const holidayLabel = document.createElement('div');
-        holidayLabel.className = 'day-holiday';
-        holidayLabel.textContent = `\uD83C\uDF8C ${holidayName}`;
-        dayCell.appendChild(holidayLabel);
+        ...
     }
+    */
 
     // 担当日ラベル表示（非表示に変更 - ユーザー要望により）
     /*
@@ -1540,12 +1817,49 @@ function createDayCell(date, target, laneMap = new Map(), customLaneCount = 0) {
         badgesContainer.appendChild(holidayLabel);
     }
 
-    // その日のイベントを取得
+    // 勤務時間バッジの表示 (平日のみ)
+    if (typeof getWorkTimeForDate === 'function' && weekday !== 0 && weekday !== 6) {
+        const workTime = getWorkTimeForDate(date);
+        if (workTime) {
+            const workBadge = document.createElement('div');
+            workBadge.className = 'day-work-badge';
+
+            // シフト名が A勤務, B勤務 のような形式なら A, B だけ抽出して表示
+            let shortName = workTime.name || '勤';
+            if (shortName.includes('勤務')) {
+                shortName = shortName.replace('勤務', '');
+            }
+            workBadge.textContent = shortName;
+            workBadge.title = `勤務時間: ${workTime.start} ～ ${workTime.end}`;
+
+            // A〜E勤務などの色を分ける
+            const shiftChar = shortName.charAt(0);
+            if (['A', 'B', 'C', 'D', 'E'].includes(shiftChar)) {
+                workBadge.classList.add(`shift-${shiftChar}`);
+            }
+
+            // 個別オーバーライド時のスタイル
+            if (workTime.isOverride) {
+                workBadge.classList.add('is-override');
+            }
+
+            // クリック/右クリックで勤務変更メニューを表示
+            const openMenu = (e) => {
+                if (typeof showWorkShiftMenu === 'function') {
+                    showWorkShiftMenu(e, dateStr);
+                }
+            };
+            workBadge.onclick = openMenu;
+            workBadge.oncontextmenu = openMenu;
+            workBadge.style.cursor = 'pointer';
+
+            badgesContainer.appendChild(workBadge);
+        }
+    }
+
+    // その日のイベントを取得（表示は全件、ピン付けのみ選択対象に絞る）
     const dayEvents = scheduleData.filter(item => {
-        if (item.date.toDateString() !== date.toDateString()) return false;
-        if (target === 'teacher' && item.type !== 'teacher') return false;
-        if (target === 'student' && item.type !== 'student') return false;
-        return true;
+        return item.date.toDateString() === date.toDateString();
     });
 
     // 曜日カウント表示
@@ -1592,32 +1906,51 @@ function createDayCell(date, target, laneMap = new Map(), customLaneCount = 0) {
 
     // laneMapに基づいて並び替え
     customEvents.sort((a, b) => {
-        const laneA = laneMap.get(String(a.id)) ?? 999;
-        const laneB = laneMap.get(String(b.id)) ?? 999;
+        const laneA = laneMap.get(`${a.id}-${dateStr}`) ?? 999;
+        const laneB = laneMap.get(`${b.id}-${dateStr}`) ?? 999;
         return laneA - laneB;
     });
 
     customEvents.forEach(ov => {
         const item = ov.data;
         let timeDisplay = '';
-        if (item.allDay === false && item.startTime) {
-            timeDisplay = item.startTime + ' ';
+        let displayEventName = item.event;
+
+        // 年休カードの場合：その日の最新の勤務時間に基づいて時間を動的に算出
+        if (item.isLeaveCard && typeof getWorkTimeForDate === 'function') {
+            const currentWork = getWorkTimeForDate(new Date(date.getFullYear(), date.getMonth(), date.getDate()));
+            if (currentWork && currentWork.start && currentWork.end) {
+                let calcStart, calcEnd;
+                if (item.leaveType === 'early') {
+                    calcStart = currentWork.start;
+                    calcEnd = addMinutes(currentWork.start, item.leaveHours * 60 + (item.leaveExtra || 0));
+                } else if (item.leaveType === 'late') {
+                    calcStart = addMinutes(currentWork.end, -(item.leaveHours * 60 + (item.leaveExtra || 0)));
+                    calcEnd = currentWork.end;
+                } else if (item.leaveType === 'full') {
+                    calcStart = currentWork.start;
+                    calcEnd = currentWork.end;
+                }
+
+                if (calcStart && calcEnd) {
+                    timeDisplay = `${calcStart}-${calcEnd}`;
+                }
+            }
+            displayEventName = item.event; // ラベル名（例: 前半1時間休）
+        } else if (item.allDay === false && item.startTime) {
+            timeDisplay = item.startTime + (item.endTime ? `-${item.endTime}` : '') + ' ';
         }
 
         const eventItem = document.createElement('div');
-        eventItem.className = 'event-item custom';
-
-        // 連続表示のためのクラス判定
-        const startDate = ov.startDate || ov.date;
-        const endDate = ov.endDate || ov.date || ov.startDate;
-        if (startDate !== endDate) {
-            if (dateStr === startDate) eventItem.classList.add('range-start');
-            else if (dateStr === endDate) eventItem.classList.add('range-end');
-            else eventItem.classList.add('range-middle');
+        eventItem.className = 'event-item';
+        if (item.isLeaveCard) {
+            eventItem.classList.add('leave-card');
+        } else {
+            eventItem.classList.add('custom');
         }
 
         // 表示順（レーン）の固定：grid-rowを使用
-        const laneIndex = laneMap.get(String(ov.id));
+        const laneIndex = laneMap.get(`${ov.id}-${dateStr}`);
         if (laneIndex !== undefined) {
             eventItem.style.gridRow = laneIndex + 1;
         }
@@ -1629,15 +1962,35 @@ function createDayCell(date, target, laneMap = new Map(), customLaneCount = 0) {
 
         let isParticipating = item.isParticipating;
         if (isParticipating === undefined) {
-            const name = item.event || "";
-            isParticipating = name.includes('教職員会議') || name.includes('コース会議') || name.includes('体験入学') || name.includes('入試') || name.includes('入学試験');
+            const exclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
+            const itemExclusions = exclusions[ov.id] || [];
+            isParticipating = !itemExclusions.includes(dateStr);
         }
         if (isParticipating) eventItem.classList.add('is-participating');
 
-        eventItem.innerHTML = `
-            <span class="event-text">${timeDisplay}${typeof replaceSpecialMarks === 'function' ? replaceSpecialMarks(item.event) : item.event}</span>
-            <button class="event-delete-btn" onclick="deleteCalendarEvent(event, 'custom', '${ov.id}', '${dateStr}')" title="削除">×</button>
-        `;
+        // デザインの構築
+        if (item.isLeaveCard) {
+            eventItem.innerHTML = `
+                <div class="leave-card-label">${displayEventName}</div>
+                <div class="leave-card-time-badge">${timeDisplay}</div>
+                <button class="event-delete-btn" onclick="deleteCalendarEvent(event, 'custom', '${ov.id}', '${dateStr}')" title="削除">×</button>
+            `;
+        } else {
+            const textContent = typeof replaceSpecialMarks === 'function' ? replaceSpecialMarks(displayEventName) : displayEventName;
+            eventItem.innerHTML = `
+                <span class="event-text">${timeDisplay ? timeDisplay + ' ' : ''}${textContent}</span>
+                <button class="event-delete-btn" onclick="deleteCalendarEvent(event, 'custom', '${ov.id}', '${dateStr}')" title="削除">×</button>
+            `;
+
+            // 連続表示のためのクラス判定（年休カード以外）
+            const startDate = ov.startDate || ov.date;
+            const endDate = ov.endDate || ov.date || ov.startDate;
+            if (startDate !== endDate) {
+                if (dateStr === startDate) eventItem.classList.add('range-start');
+                else if (dateStr === endDate) eventItem.classList.add('range-end');
+                else eventItem.classList.add('range-middle');
+            }
+        }
 
         eventItem.addEventListener('dblclick', (e) => {
             e.stopPropagation();
@@ -1647,9 +2000,9 @@ function createDayCell(date, target, laneMap = new Map(), customLaneCount = 0) {
         // 右クリックメニュー対応
         eventItem.addEventListener('contextmenu', (e) => showEventContextMenu(e, 'custom', ov.id, dateStr));
 
-        // 期間の最終日にリサイズハンドルを表示
+        // 期間の最終日にリサイズハンドルを表示（年休カード以外）
         const isLastDay = dateStr === (ov.endDate || ov.startDate || ov.date);
-        if (isLastDay) {
+        if (isLastDay && !item.isLeaveCard) {
             const handle = document.createElement('div');
             handle.className = 'resize-handle-right';
             handle.title = 'ドラッグして期間を変更';
@@ -1686,7 +2039,7 @@ function createDayCell(date, target, laneMap = new Map(), customLaneCount = 0) {
             ov.date === dateStr &&
             ov.action === 'delete'
         );
-        
+
         const isMoved = classOverrides.some(ov =>
             String(ov.id) === String(item.id) &&
             ov.type === 'excel' &&
@@ -1711,16 +2064,34 @@ function createDayCell(date, target, laneMap = new Map(), customLaneCount = 0) {
         );
 
         let isParticipating = false;
-        if (participateOv) {
+        if (participateOv && participateOv.data.isParticipating !== undefined) {
             isParticipating = !!participateOv.data.isParticipating;
         } else {
-            // デフォルトでピン付けするキーワード
-            const name = item.event || "";
-            if (name.includes('教職員会議') || name.includes('コース会議') || name.includes('体験入学') || name.includes('入試') || name.includes('入学試験')) {
-                isParticipating = true;
+            // 対象外（例：教員モードでの学生用行事）は、キーワードに一致してもデフォルトではピン付けしない
+            if (target !== 'both' && item.type !== target) {
+                isParticipating = false;
+            } else {
+                // 除外リストをチェック
+                const exclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
+                const itemExclusions = exclusions[item.id] || [];
+                if (itemExclusions.includes(dateStr)) {
+                    isParticipating = false;
+                } else {
+                    // デフォルトでピン付けするキーワード
+                    const name = item.event || "";
+                    if (containsPinnedKeyword(name)) {
+                        isParticipating = true;
+                    }
+                }
             }
         }
         if (isParticipating) eventItem.classList.add('is-participating');
+
+        // 表示順（レーン）の固定
+        const laneIndex = laneMap.get(`${item.id}-${dateStr}`);
+        if (laneIndex !== undefined) {
+            eventItem.style.gridRow = laneIndex + 1;
+        }
 
         eventItem.innerHTML = `
             <span class="event-text">${typeof replaceSpecialMarks === 'function' ? replaceSpecialMarks(item.event) : item.event}</span>
@@ -1745,10 +2116,10 @@ function createDayCell(date, target, laneMap = new Map(), customLaneCount = 0) {
         ov.type === 'excel' &&
         ov.data &&
         // この日で削除されていないことを確認
-        !classOverrides.some(dov => 
-            String(dov.id) === String(ov.id) && 
-            dov.date === dateStr && 
-            dov.type === 'excel' && 
+        !classOverrides.some(dov =>
+            String(dov.id) === String(ov.id) &&
+            dov.date === dateStr &&
+            dov.type === 'excel' &&
             dov.action === 'delete'
         )
     );
@@ -1778,10 +2149,28 @@ function createDayCell(date, target, laneMap = new Map(), customLaneCount = 0) {
 
         let isParticipating = item.isParticipating;
         if (isParticipating === undefined) {
-            const name = item.event || "";
-            isParticipating = name.includes('教職員会議') || name.includes('コース会議') || name.includes('体験入学') || name.includes('入試') || name.includes('入学試験');
+            // 対象外（例：教員モードでの学生用行事）
+            if (target !== 'both' && item.type !== target) {
+                isParticipating = false;
+            } else {
+                // 除外リストをチェック
+                const exclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
+                const itemExclusions = exclusions[ov.id] || [];
+                if (itemExclusions.includes(dateStr)) {
+                    isParticipating = false;
+                } else {
+                    const name = item.event || "";
+                    isParticipating = containsPinnedKeyword(name);
+                }
+            }
         }
         if (isParticipating) eventItem.classList.add('is-participating');
+
+        // 表示順（レーン）の固定
+        const laneIndex = laneMap.get(`${ov.id}-${dateStr}`);
+        if (laneIndex !== undefined) {
+            eventItem.style.gridRow = laneIndex + 1;
+        }
 
         eventItem.innerHTML = `
             <span class="event-text">${timeDisplay}${item.event}</span>
@@ -1800,9 +2189,6 @@ function createDayCell(date, target, laneMap = new Map(), customLaneCount = 0) {
         if (item.location) tooltip += `\n場所: ${item.location}`;
         if (item.memo) tooltip += `\nメモ: ${item.memo}`;
         eventItem.title = tooltip;
-
-        // カスタムレーンの分だけ下げる
-        eventItem.style.gridRow = 'auto';
 
         eventsContainer.appendChild(eventItem);
     });
@@ -1843,6 +2229,16 @@ function createDayCell(date, target, laneMap = new Map(), customLaneCount = 0) {
         // laneItemsは再追加する必要はないが、DOM順序も整えておくと安全
         laneItems.forEach(el => finalContainer.appendChild(el));
         autoItems.forEach(el => finalContainer.appendChild(el));
+    }
+
+    // 年休候補日（フリーな平日）の判定とスタイル適用
+    if (weekday !== 0 && weekday !== 6 && !isHolidayDay) {
+        // dayCell 内の全てのイベント（授業含む）をチェック
+        const pinnedItems = dayCell.querySelectorAll('.event-item.is-participating');
+        if (pinnedItems.length === 0) {
+            dayCell.classList.add('vacation-candidate');
+            dayCell.title = (dayCell.title ? dayCell.title + '\n' : '') + '年休候補日（予定なし）';
+        }
     }
 
     return dayCell;
@@ -2094,13 +2490,13 @@ function deleteCalendarEvent(e, type, id, date, period = null) {
         // 削除する前に、同じ日付のmoveオーバライドをすべてクリア
         // （移動記録が残っていると、削除レコードと競合する可能性があるため）
         classOverrides = classOverrides.filter(ov =>
-            !(String(ov.id) === String(id) && 
-              ov.date === date && 
-              ov.type === type && 
-              ov.action === 'move' &&
-              (type !== 'myclass' || String(ov.period) === String(period)))
+            !(String(ov.id) === String(id) &&
+                ov.date === date &&
+                ov.type === type &&
+                ov.action === 'move' &&
+                (type !== 'myclass' || String(ov.period) === String(period)))
         );
-        
+
         // 削除レコードを追加
         classOverrides.push({
             type: type,
@@ -2183,7 +2579,7 @@ function editCalendarEvent(type, id, date, period) {
         if (!cls) return;
 
         classFields.classList.remove('hidden');
-        participateFields.classList.add('hidden'); // 授業には一旦不要？要望あれば
+        participateFields.classList.remove('hidden'); // 授業でもピン管理を同期
         document.getElementById('quickEditModalTitle').textContent = `${date} の授業編集`;
 
         const existingOv = classOverrides.find(ov =>
@@ -2193,6 +2589,19 @@ function editCalendarEvent(type, id, date, period) {
             ov.action === 'move' &&
             ov.data
         );
+
+        // 授業のピン状態（デフォルトは担当＝ピンあり。Exclusionsにあればなし）
+        let isParticipating = true;
+        const exclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
+        const classExclusions = exclusions[id] || [];
+        if (classExclusions.includes(date)) {
+            isParticipating = false;
+        }
+        // 個別データに記録があれば優先
+        if (existingOv && existingOv.data && existingOv.data.isParticipating !== undefined) {
+            isParticipating = !!existingOv.data.isParticipating;
+        }
+        participateCheckbox.checked = isParticipating;
 
         // 授業はデフォルト「終日=False」
         allDayCheckbox.checked = (existingOv && existingOv.data) ? !!existingOv.data.allDay : false;
@@ -2222,7 +2631,7 @@ function editCalendarEvent(type, id, date, period) {
         let isAllDay = true; // 行事はデフォルト「終日=True」
         let isParticipating = false;
 
-        const override = classOverrides.find(ov => ov.id == id && ov.date === date && ov.type === 'excel' && ov.action === 'move');
+        const override = classOverrides.find(ov => String(ov.id) === String(id) && ov.date === date && ov.type === 'excel' && ov.action === 'move');
         if (override && override.data) {
             currentText = override.data.event;
             currentLocation = override.data.location || '';
@@ -2230,10 +2639,14 @@ function editCalendarEvent(type, id, date, period) {
             currentEndTime = override.data.endTime || '';
             currentMemo = override.data.memo || '';
             isAllDay = override.data.allDay !== undefined ? override.data.allDay : true;
-            isParticipating = override.data.isParticipating || false;
+            isParticipating = override.data.isParticipating !== undefined ? override.data.isParticipating : false;
         } else {
-            const item = scheduleData.find(i => i.id == id);
+            const item = scheduleData.find(i => String(i.id) === String(id));
             currentText = item ? item.event : '';
+            // デフォルトでピン付けするキーワード
+            if (containsPinnedKeyword(currentText)) {
+                isParticipating = true;
+            }
         }
 
         allDayCheckbox.checked = isAllDay;
@@ -2250,7 +2663,8 @@ function editCalendarEvent(type, id, date, period) {
         document.getElementById('quickEditDateRangeFields').classList.remove('hidden');
         document.getElementById('quickEditModalTitle').textContent = `${date} の新規予定追加`;
 
-        const override = classOverrides.find(ov => ov.id == id && ov.type === 'custom');
+        let isParticipating = false;
+        const override = classOverrides.find(ov => String(ov.id) === String(id) && ov.type === 'custom');
         if (override && override.data) {
             document.getElementById('quickEditModalTitle').textContent = `予定の編集`;
             document.getElementById('quickEditName').value = override.data.event || '';
@@ -2261,7 +2675,7 @@ function editCalendarEvent(type, id, date, period) {
             document.getElementById('quickEditStartDate').value = override.startDate || override.date || date;
             document.getElementById('quickEditEndDate').value = override.endDate || override.date || date;
             allDayCheckbox.checked = override.data.allDay !== undefined ? override.data.allDay : true;
-            participateCheckbox.checked = override.data.isParticipating || false;
+            isParticipating = override.data.isParticipating || false;
         } else {
             // 新規クリア
             document.getElementById('quickEditName').value = '';
@@ -2272,8 +2686,9 @@ function editCalendarEvent(type, id, date, period) {
             document.getElementById('quickEditStartDate').value = date;
             document.getElementById('quickEditEndDate').value = date;
             allDayCheckbox.checked = true;
-            participateCheckbox.checked = false;
+            isParticipating = false;
         }
+        participateCheckbox.checked = isParticipating;
     }
 
     toggleQuickEditTimeFields();
@@ -2349,7 +2764,26 @@ function handleQuickEditSubmit(e) {
 
     if (type === 'myclass') {
         const cls = myClasses.find(c => String(c.id) === String(id));
-        const newPeriod = parseInt(document.getElementById('quickEditPeriod').value);
+        const newPeriod = document.getElementById('quickEditPeriod').value; // 元のコードに合わせて文字列またはパース後の型を確認
+
+        // 授業の参加切り替え：assignmentExclusionsで管理（コンテキストメニューと同期）
+        let assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
+        const dateKey = date;
+        if (!assignmentExclusions[id]) {
+            assignmentExclusions[id] = [];
+        }
+
+        if (isParticipating) {
+            // 参加する場合：除外リストから削除
+            assignmentExclusions[id] = assignmentExclusions[id].filter(d => d !== dateKey);
+        } else {
+            // 非参加にする場合：除外リストに追加
+            if (!assignmentExclusions[id].includes(dateKey)) {
+                assignmentExclusions[id].push(dateKey);
+            }
+        }
+        localStorage.setItem('assignmentExclusions', JSON.stringify(assignmentExclusions));
+
 
         // 既存オーバライドのクリア
         classOverrides = classOverrides.filter(ov =>
@@ -2362,7 +2796,7 @@ function handleQuickEditSubmit(e) {
             id: id,
             date: date,
             action: 'move',
-            period: parseInt(sourcePeriod)
+            period: sourcePeriod // そのまま使用
         });
 
         // 2. 新しいデータ
@@ -2476,67 +2910,7 @@ function downloadBackup() {
 }
 window.downloadBackup = downloadBackup;
 
-/**
- * バックアップから復元
- */
-async function restoreFromBackup(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    if (!confirm('バックアップからデータを復元しますか？\n現在のデータはすべて書き換えられます。')) {
-        e.target.value = '';
-        return;
-    }
-
-    try {
-        const text = await file.text();
-        const data = JSON.parse(text);
-
-        if (!data.scheduleData && !data.myClasses && !data.classOverrides) {
-            throw new Error('有効なバックアップデータが見つかりませんでした。');
-        }
-
-        // データの復旧
-        if (data.scheduleData) {
-            scheduleData = data.scheduleData.map(item => {
-                item.date = new Date(item.date);
-                return item;
-            });
-            saveScheduleData(data.fileName || '復元データ');
-        }
-
-        if (data.myClasses) {
-            myClasses = data.myClasses;
-        }
-
-        if (data.classOverrides) {
-            classOverrides = data.classOverrides;
-        }
-
-        // 永続化とUI更新
-        saveAllToLocal();
-        updateAvailableYearsAndMonths();
-        updateStats();
-        updateCalendar();
-        if (typeof renderMyClassesList === 'function') renderMyClassesList();
-
-        // UI表示状態の更新
-        if (scheduleData.length > 0) {
-            const sections = ['controlsSection', 'calendarSection', 'myClassesSection', 'exportSection', 'fileSelected'];
-            sections.forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.classList.remove('hidden');
-            });
-        }
-
-        alert('復元が完了しました。');
-    } catch (err) {
-        console.error('復元エラー:', err);
-        alert('復元に失敗しました: ' + err.message);
-    }
-    e.target.value = '';
-}
-window.restoreFromBackup = restoreFromBackup;
+// 復元処理はファイルの最初の方で定義されています
 
 /**
  * モーダルを閉じる
@@ -3228,15 +3602,15 @@ function showEventContextMenu(e, type, id, date, period = null) {
         isParticipating = !classExclusions.includes(dateKey);
     } else if (type === 'custom') {
         const ov = classOverrides.find(ov => ov.type === 'custom' && String(ov.id) === String(id));
-        isParticipating = ov && ov.data && (ov.data.isParticipating !== undefined ? ov.data.isParticipating : (ov.data.event && (ov.data.event.includes('教職員会議') || ov.data.event.includes('コース会議') || ov.data.event.includes('体験入学') || ov.data.event.includes('入試') || ov.data.event.includes('入学試験'))));
+        isParticipating = ov && ov.data && (ov.data.isParticipating !== undefined ? ov.data.isParticipating : containsPinnedKeyword(ov.data.event));
     } else if (type === 'excel') {
         const ov = classOverrides.find(ov => ov.type === 'excel' && String(ov.id) === String(id) && ov.date === date && ov.action === 'move' && ov.data);
         if (ov) {
-            isParticipating = ov.data.isParticipating !== undefined ? ov.data.isParticipating : (ov.data.event && (ov.data.event.includes('教職員会議') || ov.data.event.includes('コース会議') || ov.data.event.includes('体験入学') || ov.data.event.includes('入試') || ov.data.event.includes('入学試験')));
+            isParticipating = ov.data.isParticipating !== undefined ? ov.data.isParticipating : containsPinnedKeyword(ov.data.event);
         } else {
             const item = scheduleData.find(i => String(i.id) === String(id));
             const name = item ? (item.event || item.name || "") : "";
-            isParticipating = name.includes('教職員会議') || name.includes('コース会議') || name.includes('体験入学') || name.includes('入試') || name.includes('入学試験');
+            isParticipating = containsPinnedKeyword(name);
         }
     }
 
@@ -3275,7 +3649,7 @@ function handleContextAction(action) {
             let assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
             // dateはISO形式の文字列（YYYY-MM-DD）として渡される
             const dateKey = date;
-            
+
             if (!assignmentExclusions[id]) {
                 assignmentExclusions[id] = [];
             }
