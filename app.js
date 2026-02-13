@@ -6,14 +6,14 @@
 // =============================
 // グローバル変数
 // =============================
-let scheduleData = [];      // 全スケジュールデータ（キャッシュから生成される現在の統合ビュー）
-let scheduleCache = {};     // 年度ごとのスケジュールキャッシュ { 2025: { data: [], timestamp: ... }, ... }
-let currentYear = null;     // 現在表示中の年（初期値はデータの最新年度に自動設定）
-let currentMonth = 4;       // 現在表示中の月（デフォルト4月：学年開始）
-let availableYears = [];    // 利用可能な年度リスト
-let availableMonths = [];   // 利用可能な月リスト
-let myClasses = [];         // 登録済み授業データ
-let classOverrides = [];    // カレンダー操作の記録
+var scheduleData = [];      // 全スケジュールデータ（キャッシュから生成される現在の統合ビュー）
+var scheduleCache = {};     // 年度ごとのスケジュールキャッシュ { 2025: { data: [], timestamp: ... }, ... }
+var currentYear = null;     // 現在表示中の年（初期値はデータの最新年度に自動設定）
+var currentMonth = 4;       // 現在表示中の月（デフォルト4月：学年開始）
+var availableYears = [];    // 利用可能な年度リスト
+var availableMonths = [];   // 利用可能な月リスト
+var myClasses = [];         // 登録済み授業データ
+var classOverrides = [];    // カレンダー操作の記録
 
 // 学校年度関連定数
 const FISCAL_YEAR_START_MONTH = 4;  // 4月開始
@@ -28,6 +28,7 @@ function getFiscalYear(date) {
     const month = date.getMonth() + 1;
     return month >= FISCAL_YEAR_START_MONTH ? year : year - 1;
 }
+window.getFiscalYear = getFiscalYear;
 
 /**
  * 年度の開始日を取得
@@ -283,10 +284,10 @@ window.formatDateKey = formatDateKey;
 /**
  * 日付キー形式（YYYY-MM-DD）をDateオブジェクトに変換
  */
-function parseDateKey(dateKey) {
-    if (!dateKey) return new Date();
-    const parts = dateKey.split('-');
-    return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+function parseDateKey(dateStr) {
+    if (!dateStr) return new Date();
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(y, m - 1, d);
 }
 window.parseDateKey = parseDateKey;
 
@@ -1388,15 +1389,64 @@ function updateCalendar() {
         calendarGrid.appendChild(emptyDay);
     }
 
+    // 期間予定（カスタム予定）の表示位置を固定するためのレーン割り当て
+    const laneMap = new Map(); // id -> laneIndex
+    const customEventsForMonth = classOverrides.filter(ov =>
+        ov.type === 'custom' && ov.action === 'add' && ov.data
+    );
+
+    // 開始日でソート、次に期間の長さでソート
+    customEventsForMonth.sort((a, b) => {
+        const startA = a.startDate || a.date;
+        const startB = b.startDate || b.date;
+        if (startA !== startB) return startA.localeCompare(startB);
+        const endA = a.endDate || a.date;
+        const endB = b.endDate || b.date;
+        return endB.localeCompare(endA); // 長い方を優先
+    });
+
+    const lanes = []; // [Set(dateStr), Set(dateStr), ...] 各レーンが塞がっている日付の集合
+    customEventsForMonth.forEach(ov => {
+        const startDate = ov.startDate || ov.date;
+        const endDate = ov.endDate || ov.date || ov.startDate;
+
+        // 該当イベントがカバーする日付リストを作成
+        const coveredDates = [];
+        const curr = parseDateKey(startDate);
+        const last = parseDateKey(endDate);
+        while (curr <= last) {
+            coveredDates.push(formatDateKey(curr));
+            curr.setDate(curr.getDate() + 1);
+        }
+
+        // 空いているレーンを探す
+        let targetLane = -1;
+        for (let i = 0; i < lanes.length; i++) {
+            const hasOverlap = coveredDates.some(d => lanes[i].has(d));
+            if (!hasOverlap) {
+                targetLane = i;
+                break;
+            }
+        }
+
+        if (targetLane === -1) {
+            targetLane = lanes.length;
+            lanes.push(new Set());
+        }
+
+        coveredDates.forEach(d => lanes[targetLane].add(d));
+        laneMap.set(String(ov.id), targetLane);
+    });
+
     // 各日付セル
     for (let day = 1; day <= daysInMonth; day++) {
         const date = new Date(currentYear, currentMonth - 1, day);
-        const dayCell = createDayCell(date, target);
+        const dayCell = createDayCell(date, target, laneMap, lanes.length);
         calendarGrid.appendChild(dayCell);
     }
 }
 
-function createDayCell(date, target) {
+function createDayCell(date, target, laneMap = new Map(), customLaneCount = 0) {
     const dateStr = formatDateKey(date);
     const dayCell = document.createElement('div');
     dayCell.className = 'calendar-day';
@@ -1450,6 +1500,18 @@ function createDayCell(date, target) {
     }
     */
 
+    // バッジ用コンテナ（右上に配置）
+    const badgesContainer = document.createElement('div');
+    badgesContainer.className = 'day-badges';
+
+    // 祝日名表示
+    if (isHolidayDay) {
+        const holidayLabel = document.createElement('div');
+        holidayLabel.className = 'day-holiday';
+        holidayLabel.textContent = holidayName; // 絵文字は一旦抜くかCSSで調整
+        badgesContainer.appendChild(holidayLabel);
+    }
+
     // その日のイベントを取得
     const dayEvents = scheduleData.filter(item => {
         if (item.date.toDateString() !== date.toDateString()) return false;
@@ -1464,7 +1526,7 @@ function createDayCell(date, target) {
         const weekdayCount = document.createElement('div');
         weekdayCount.className = 'day-weekday-count';
         weekdayCount.textContent = weekdayCountItems[0].weekdayCount;
-        dayCell.appendChild(weekdayCount);
+        badgesContainer.appendChild(weekdayCount);
     }
 
     // 補講日バッジ表示
@@ -1476,16 +1538,128 @@ function createDayCell(date, target) {
         const makeupBadge = document.createElement('div');
         makeupBadge.className = 'day-makeup-count';
         makeupBadge.textContent = '補講日';
-        dayCell.appendChild(makeupBadge);
+        badgesContainer.appendChild(makeupBadge);
+    }
+
+    if (badgesContainer.hasChildNodes()) {
+        dayCell.appendChild(badgesContainer);
     }
 
 
     // イベントリスト
     const eventsContainer = document.createElement('div');
     eventsContainer.className = 'day-events';
+    // グリッドレイアウトを強制（Lanes用）
+    eventsContainer.style.display = 'grid';
+    eventsContainer.style.gridAutoRows = 'min-content';
 
+    // 1. カスタム（期間予定）イベントを最優先で配置
+    let customEvents = classOverrides.filter(ov =>
+        ov.type === 'custom' &&
+        ov.action === 'add' &&
+        ov.data &&
+        (ov.startDate || ov.date) <= dateStr &&
+        (ov.endDate || ov.date || ov.startDate) >= dateStr
+    );
+
+    // laneMapに基づいて並び替え
+    customEvents.sort((a, b) => {
+        const laneA = laneMap.get(String(a.id)) ?? 999;
+        const laneB = laneMap.get(String(b.id)) ?? 999;
+        return laneA - laneB;
+    });
+
+    customEvents.forEach(ov => {
+        const item = ov.data;
+        let timeDisplay = '';
+        if (item.allDay === false && item.startTime) {
+            timeDisplay = item.startTime + ' ';
+        }
+
+        const eventItem = document.createElement('div');
+        eventItem.className = 'event-item custom';
+
+        // 連続表示のためのクラス判定
+        const startDate = ov.startDate || ov.date;
+        const endDate = ov.endDate || ov.date || ov.startDate;
+        if (startDate !== endDate) {
+            if (dateStr === startDate) eventItem.classList.add('range-start');
+            else if (dateStr === endDate) eventItem.classList.add('range-end');
+            else eventItem.classList.add('range-middle');
+        }
+
+        // 表示順（レーン）の固定：grid-rowを使用
+        const laneIndex = laneMap.get(String(ov.id));
+        if (laneIndex !== undefined) {
+            eventItem.style.gridRow = laneIndex + 1;
+        }
+
+        eventItem.draggable = true;
+        eventItem.dataset.classId = ov.id;
+        eventItem.dataset.type = 'custom';
+        eventItem.dataset.date = dateStr;
+
+        let isParticipating = item.isParticipating;
+        if (isParticipating === undefined) {
+            const name = item.event || "";
+            isParticipating = name.includes('教職員会議') || name.includes('コース会議') || name.includes('体験入学') || name.includes('入試') || name.includes('入学試験');
+        }
+        if (isParticipating) eventItem.classList.add('is-participating');
+
+        eventItem.innerHTML = `
+            <span class="event-text">${timeDisplay}${item.event}</span>
+            <button class="event-delete-btn" onclick="deleteCalendarEvent(event, 'custom', '${ov.id}', '${dateStr}')" title="削除">×</button>
+        `;
+
+        eventItem.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            editCalendarEvent('custom', ov.id, dateStr);
+        });
+
+        // 右クリックメニュー対応
+        eventItem.addEventListener('contextmenu', (e) => showEventContextMenu(e, 'custom', ov.id, dateStr));
+
+        // 期間の最終日にリサイズハンドルを表示
+        const isLastDay = dateStr === (ov.endDate || ov.startDate || ov.date);
+        if (isLastDay) {
+            const handle = document.createElement('div');
+            handle.className = 'resize-handle-right';
+            handle.title = 'ドラッグして期間を変更';
+            handle.addEventListener('mousedown', (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                if (typeof startResizing === 'function') startResizing(e, ov);
+            });
+            eventItem.appendChild(handle);
+            eventItem.classList.add('resizable');
+        }
+
+        let tooltip = `[カスタム] ${item.event}`;
+        if (item.location) tooltip += `\n場所: ${item.location}`;
+        if (item.memo) tooltip += `\nメモ: ${item.memo}`;
+        eventItem.title = tooltip;
+
+        eventsContainer.appendChild(eventItem);
+    });
+
+    // 2. Excelイベント（年間行事）をその下に配置
     dayEvents.forEach(item => {
         if (!item.event || item.event.trim() === '') return;
+
+        // 祝日はバッジ（右上）で表示するため、イベントリストからは除外
+        if (isHolidayDay) {
+            const ev = item.event.trim();
+            const hn = holidayName.trim();
+            const isRedundant = ev === hn || ev === '祝日' || ev === '休日' ||
+                ev.includes('(祝)') || ev.includes('（祝）') || ev.includes('【祝】') ||
+                ev.includes(hn) ||
+                (hn === '建国記念の日' && ev === '建国記念日') ||
+                (hn === 'スポーツの日' && ev === '体育の日') ||
+                (hn === '体育の日' && ev === 'スポーツの日') ||
+                (hn === '元日' && ev.includes('元旦')) ||
+                (hn === '振替休日' && ev.includes('振替休日'));
+            if (isRedundant) return;
+        }
 
         // オーバライドチェック
         const isOverridden = classOverrides.some(ov =>
@@ -1505,12 +1679,32 @@ function createDayCell(date, target) {
         eventItem.dataset.type = 'excel';
         eventItem.dataset.date = dateStr;
 
+        // 参加状況チェック
+        const participateOv = classOverrides.find(ov =>
+            String(ov.id) === String(item.id) && ov.date === dateStr && ov.type === 'excel' && ov.data
+        );
+
+        let isParticipating = false;
+        if (participateOv) {
+            isParticipating = !!participateOv.data.isParticipating;
+        } else {
+            // デフォルトでピン付けするキーワード
+            const name = item.event || "";
+            if (name.includes('教職員会議') || name.includes('コース会議') || name.includes('体験入学') || name.includes('入試') || name.includes('入学試験')) {
+                isParticipating = true;
+            }
+        }
+        if (isParticipating) eventItem.classList.add('is-participating');
+
         eventItem.innerHTML = `
             <span class="event-text">${item.event}</span>
             <button class="event-delete-btn" onclick="deleteCalendarEvent(event, 'excel', '${item.id}', '${dateStr}')" title="この日だけ削除">×</button>
         `;
 
         eventItem.addEventListener('dblclick', () => editCalendarEvent('excel', item.id, dateStr));
+
+        // 右クリックメニュー対応
+        eventItem.addEventListener('contextmenu', (e) => showEventContextMenu(e, 'excel', item.id, dateStr));
 
         eventItem.addEventListener('dragstart', handleEventDragStart);
         eventItem.title = item.event;
@@ -1528,6 +1722,22 @@ function createDayCell(date, target) {
 
     addedExcelOverrides.forEach(ov => {
         const item = ov.data;
+        if (!item) return;
+
+        // 祝日は除外
+        if (isHolidayDay && holidayName) {
+            const ev = item.event.trim();
+            const hn = holidayName.trim();
+            const isRedundant = ev === hn || ev === '祝日' || ev === '休日' ||
+                ev.includes('(祝)') || ev.includes('（祝）') || ev.includes('【祝】') ||
+                ev.includes(hn) ||
+                (hn === '建国記念の日' && ev === '建国記念日') ||
+                (hn === 'スポーツの日' && ev === '体育の日') ||
+                (hn === '体育の日' && ev === 'スポーツの日') ||
+                (hn === '元日' && ev.includes('元旦')) ||
+                (hn === '振替休日' && ev.includes('振替休日'));
+            if (isRedundant) return;
+        }
         let timeDisplay = '';
         let fullTimeRange = '';
         if (item.allDay === false && item.startTime) {
@@ -1536,12 +1746,19 @@ function createDayCell(date, target) {
         }
 
         const eventItem = document.createElement('div');
-        eventItem.className = 'event-item moved';
+        eventItem.className = 'event-item';
         eventItem.classList.add(item.type || 'teacher');
         eventItem.draggable = true;
         eventItem.dataset.classId = ov.id;
         eventItem.dataset.type = 'excel';
         eventItem.dataset.date = dateStr;
+
+        let isParticipating = item.isParticipating;
+        if (isParticipating === undefined) {
+            const name = item.event || "";
+            isParticipating = name.includes('教職員会議') || name.includes('コース会議') || name.includes('体験入学') || name.includes('入試') || name.includes('入学試験');
+        }
+        if (isParticipating) eventItem.classList.add('is-participating');
 
         eventItem.innerHTML = `
             <span class="event-text">${timeDisplay}${item.event}</span>
@@ -1549,6 +1766,9 @@ function createDayCell(date, target) {
         `;
 
         eventItem.addEventListener('dblclick', () => editCalendarEvent('excel', ov.id, dateStr));
+
+        // 右クリックメニュー対応
+        eventItem.addEventListener('contextmenu', (e) => showEventContextMenu(e, 'excel', ov.id, dateStr));
 
         eventItem.addEventListener('dragstart', handleEventDragStart);
 
@@ -1558,48 +1778,8 @@ function createDayCell(date, target) {
         if (item.memo) tooltip += `\nメモ: ${item.memo}`;
         eventItem.title = tooltip;
 
-        eventsContainer.appendChild(eventItem);
-    });
-
-    // カスタム（新規追加）イベントを表示
-    const customEvents = classOverrides.filter(ov =>
-        ov.type === 'custom' &&
-        ov.action === 'add' &&
-        ov.data &&
-        (ov.startDate || ov.date) <= dateStr &&
-        (ov.endDate || ov.date || ov.startDate) >= dateStr
-    );
-
-    customEvents.forEach(ov => {
-        const item = ov.data;
-        let timeDisplay = '';
-        if (item.allDay === false && item.startTime) {
-            timeDisplay = item.startTime + ' ';
-        }
-
-        const eventItem = document.createElement('div');
-        eventItem.className = 'event-item custom';
-        eventItem.draggable = true;
-        eventItem.dataset.classId = ov.id;
-        eventItem.dataset.type = 'custom';
-        eventItem.dataset.date = dateStr;
-
-        eventItem.innerHTML = `
-            <span class="event-text">${timeDisplay}${item.event}</span>
-            <button class="event-delete-btn" onclick="deleteCalendarEvent(event, 'custom', '${ov.id}', '${dateStr}')" title="削除">×</button>
-        `;
-
-        eventItem.addEventListener('dblclick', (e) => {
-            e.stopPropagation();
-            editCalendarEvent('custom', ov.id, dateStr);
-        });
-
-        eventItem.addEventListener('dragstart', handleEventDragStart);
-
-        let tooltip = `[カスタム] ${item.event}`;
-        if (item.location) tooltip += `\n場所: ${item.location}`;
-        if (item.memo) tooltip += `\nメモ: ${item.memo}`;
-        eventItem.title = tooltip;
+        // カスタムレーンの分だけ下げる
+        eventItem.style.gridRow = 'auto';
 
         eventsContainer.appendChild(eventItem);
     });
@@ -1618,6 +1798,27 @@ function createDayCell(date, target) {
     // 自分の授業を追加（my_classes.jsから）
     if (typeof addMyClassesToDayCell === 'function') {
         addMyClassesToDayCell(dayCell, date, dayEvents);
+    }
+
+    // イベントの並び替え：参加予定（ピン付き）を優先して上に、期間予定はレーンを維持
+    const finalContainer = dayCell.querySelector('.day-events');
+    if (finalContainer) {
+        const items = Array.from(finalContainer.children);
+        // gridRowがあるもの（期間予定）とないもの（通常）を分ける
+        const laneItems = items.filter(el => el.style.gridRow);
+        const autoItems = items.filter(el => !el.style.gridRow);
+
+        // 通常予定の中で参加（ピン付き）を優先
+        autoItems.sort((a, b) => {
+            const pinA = a.classList.contains('is-participating') ? 1 : 0;
+            const pinB = b.classList.contains('is-participating') ? 1 : 0;
+            return pinB - pinA;
+        });
+
+        // 再配置（laneItemsはそのまま、autoItemsはソート順に再追加）
+        // laneItemsは再追加する必要はないが、DOM順序も整えておくと安全
+        laneItems.forEach(el => finalContainer.appendChild(el));
+        autoItems.forEach(el => finalContainer.appendChild(el));
     }
 
     return dayCell;
@@ -1748,20 +1949,58 @@ function moveCalendarEvent(eventData, targetDate, isCopy = false) {
     }
 
     // C. 移動先に追加
-    // 移動先にある同一アイテムのオーバライドがあれば消去（上書き）
-    classOverrides = classOverrides.filter(ov =>
-        !(String(ov.id) === String(id) && ov.date === targetDate && ov.type === type && (type !== 'myclass' || String(ov.period) === String(period)))
-    );
+    if (type === 'custom') {
+        const existingOv = classOverrides.find(ov => ov.type === 'custom' && String(ov.id) === String(id));
+        if (existingOv && existingOv.data) {
+            const movingData = JSON.parse(JSON.stringify(existingOv.data));
 
-    if (movingData) {
-        classOverrides.push({
-            type: type,
-            id: id,
-            date: targetDate,
-            action: 'move',
-            period: period,
-            data: movingData
-        });
+            // 日付の移動量を計算
+            const oldStart = parseDateKey(existingOv.startDate || existingOv.date);
+            const oldEnd = parseDateKey(existingOv.endDate || existingOv.date || existingOv.startDate);
+            const sourceDateObj = parseDateKey(sourceDate);
+            const targetDateObj = parseDateKey(targetDate);
+
+            const diffTime = targetDateObj.getTime() - sourceDateObj.getTime();
+            const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+            const newStart = new Date(oldStart);
+            newStart.setDate(newStart.getDate() + diffDays);
+            const newEnd = new Date(oldEnd);
+            newEnd.setDate(newEnd.getDate() + diffDays);
+
+            if (isCopy) {
+                const newId = 'custom-' + Date.now();
+                classOverrides.push({
+                    type: 'custom',
+                    id: newId,
+                    date: formatDateKey(newStart),
+                    startDate: formatDateKey(newStart),
+                    endDate: formatDateKey(newEnd),
+                    action: 'add',
+                    data: movingData
+                });
+            } else {
+                existingOv.date = formatDateKey(newStart);
+                existingOv.startDate = formatDateKey(newStart);
+                existingOv.endDate = formatDateKey(newEnd);
+            }
+        }
+    } else {
+        // 移動先にある同一アイテムのオーバライドがあれば消去（上書き）
+        classOverrides = classOverrides.filter(ov =>
+            !(String(ov.id) === String(id) && ov.date === targetDate && ov.type === type && (type !== 'myclass' || String(ov.period) === String(period)))
+        );
+
+        if (movingData) {
+            classOverrides.push({
+                type: type,
+                id: id,
+                date: targetDate,
+                action: 'move',
+                period: period,
+                data: movingData
+            });
+        }
     }
 
     saveAllToLocal();
@@ -1813,6 +2052,44 @@ window.deleteCalendarEvent = deleteCalendarEvent;
 window.deleteCachedYear = deleteCachedYear;
 
 /**
+ * 期間予定のリサイズ（マウス操作）
+ */
+function startResizing(e, override) {
+    document.body.style.cursor = 'ew-resize';
+
+    // スケジュール全体のコンテナを取得してその上でマウス移動を監視
+    const calendarContainer = document.getElementById('calendarGrid');
+
+    const onMouseMove = (moveEvent) => {
+        // マウス位置にあるセルを探す
+        const target = moveEvent.target.closest('.calendar-day');
+        if (target && target.dataset.date) {
+            const newEndDateStr = target.dataset.date;
+            const startDateStr = override.startDate || override.date;
+
+            if (newEndDateStr >= startDateStr) {
+                if (override.endDate !== newEndDateStr) {
+                    override.endDate = newEndDateStr;
+                    // カレンダーを更新（表示を反映）
+                    updateCalendar();
+                }
+            }
+        }
+    };
+
+    const onMouseUp = () => {
+        document.body.style.cursor = '';
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+        saveAllToLocal();
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+}
+window.startResizing = startResizing;
+
+/**
  * カレンダー項目の編集（モーダル表示）
  */
 /**
@@ -1823,17 +2100,22 @@ function editCalendarEvent(type, id, date, period) {
     const classFields = document.getElementById('quickEditClassOnlyFields');
     const allDayCheckbox = document.getElementById('quickEditAllDay');
 
+    const participateCheckbox = document.getElementById('quickEditParticipate');
+    const participateFields = document.getElementById('quickEditParticipateFields');
+
     // 値のリセット
     document.getElementById('quickEditType').value = type;
     document.getElementById('quickEditId').value = id;
     document.getElementById('quickEditDate').value = date;
     document.getElementById('quickEditSourcePeriod').value = period || '';
+    participateCheckbox.checked = false;
 
     if (type === 'myclass') {
         const cls = myClasses.find(c => String(c.id) === String(id));
         if (!cls) return;
 
         classFields.classList.remove('hidden');
+        participateFields.classList.add('hidden'); // 授業には一旦不要？要望あれば
         document.getElementById('quickEditModalTitle').textContent = `${date} の授業編集`;
 
         const existingOv = classOverrides.find(ov =>
@@ -1861,6 +2143,7 @@ function editCalendarEvent(type, id, date, period) {
 
     } else if (type === 'excel') {
         classFields.classList.add('hidden');
+        participateFields.classList.remove('hidden');
         document.getElementById('quickEditModalTitle').textContent = `${date} の予定編集`;
 
         let currentText = '';
@@ -1869,6 +2152,7 @@ function editCalendarEvent(type, id, date, period) {
         let currentEndTime = '';
         let currentMemo = '';
         let isAllDay = true; // 行事はデフォルト「終日=True」
+        let isParticipating = false;
 
         const override = classOverrides.find(ov => ov.id == id && ov.date === date && ov.type === 'excel' && ov.action === 'move');
         if (override && override.data) {
@@ -1878,12 +2162,14 @@ function editCalendarEvent(type, id, date, period) {
             currentEndTime = override.data.endTime || '';
             currentMemo = override.data.memo || '';
             isAllDay = override.data.allDay !== undefined ? override.data.allDay : true;
+            isParticipating = override.data.isParticipating || false;
         } else {
             const item = scheduleData.find(i => i.id == id);
             currentText = item ? item.event : '';
         }
 
         allDayCheckbox.checked = isAllDay;
+        participateCheckbox.checked = isParticipating;
         document.getElementById('quickEditName').value = currentText;
         document.getElementById('quickEditLocation').value = currentLocation;
         document.getElementById('quickEditStartTime').value = currentStartTime;
@@ -1892,6 +2178,7 @@ function editCalendarEvent(type, id, date, period) {
         document.getElementById('quickEditDateRangeFields').classList.add('hidden');
     } else if (type === 'custom') {
         classFields.classList.add('hidden');
+        participateFields.classList.remove('hidden');
         document.getElementById('quickEditDateRangeFields').classList.remove('hidden');
         document.getElementById('quickEditModalTitle').textContent = `${date} の新規予定追加`;
 
@@ -1906,6 +2193,7 @@ function editCalendarEvent(type, id, date, period) {
             document.getElementById('quickEditStartDate').value = override.startDate || override.date || date;
             document.getElementById('quickEditEndDate').value = override.endDate || override.date || date;
             allDayCheckbox.checked = override.data.allDay !== undefined ? override.data.allDay : true;
+            participateCheckbox.checked = override.data.isParticipating || false;
         } else {
             // 新規クリア
             document.getElementById('quickEditName').value = '';
@@ -1916,6 +2204,7 @@ function editCalendarEvent(type, id, date, period) {
             document.getElementById('quickEditStartDate').value = date;
             document.getElementById('quickEditEndDate').value = date;
             allDayCheckbox.checked = true;
+            participateCheckbox.checked = false;
         }
     }
 
@@ -1988,6 +2277,8 @@ function handleQuickEditSubmit(e) {
     const location = document.getElementById('quickEditLocation').value.trim();
     const memo = document.getElementById('quickEditMemo').value.trim();
 
+    const isParticipating = document.getElementById('quickEditParticipate').checked;
+
     if (type === 'myclass') {
         const cls = myClasses.find(c => String(c.id) === String(id));
         const newPeriod = parseInt(document.getElementById('quickEditPeriod').value);
@@ -2014,6 +2305,7 @@ function handleQuickEditSubmit(e) {
         updatedCls.startTime = startTime;
         updatedCls.endTime = endTime;
         updatedCls.memo = memo;
+        updatedCls.isParticipating = isParticipating;
 
         classOverrides.push({
             type: 'myclass',
@@ -2042,7 +2334,8 @@ function handleQuickEditSubmit(e) {
                 startTime: startTime,
                 endTime: endTime,
                 location: location,
-                memo: memo
+                memo: memo,
+                isParticipating: isParticipating
             }
         });
     } else if (type === 'custom') {
@@ -2067,7 +2360,8 @@ function handleQuickEditSubmit(e) {
                 startTime: startTime,
                 endTime: endTime,
                 location: location,
-                memo: memo
+                memo: memo,
+                isParticipating: isParticipating
             }
         });
     }
@@ -2218,9 +2512,32 @@ function getAppliedScheduleData(target) {
         filtered = scheduleData.filter(item => item.type === 'student');
     }
 
-    // 2. 削除・移動元の除外
+    // 祝日冗長チェック関数
+    const isRedundantHoliday = (eventText, date) => {
+        if (!eventText) return false;
+        const holidaysMap = getHolidaysForYear(date.getFullYear());
+        const hName = getHolidayName(date, holidaysMap);
+        if (!hName) return false;
+
+        const ev = eventText.trim();
+        const hn = hName.trim();
+        return ev === hn || ev === '祝日' || ev === '休日' ||
+            ev.includes('(祝)') || ev.includes('（祝）') || ev.includes('【祝】') ||
+            ev.includes(hn) ||
+            (hn === '建国記念の日' && ev === '建国記念日') ||
+            (hn === 'スポーツの日' && ev === '体育の日') ||
+            (hn === '体育の日' && ev === 'スポーツの日') ||
+            (hn === '元日' && ev.includes('元旦')) ||
+            (hn === '振替休日' && ev.includes('振替休日'));
+    };
+
+    // 2. 削除・移動元の除外 & 祝日除外
     const result = filtered.filter(item => {
         const dateStr = formatDateKey(item.date);
+
+        // 祝日チェック
+        if (isRedundantHoliday(item.event, item.date)) return false;
+
         const isOverridden = classOverrides.some(ov =>
             String(ov.id) === String(item.id) &&
             ov.type === 'excel' &&
@@ -2237,9 +2554,13 @@ function getAppliedScheduleData(target) {
             // 対象チェック
             if (target !== 'both' && ov.data.type !== target) return;
 
+            const dateObj = parseDateKey(ov.date);
+            // 移動先でも祝日なら除外
+            if (isRedundantHoliday(ov.data.event, dateObj)) return;
+
             result.push({
                 id: ov.id,
-                date: parseDateKey(ov.date),
+                date: dateObj,
                 event: ov.data.event,
                 type: ov.data.type || 'teacher',
                 period: ov.period || '',
@@ -2823,3 +3144,116 @@ function deleteCachedYear(year) {
 
 window.renderCachedYearList = renderCachedYearList;
 window.deleteCachedYear = deleteCachedYear;
+
+/**
+ * 右クリックメニュー（参加/非参加）
+ */
+let contextEventData = null;
+
+function showEventContextMenu(e, type, id, date, period = null) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    contextEventData = { type, id, date, period };
+
+    const menu = document.getElementById('calendarContextMenu');
+    menu.classList.remove('hidden');
+
+    // 参加状況に合わせてメニューテキストを調整
+    const participateItem = document.getElementById('ctxParticipate');
+    const notParticipateItem = document.getElementById('ctxNotParticipate');
+
+    // 現在の参加状況を確認
+    let isParticipating = false;
+    if (type === 'custom') {
+        const ov = classOverrides.find(ov => ov.type === 'custom' && String(ov.id) === String(id));
+        isParticipating = ov && ov.data && (ov.data.isParticipating !== undefined ? ov.data.isParticipating : (ov.data.event && (ov.data.event.includes('教職員会議') || ov.data.event.includes('コース会議') || ov.data.event.includes('体験入学') || ov.data.event.includes('入試') || ov.data.event.includes('入学試験'))));
+    } else if (type === 'excel') {
+        const ov = classOverrides.find(ov => ov.type === 'excel' && String(ov.id) === String(id) && ov.date === date && ov.data);
+        if (ov) {
+            isParticipating = ov.data.isParticipating !== undefined ? ov.data.isParticipating : (ov.data.event && (ov.data.event.includes('教職員会議') || ov.data.event.includes('コース会議') || ov.data.event.includes('体験入学') || ov.data.event.includes('入試') || ov.data.event.includes('入学試験')));
+        } else {
+            const item = scheduleData.find(i => String(i.id) === String(id));
+            const name = item ? (item.event || item.name || "") : "";
+            isParticipating = name.includes('教職員会議') || name.includes('コース会議') || name.includes('体験入学') || name.includes('入試') || name.includes('入学試験');
+        }
+    }
+
+    participateItem.style.display = isParticipating ? 'none' : 'flex';
+    notParticipateItem.style.display = isParticipating ? 'flex' : 'none';
+
+    // 位置調整
+    const menuWidth = 160;
+    const menuHeight = 180;
+    let x = e.clientX;
+    let y = e.clientY;
+
+    if (x + menuWidth > window.innerWidth) x -= menuWidth;
+    if (y + menuHeight > window.innerHeight) y -= menuHeight;
+
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+
+    // メニュー以外をクリックしたら閉じる
+    const closeMenu = () => {
+        menu.classList.add('hidden');
+        document.removeEventListener('click', closeMenu);
+    };
+    setTimeout(() => document.addEventListener('click', closeMenu), 10);
+}
+
+function handleContextAction(action) {
+    if (!contextEventData) return;
+    const { type, id, date, period } = contextEventData;
+
+    if (action === 'participate' || action === 'not_participate') {
+        const isEnable = action === 'participate';
+
+        if (type === 'excel') {
+            // Excel行事の参加切り替え
+            classOverrides = classOverrides.filter(ov =>
+                !(String(ov.id) === String(id) && ov.date === date && ov.type === 'excel')
+            );
+
+            let baseData = null;
+            const item = scheduleData.find(i => String(i.id) === String(id));
+            if (item) {
+                baseData = {
+                    event: item.event,
+                    type: item.type,
+                    location: item.location || '',
+                    memo: item.memo || '',
+                    isParticipating: isEnable
+                };
+            } else {
+                baseData = { event: 'Unknown', isParticipating: isEnable };
+            }
+
+            classOverrides.push({
+                type: 'excel',
+                id: id,
+                date: date,
+                action: 'move',
+                data: baseData
+            });
+        } else if (type === 'custom') {
+            const ov = classOverrides.find(o => o.type === 'custom' && String(o.id) === String(id));
+            if (ov && ov.data) {
+                ov.data.isParticipating = isEnable;
+            }
+        }
+
+        saveAllToLocal();
+        updateCalendar();
+    } else if (action === 'edit') {
+        editCalendarEvent(type, id, date, period);
+    } else if (action === 'delete') {
+        deleteCalendarEvent(null, type, id, date, period);
+    }
+
+    document.getElementById('calendarContextMenu').classList.add('hidden');
+    contextEventData = null;
+}
+
+window.showEventContextMenu = showEventContextMenu;
+window.handleContextAction = handleContextAction;

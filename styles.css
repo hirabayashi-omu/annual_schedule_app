@@ -480,12 +480,16 @@ body {
 
 .calendar-day {
     min-height: 120px;
-    padding: var(--spacing-md);
+    padding: var(--spacing-sm);
     background: white;
     border: 1px solid var(--neutral-200);
     border-radius: var(--radius-md);
     transition: all var(--transition-fast);
     cursor: pointer;
+    position: relative;
+    /* 子要素の絶対配置のため */
+    display: flex;
+    flex-direction: column;
 }
 
 .calendar-day:hover {
@@ -525,44 +529,59 @@ body {
 }
 
 .day-number {
-    font-weight: 600;
-    font-size: var(--font-size-lg);
+    font-weight: 700;
+    font-size: var(--font-size-base);
     color: var(--neutral-700);
     margin-bottom: var(--spacing-sm);
+    z-index: 5;
+}
+
+/* バッジ類をまとめるコンテナ用（JSで作成するか、個別に絶対配置） */
+.day-badges {
+    position: absolute;
+    top: var(--spacing-xs);
+    right: var(--spacing-xs);
+    display: flex;
+    flex-direction: row;
+    /* 横並びに変更 */
+    align-items: center;
+    gap: 2px;
+    z-index: 10;
+    pointer-events: none;
 }
 
 .day-weekday-count {
     display: inline-block;
-    padding: 2px var(--spacing-sm);
+    padding: 1px 4px;
     background: var(--secondary-purple);
     color: white;
     border-radius: var(--radius-sm);
-    font-size: var(--font-size-xs);
-    font-weight: 600;
-    margin-bottom: var(--spacing-sm);
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
 }
 
 .day-makeup-count {
     display: inline-block;
-    padding: 2px var(--spacing-sm);
+    padding: 1px 4px;
     background: var(--warning-orange);
     color: white;
     border-radius: var(--radius-sm);
-    font-size: var(--font-size-xs);
-    font-weight: 600;
-    margin-bottom: var(--spacing-sm);
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
 }
 
 
 .day-holiday {
     display: inline-block;
-    padding: var(--spacing-xs) var(--spacing-sm);
+    padding: 1px 4px;
     background: linear-gradient(135deg, var(--error-red), hsl(0, 85%, 70%));
     color: white;
     border-radius: var(--radius-sm);
-    font-size: var(--font-size-xs);
-    font-weight: 600;
-    margin-bottom: var(--spacing-sm);
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
     box-shadow: var(--shadow-sm);
     animation: pulse 2s ease-in-out infinite;
 }
@@ -602,8 +621,123 @@ body {
     transform: translateX(2px);
 }
 
+/* 期間予定（アロー・リボン表示）の工夫 */
+.event-item.range-start {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-top-left-radius: var(--radius-sm);
+    border-bottom-left-radius: var(--radius-sm);
+    margin-right: -11px;
+    padding-right: 15px;
+    position: relative;
+    z-index: 2;
+    box-shadow: -2px 1px 4px rgba(0, 0, 0, 0.05);
+}
+
+.event-item.range-middle {
+    border-radius: 0;
+    margin-left: -11px;
+    margin-right: -11px;
+    padding-left: 15px;
+    padding-right: 15px;
+    position: relative;
+    z-index: 1;
+    border-left: none;
+    border-right: none;
+}
+
+.event-item.range-end {
+    border-radius: 0;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    margin-left: -11px;
+    padding-left: 15px;
+    padding-right: 25px;
+    /* アローヘッド分の余白 */
+    position: relative;
+    z-index: 2;
+    border-left: none;
+    /* アローヘッド（ Chevron ）の形状を作成 */
+    clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%);
+    box-shadow: 2px 1px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* 週の境界（土・日）での表示調整：アローの形状を維持しつつ隙間を埋める */
+.calendar-day.saturday .event-item.range-start,
+.calendar-day.saturday .event-item.range-middle {
+    margin-right: 0;
+    /* 週の終わりは一旦平らに（または好みで少し丸める） */
+    clip-path: none;
+    border-top-right-radius: 2px;
+    border-bottom-right-radius: 2px;
+}
+
+.calendar-day.sunday .event-item.range-middle,
+.calendar-day.sunday .event-item.range-end {
+    margin-left: 0;
+    border-top-left-radius: 2px;
+    border-bottom-left-radius: 2px;
+}
+
+.event-item.custom {
+    background: var(--primary-blue-light);
+    border-left: 4px solid var(--secondary-purple);
+    color: var(--secondary-purple-dark);
+    font-weight: 600;
+    text-shadow: 0 0 1px rgba(255, 255, 255, 0.5);
+}
+
 .event-item.teacher {
     border-left-color: var(--primary-blue);
+}
+
+.event-item.custom.resizable {
+    position: relative;
+    padding-right: 15px;
+}
+
+.resize-handle-right {
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    /* アローの先端に重ならないよう少し内側に移動 */
+    width: 10px;
+    height: 70%;
+    transform: translateY(-50%);
+    cursor: ew-resize;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    transition: background-color 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 5;
+}
+
+.resize-handle-right::after {
+    content: '||';
+    font-size: 8px;
+    color: rgba(0, 0, 0, 0.4);
+    letter-spacing: -1px;
+}
+
+.resize-handle-right:hover {
+    background-color: rgba(0, 0, 0, 0.3);
+}
+
+.event-item.dragging {
+    opacity: 0.5 !important;
+}
+
+/* スケジュール表のカスタム行ハイライト */
+#classScheduleBody tr.item-custom {
+    background-color: var(--primary-blue-light);
+}
+
+/* 授業行のハイライト */
+#classScheduleBody tr.item-myclass {
+    background-color: #f0fdf4;
+    /* 薄い緑色 */
 }
 
 .event-item.student {
@@ -1463,6 +1597,63 @@ body {
     position: relative;
     padding-right: 24px !important;
     cursor: grab;
+    transition: all 0.2s ease;
+}
+
+/* 参加予定の強調表示 */
+.event-item.is-participating {
+    font-weight: 800 !important;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.1);
+    z-index: 5;
+}
+
+.event-item.is-participating .event-text::before {
+    content: '📌 ';
+    font-style: normal;
+}
+
+/* 右クリックメニュー */
+.context-menu {
+    position: fixed;
+    background: white;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-md);
+    padding: 6px 0;
+    min-width: 160px;
+    z-index: 9999;
+}
+
+.context-menu-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.context-menu-list li {
+    padding: 10px 16px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--neutral-700);
+    transition: background 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.context-menu-list li:hover {
+    background: var(--neutral-100);
+}
+
+.context-menu-list li.divider {
+    height: 1px;
+    background: var(--neutral-200);
+    margin: 6px 0;
+    padding: 0;
+    cursor: default;
+}
+
+.context-menu.hidden {
+    display: none;
 }
 
 .event-item:active {
@@ -1496,10 +1687,6 @@ body {
     opacity: 1;
 }
 
-.event-item.moved {
-    border-left: 3px solid var(--warning-orange) !important;
-    background-color: #fff9ed !important;
-}
 
 .class-actions {
     display: flex;

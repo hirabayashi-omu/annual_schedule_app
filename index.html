@@ -742,10 +742,16 @@
                         <input type="text" id="quickEditName" class="form-input" required>
                     </div>
 
-                    <div class="form-group"
-                        style="margin-bottom: 15px; flex-direction: row; align-items: center; gap: 10px;">
-                        <input type="checkbox" id="quickEditAllDay" onchange="toggleQuickEditTimeFields()">
-                        <label for="quickEditAllDay" style="margin-bottom: 0;">終日</label>
+                    <div style="display: flex; gap: 20px; margin-bottom: 15px;">
+                        <div class="form-group" style="flex-direction: row; align-items: center; gap: 10px;">
+                            <input type="checkbox" id="quickEditAllDay" onchange="toggleQuickEditTimeFields()">
+                            <label for="quickEditAllDay" style="margin-bottom: 0;">終日</label>
+                        </div>
+                        <div id="quickEditParticipateFields" class="form-group"
+                            style="flex-direction: row; align-items: center; gap: 10px;">
+                            <input type="checkbox" id="quickEditParticipate">
+                            <label for="quickEditParticipate" style="margin-bottom: 0;">📌 行事に参加する</label>
+                        </div>
                     </div>
 
                     <div id="quickEditTimeFields" class="hidden">
@@ -879,11 +885,32 @@
                 <button class="close-modal-btn" onclick="closeClassScheduleModal()">&times;</button>
             </div>
             <div class="modal-body">
+                <div class="filter-controls"
+                    style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 8px; display: flex; gap: 20px; align-items: center;">
+                    <span style="font-weight: bold; font-size: 0.9rem;">表示対象:</span>
+                    <label style="cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                        <input type="checkbox" id="filterAnnualEvents" checked> 年間行事
+                    </label>
+                    <label style="cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                        <input type="checkbox" id="filterMyClasses" checked> 授業
+                    </label>
+                    <label style="cursor: pointer; display: flex; align-items: center; gap: 5px; margin-right: 15px;">
+                        <input type="checkbox" id="filterCustomEvents" checked> オリジナル予定
+                    </label>
+                    <div style="border-left: 1px solid #ccc; height: 24px; margin-right: 15px;"></div>
+                    <label id="vacationFilterLabel"
+                        style="cursor: pointer; display: flex; align-items: center; gap: 5px; color: var(--success-green); font-weight: bold; background: #e8f5e9; padding: 4px 10px; border-radius: 20px;">
+                        <input type="checkbox" id="filterVacationOnly"> 🏖️ 年休候補日
+                    </label>
+                    <button id="extractVacationBtn" class="btn btn-sm btn-success" style="margin-left: auto;">
+                        <span>🔍 候補日を抽出</span>
+                    </button>
+                </div>
                 <div class="schedule-table-container">
                     <table class="schedule-table">
                         <thead>
                             <tr>
-                                <th style="width: 50px;">担当日</th>
+                                <th style="width: 50px;" title="📌（ピン）マークがない日程が年休候補となります">📌</th>
                                 <th style="width: 60px;">日付</th>
                                 <th style="width: 40px;">曜</th>
                                 <th style="width: 50px;">時限</th>
@@ -918,6 +945,17 @@
             <div class="loading-spinner"></div>
             <p>処理中...</p>
         </div>
+    </div>
+
+    <!-- 右クリックコンテキストメニュー -->
+    <div id="calendarContextMenu" class="context-menu hidden">
+        <ul class="context-menu-list">
+            <li id="ctxParticipate" onclick="handleContextAction('participate')">📌 参加にする</li>
+            <li id="ctxNotParticipate" onclick="handleContextAction('not_participate')">🚫 非参加にする</li>
+            <li class="divider"></li>
+            <li onclick="handleContextAction('edit')">✏️ 編集...</li>
+            <li onclick="handleContextAction('delete')" style="color: var(--error-red);">🗑️ 削除</li>
+        </ul>
     </div>
 
     <!-- メインスクリプト -->

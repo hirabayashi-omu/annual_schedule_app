@@ -28,6 +28,13 @@ const WEEKDAY_NAMES = ['日', '月', '火', '水', '木', '金', '土'];
 // 初期化フラグ
 let isMyClassesInitialized = false;
 
+// 日程表関連のステート
+let scheduleEventListenersInitialized = false;
+let currentScheduleClassId = null;
+
+// 時間割関連のステート
+let currentTimetableSemester = 'first';
+
 // 初期化
 function initializeMyClasses() {
     if (isMyClassesInitialized) {
@@ -1518,6 +1525,7 @@ function addMyClassesToDayCell(dayCell, date, dayEvents) {
 
             const eventItem = document.createElement('div');
             eventItem.className = 'event-item my-class';
+            if (assignedMark) eventItem.classList.add('is-participating');
             eventItem.draggable = true;
             eventItem.dataset.classId = cls.id;
             eventItem.dataset.type = 'myclass';
@@ -1661,33 +1669,47 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
 // =============================
 
 // 日程表を表示
-function showClassSchedule(classId = null) {
+function showClassSchedule(classId = null, options = {}) {
     console.log('日程表表示処理を開始します...');
+    // options のデフォルト値をマージ
+    options = {
+        showAnnual: true,
+        showMyClass: true,
+        showCustom: true,
+        vacationOnly: false,
+        ...options
+    };
+
+    // 現在のクラスIDを保存
+    currentScheduleClassId = classId;
+
     const modal = document.getElementById('classScheduleModal');
     const tbody = document.getElementById('classScheduleBody');
-    if (!modal) {
-        console.error('classScheduleModal が見つかりません');
-        return;
-    }
-    if (!tbody) {
-        console.error('classScheduleBody が見つかりません');
+    const modalTitle = modal ? modal.querySelector('.modal-header h2') : null;
+
+    if (!modal || !tbody) {
+        console.error('モーダルまたはテーブルボディが見つかりません');
         return;
     }
 
-    const modalTitle = modal.querySelector('.modal-header h2');
+    // フィルタ状態の取得 (引数がない場合はDOMから、ある場合は引数を優先)
+    const showAnnual = options.showAnnual;
+    const showMyClass = options.showMyClass;
+    const showCustom = options.showCustom;
 
     // 対象年度を決定
-    // 1. 時間割で選択された年度 (timetableYearSelect)
+    // 1. グローバルの年度選択 (globalYearSelect)
     // 2. app.jsのcurrentYear
     // 3. 現在日時より算出
     let targetYear;
-    const timetableYearSelect = document.getElementById('timetableYearSelect');
+    const globalYearSelect = document.getElementById('globalYearSelect');
 
-    if (timetableYearSelect && timetableYearSelect.value) {
-        targetYear = parseInt(timetableYearSelect.value);
+    if (globalYearSelect && globalYearSelect.value) {
+        targetYear = parseInt(globalYearSelect.value);
     } else {
         try {
-            targetYear = typeof currentYear !== 'undefined' ? currentYear : getFiscalYear(new Date());
+            // currentYear が null の場合も考慮してフォールバック
+            targetYear = (typeof currentYear !== 'undefined' && currentYear) ? currentYear : getFiscalYear(new Date());
         } catch (e) {
             console.warn('currentYear または getFiscalYear の取得に失敗しました', e);
             targetYear = new Date().getFullYear();
@@ -1710,45 +1732,88 @@ function showClassSchedule(classId = null) {
         }
     }
 
-    console.log(`myClasses数: ${myClasses.length}, classId: ${classId}`);
-    let scheduleData = typeof generateClassEvents === 'function' ? generateClassEvents(targetYear, { includeExclusions: true }) : [];
+    // フィルターの初期化
+    initializeScheduleFilters(targetYear, classId, options);
 
-    // 年度スケジュール(Excel)データも統合
-    if (typeof window.getAppliedScheduleData === 'function') {
-        const annualEvents = window.getAppliedScheduleData('both');
-        // 現在のフィルタリング条件に合わせて追加
+    // 1. 各ソースからデータを収集
+    let classEvents = [];
+    let annualEvents = [];
+    let customEvents = [];
+
+    // --- 授業データ生成 ---
+    if (showMyClass) {
+        classEvents = typeof window.generateClassEvents === 'function' ? window.generateClassEvents(targetYear, { includeExclusions: true }) : [];
         if (classId) {
-            const targetCls = myClasses.find(c => String(c.id) === String(classId));
-            if (targetCls) {
-                const relevantAnnual = annualEvents.filter(item => {
-                    // クラス名、学年、クラスが一致するものを抽出
-                    const isSameGrade = item.targetGrade === targetCls.targetGrade;
-                    const isSameClass = item.targetClass === targetCls.targetClass;
-                    const isMatch = (item.targetType === 'grade' && isSameGrade) || (isSameGrade && isSameClass);
-                    return isMatch;
-                });
-                scheduleData = scheduleData.concat(relevantAnnual);
-            }
-        } else {
-            // 全体表示の場合は全て結合
-            scheduleData = scheduleData.concat(annualEvents);
+            classEvents = classEvents.filter(item => String(item.id) === String(classId));
         }
     }
 
-    // 授業名・行事名が空欄の予定を除外
-    scheduleData = scheduleData.filter(item => item.name || item.event);
+    // --- 年間行事 & オリジナル予定取得 ---
+    if (typeof window.getAppliedScheduleData === 'function') {
+        const appliedData = window.getAppliedScheduleData('both');
 
-    console.log(`生成された日程表イベント数: ${scheduleData.length}`);
+        // 年度フィルタの作成 (4/1 ～ 3/31)
+        const fiscalStart = new Date(targetYear, 3, 1);
+        const fiscalEnd = new Date(targetYear + 1, 2, 31, 23, 59, 59);
 
-    // 特定の授業のみにフィルタリング
-    if (classId) {
-        scheduleData = scheduleData.filter(item => {
-            if (item.type === 'myclass') {
-                return String(item.id) === String(classId);
+        // 分離 & 年度フィルタ適用
+        if (showAnnual) {
+            annualEvents = appliedData.filter(item => {
+                if (!((item.type === 'teacher' || item.type === 'student' || item.type === 'excel') &&
+                    item.date >= fiscalStart && item.date <= fiscalEnd)) return false;
+
+                // 祝日は除外
+                const holidaysMap = typeof getHolidaysForYear === 'function' ? getHolidaysForYear(item.date.getFullYear()) : null;
+                const hName = holidaysMap ? getHolidayName(item.date, holidaysMap) : null;
+                if (hName && item.event) {
+                    const ev = item.event.trim();
+                    const hn = hName.trim();
+                    const isRedundant = ev === hn || ev === '祝日' || ev === '休日' ||
+                        ev.includes('(祝)') || ev.includes('（祝）') || ev.includes('【祝】') ||
+                        ev.includes(hn) ||
+                        (hn === '建国記念の日' && ev === '建国記念日') ||
+                        (hn === 'スポーツの日' && ev === '体育の日') ||
+                        (hn === '体育の日' && ev === 'スポーツの日') ||
+                        (hn === '元日' && ev.includes('元旦')) ||
+                        (hn === '振替休日' && ev.includes('振替休日'));
+                    if (isRedundant) return false;
+                }
+
+                return true;
+            });
+        }
+        if (showCustom) {
+            customEvents = appliedData.filter(item =>
+                (item.type === 'custom' || item.isCustom) &&
+                item.date >= fiscalStart && item.date <= fiscalEnd
+            );
+        }
+
+        // クラス別フィルタリングの適用
+        if (classId) {
+            const targetCls = myClasses.find(c => String(c.id) === String(classId));
+            if (targetCls) {
+                // 年間行事は対象学年・クラスで絞る
+                annualEvents = annualEvents.filter(item => {
+                    const isSameGrade = item.targetGrade === targetCls.targetGrade;
+                    const isSameClass = item.targetClass === targetCls.targetClass;
+                    return (item.targetType === 'grade' && isSameGrade) || (isSameGrade && isSameClass);
+                });
+                // カスタム予定は「共通」扱いの想定だが、必要ならここで絞る（現在は全て残す）
             }
-            return true; // Excelイベントはそのまま表示
-        });
+        }
     }
+
+    // すべてを統合
+    let scheduleData = [...classEvents, ...annualEvents, ...customEvents];
+
+    // 有効なデータ（名前またはイベント名があるもの）のみに絞る
+    scheduleData = scheduleData.filter(item => item && (item.name || item.event));
+
+    // 重要：日付順に並び替え
+    scheduleData.sort((a, b) => a.date - b.date);
+
+    console.log(`データ構築完了: 合計 ${scheduleData.length} 件 (授業:${classEvents.length}, 行事:${annualEvents.length}, オリジナル:${customEvents.length})`);
 
 
 
@@ -1774,9 +1839,16 @@ function showClassSchedule(classId = null) {
     // テーブルをクリア
     tbody.innerHTML = '';
 
+    // 年休候補日（ピンなし）のみを表示する場合
+    if (options.vacationOnly) {
+        scheduleData = scheduleData.filter(item => !isDatePinned(item.date, item.id || classId));
+        console.log(`年休候補日でフィルタリング: 残り ${scheduleData.length} 件`);
+    }
+
     if (scheduleData.length === 0) {
-        console.warn('授業予定が見つかりません');
-        tbody.innerHTML = '<tr><td colspan="9" class="center">授業予定が見つかりません。授業を登録するか、Excelファイルを読み込んでください。</td></tr>';
+        console.warn('表示する予定がありません');
+        const msg = options.vacationOnly ? '年休候補日（予定のない日）は見つかりませんでした。' : '授業予定が見つかりません。授業を登録するか、Excelファイルを読み込んでください。';
+        tbody.innerHTML = `<tr><td colspan="9" class="center">${msg}</td></tr>`;
     } else {
         // 日付順にソート (generateClassEventsですでにソートされているはずだが念のため)
         scheduleData.sort((a, b) => a.date - b.date);
@@ -1827,6 +1899,13 @@ function showClassSchedule(classId = null) {
             let classExclusions = assignmentExclusions[classIdToUse] || [];
             // 除外リストに含まれていなければTrue（チェック状態）
             const isChecked = !classExclusions.includes(dateKey);
+
+            if (item.type === 'custom' || item.isCustom) {
+                tr.classList.add('item-custom');
+            }
+            if (item.type === 'myclass') {
+                tr.classList.add('item-myclass');
+            }
 
             tr.innerHTML = `
                 <td class="center">
@@ -1884,12 +1963,130 @@ function showClassSchedule(classId = null) {
     });
 }
 
-// モーダルを閉じる
-function closeClassScheduleModal() {
-    const modal = document.getElementById('classScheduleModal');
-    if (modal) {
-        modal.classList.add('hidden');
+// 日程表フィルターの初期化とイベント設定
+function initializeScheduleFilters(targetYear, classId, options) {
+    const vacationToggle = document.getElementById('filterVacationOnly');
+    const extractBtn = document.getElementById('extractVacationBtn');
+    const annualCheck = document.getElementById('filterAnnualEvents');
+    const myClassCheck = document.getElementById('filterMyClasses');
+    const customCheck = document.getElementById('filterCustomEvents');
+
+    // 初期状態を同期
+    if (vacationToggle) vacationToggle.checked = !!options.vacationOnly;
+    if (annualCheck) annualCheck.checked = options.showAnnual !== false;
+    if (myClassCheck) myClassCheck.checked = options.showMyClass !== false;
+    if (customCheck) customCheck.checked = options.showCustom !== false;
+
+    // 再描画をトリガーする関数
+    const refreshTable = () => {
+        showClassSchedule(classId, {
+            showAnnual: annualCheck.checked,
+            showMyClass: myClassCheck.checked,
+            showCustom: customCheck.checked,
+            vacationOnly: vacationToggle.checked
+        });
+    };
+
+    // 既存のリスナーを解除するためクローンで置き換え（簡易的な防護）
+    const newExtractBtn = extractBtn.cloneNode(true);
+    extractBtn.parentNode.replaceChild(newExtractBtn, extractBtn);
+
+    const newVacationToggle = vacationToggle.cloneNode(true);
+    vacationToggle.parentNode.replaceChild(newVacationToggle, vacationToggle);
+
+    // イベント登録
+    newVacationToggle.addEventListener('change', refreshTable);
+    newExtractBtn.addEventListener('click', () => {
+        newVacationToggle.checked = true;
+        refreshTable();
+    });
+
+    // 他のチェックボックスにも
+    [annualCheck, myClassCheck, customCheck].forEach(chk => {
+        if (!chk.dataset.filterSet) {
+            chk.addEventListener('change', refreshTable);
+            chk.dataset.filterSet = 'true';
+        }
+    });
+}
+
+/**
+ * 年休候補日の判定・抽出
+ * 📌（ピン）マークがつく要素：
+ * 1. 参加チェックを入れたExcel行事/オリジナル予定
+ * 2. [担]マークのついた授業
+ * 3. デフォルトでピン付けされるキーワード（教職員会議、コース会議）を含む予定
+ */
+function isDatePinned(date, classId) {
+    const dateKey = formatDateKey(date);
+
+    // 1. 授業のチェック
+    let classEvents = typeof window.generateClassEvents === 'function' ? window.generateClassEvents(getFiscalYear(date), { includeExclusions: true }) : [];
+    const classOnThisDay = classEvents.filter(item => formatDateKey(item.date) === dateKey);
+
+    // 授業のピン（担当中）
+    const isClassPinned = classOnThisDay.some(cls => {
+        const exclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
+        const classExclusions = exclusions[cls.id] || [];
+        return !classExclusions.includes(dateKey);
+    });
+    if (isClassPinned) return true;
+
+    // 2. 行事・カスタム予定のチェック
+    if (typeof window.getAppliedScheduleData === 'function') {
+        const appliedData = window.getAppliedScheduleData('both');
+        const eventsOnThisDay = appliedData.filter(item => formatDateKey(item.date) === dateKey);
+
+        const isEventPinned = eventsOnThisDay.some(item => {
+            // overrideチェック (Excel)
+            const ov = classOverrides.find(o =>
+                (o.type === 'excel' || o.type === 'custom') &&
+                String(o.id) === String(item.id) &&
+                (o.date === dateKey || (o.startDate <= dateKey && o.endDate >= dateKey))
+            );
+
+            if (ov && ov.data && ov.data.isParticipating !== undefined) {
+                return ov.data.isParticipating;
+            }
+
+            // キーワードチェック
+            const name = item.event || item.name || "";
+            if (name.includes('教職員会議') || name.includes('コース会議') || name.includes('体験入学') || name.includes('入試') || name.includes('入学試験')) {
+                return true;
+            }
+
+            // 祝日チェック (祝日は「予定あり」として扱い、年休候補から外す)
+            const holidaysMap = typeof getHolidaysForYear === 'function' ? getHolidaysForYear(date.getFullYear()) : null;
+            const hName = holidaysMap ? getHolidayName(date, holidaysMap) : null;
+            if (hName) {
+                const ev = name.trim();
+                const hn = hName.trim();
+                // 祝日名そのものの予定、または「祝日」「休日」という名前ならピン付け扱い
+                if (ev === hn || ev === '祝日' || ev === '休日' ||
+                    ev.includes('(祝)') || ev.includes('（祝）') || ev.includes('【祝】') ||
+                    ev.includes(hn) ||
+                    (hn === '建国記念の日' && ev === '建国記念日') ||
+                    (hn === 'スポーツの日' && ev === '体育の日') ||
+                    (hn === '体育の日' && ev === 'スポーツの日') ||
+                    (hn === '元日' && ev.includes('元旦')) ||
+                    (hn === '振替休日' && ev.includes('振替休日'))) {
+                    return true;
+                }
+            }
+
+            return false;
+        });
+
+        if (isEventPinned) return true;
+
+        // 行事そのものがない場合でも、その日が祝日なら候補から外す（ピン留め扱いとする）
+        const holidaysMap = typeof getHolidaysForYear === 'function' ? getHolidaysForYear(date.getFullYear()) : null;
+        if (holidaysMap && typeof getHolidayName === 'function' && getHolidayName(date, holidaysMap)) {
+            return true;
+        }
     }
+
+    return false;
 }
 
 window.showClassSchedule = showClassSchedule;
@@ -1905,40 +2102,75 @@ function exportClassScheduleCsv() {
     // ボタンからclassIdを取得
     const csvBtn = document.getElementById('csvExportScheduleBtn');
     const classId = csvBtn && csvBtn.dataset.classId ? parseInt(csvBtn.dataset.classId) : null;
-    const targetYear = typeof currentYear !== 'undefined' ? currentYear : getFiscalYear(new Date());
-    let scheduleData = typeof generateClassEvents === 'function' ? generateClassEvents(targetYear, { includeExclusions: false }) : [];
 
-    // 年度スケジュール(Excel)データも統合 (showClassScheduleと同様のロジック)
-    if (typeof window.getAppliedScheduleData === 'function') {
-        const annualEvents = window.getAppliedScheduleData('both');
+    // 対象年度を決定 (showClassScheduleと同様)
+    let targetYear;
+    const globalYearSelect = document.getElementById('globalYearSelect');
+    if (globalYearSelect && globalYearSelect.value) {
+        targetYear = parseInt(globalYearSelect.value);
+    } else {
+        targetYear = (typeof currentYear !== 'undefined' && currentYear) ? currentYear : (typeof getFiscalYear === 'function' ? getFiscalYear(new Date()) : new Date().getFullYear());
+    }
+
+    // フィルタ状態の取得
+    const showAnnual = document.getElementById('filterAnnualEvents')?.checked ?? true;
+    const showMyClass = document.getElementById('filterMyClasses')?.checked ?? true;
+    const showCustom = document.getElementById('filterCustomEvents')?.checked ?? true;
+
+    // 1. 各ソースからデータを収集
+    let classEvents = [];
+    let annualEvents = [];
+    let customEvents = [];
+
+    if (showMyClass) {
+        classEvents = typeof window.generateClassEvents === 'function' ? window.generateClassEvents(targetYear, { includeExclusions: false }) : [];
         if (classId) {
-            const targetCls = myClasses.find(c => String(c.id) === String(classId));
-            if (targetCls) {
-                const relevantAnnual = annualEvents.filter(item => {
-                    const isSameGrade = item.targetGrade === targetCls.targetGrade;
-                    const isSameClass = item.targetClass === targetCls.targetClass;
-                    const isMatch = (item.targetType === 'grade' && isSameGrade) || (isSameGrade && isSameClass);
-                    return isMatch;
-                });
-                scheduleData = scheduleData.concat(relevantAnnual);
-            }
-        } else {
-            scheduleData = scheduleData.concat(annualEvents);
+            classEvents = classEvents.filter(item => String(item.id) === String(classId));
         }
     }
 
-    // 特定の授業のみにフィルタリング
-    if (classId) {
-        scheduleData = scheduleData.filter(item => {
-            if (item.type === 'myclass') {
-                return String(item.id) === String(classId);
+    if (typeof window.getAppliedScheduleData === 'function') {
+        const appliedData = window.getAppliedScheduleData('both');
+
+        // 年度フィルタの作成 (4/1 ～ 3/31)
+        const fiscalStart = new Date(targetYear, 3, 1);
+        const fiscalEnd = new Date(targetYear + 1, 2, 31, 23, 59, 59);
+
+        if (showAnnual) {
+            annualEvents = appliedData.filter(item => {
+                if (!((item.type === 'teacher' || item.type === 'student' || item.type === 'excel') &&
+                    item.date >= fiscalStart && item.date <= fiscalEnd)) return false;
+
+                // 祝日は除外
+                const holidaysMap = typeof getHolidaysForYear === 'function' ? getHolidaysForYear(item.date.getFullYear()) : null;
+                const hName = holidaysMap ? getHolidayName(item.date, holidaysMap) : null;
+                if (hName && item.event && item.event.trim() === hName.trim()) return false;
+
+                return true;
+            });
+        }
+        if (showCustom) {
+            customEvents = appliedData.filter(item =>
+                (item.type === 'custom' || item.isCustom) &&
+                item.date >= fiscalStart && item.date <= fiscalEnd
+            );
+        }
+
+        if (classId) {
+            const targetCls = myClasses.find(c => String(c.id) === String(classId));
+            if (targetCls) {
+                annualEvents = annualEvents.filter(item => {
+                    const isSameGrade = item.targetGrade === targetCls.targetGrade;
+                    const isSameClass = item.targetClass === targetCls.targetClass;
+                    return (item.targetType === 'grade' && isSameGrade) || (isSameGrade && isSameClass);
+                });
             }
-            return true;
-        });
+        }
     }
 
+    let scheduleData = [...classEvents, ...annualEvents, ...customEvents];
     // 授業名・行事名が空欄の予定を除外
-    scheduleData = scheduleData.filter(item => item.name || item.event);
+    scheduleData = scheduleData.filter(item => item && (item.name || item.event));
 
 
     if (scheduleData.length === 0) {
@@ -1974,7 +2206,7 @@ function exportClassScheduleCsv() {
                 : item.targetGrade === 1
                     ? `${item.targetGrade}-${item.targetClass}`
                     : `${item.targetGrade}${item.targetClass}`;
-        } else if (item.type === 'teacher' || item.type === 'student' || item.type === 'excel' || item.type === 'custom') {
+        } else if (item.type === 'teacher' || item.type === 'student' || item.type === 'excel' || item.type === 'custom' || item.isCustom) {
             targetLabel = item.type === 'student' ? '専攻科共通' : '共通行事';
         }
 
@@ -2003,8 +2235,8 @@ function exportClassScheduleCsv() {
     const link = document.createElement('a');
     if (link.download !== undefined) {
         const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
         const fileName = classId ? `授業日程表_${scheduleData[0].name}_${targetYear}年度.csv` : `授業日程表_${targetYear}年度.csv`;
+        link.setAttribute('href', url);
         link.setAttribute('download', fileName);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
@@ -2015,7 +2247,6 @@ function exportClassScheduleCsv() {
 window.exportClassScheduleCsv = exportClassScheduleCsv;
 
 // イベントリスナー追加（初期化関数に追加）
-let scheduleEventListenersInitialized = false;
 
 function addScheduleEventListeners() {
     if (scheduleEventListenersInitialized) {
@@ -2063,6 +2294,15 @@ function addScheduleEventListeners() {
         });
     }
 
+    // フィルター用イベントリスナー
+    const filters = ['filterAnnualEvents', 'filterMyClasses', 'filterCustomEvents'];
+    filters.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.onclick = () => showClassSchedule(currentScheduleClassId);
+        }
+    });
+
     scheduleEventListenersInitialized = true;
     console.log('日程表イベントリスナーを設定完了');
 }
@@ -2070,6 +2310,14 @@ function addScheduleEventListeners() {
 // 印刷機能
 function printClassSchedule() {
     window.print();
+}
+
+// モーダルを閉じる
+function closeClassScheduleModal() {
+    const modal = document.getElementById('classScheduleModal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
 }
 
 // 外部公開用
@@ -2083,7 +2331,6 @@ window.exportClassScheduleCsv = exportClassScheduleCsv;
    時間割表表示機能
    =========================== */
 
-let currentTimetableSemester = 'first';
 
 // 時間割の年度選択肢更新 (Global化により廃止 - 互換性のために残す)
 function updateTimetableYearOptions() {
