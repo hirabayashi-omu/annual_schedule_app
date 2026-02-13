@@ -20,7 +20,7 @@
         <header class="app-header">
             <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                 <div>
-                    <h1>📅 年間行事予定表アプリ</h1>
+                    <h1>&#x1F4C5; 年間行事予定表アプリ</h1>
                     <p>学校の年間スケジュールを簡単に管理・エクスポート</p>
                 </div>
                 <div style="display: flex; align-items: center; gap: 10px;">
@@ -36,15 +36,15 @@
         <!-- ナビゲーションツールバー -->
         <nav class="app-toolbar">
             <button id="navCalendarBtn" class="nav-btn active" data-tooltip="カレンダーで予定を表示">
-                <span class="nav-icon">📅</span>
+                <span class="nav-icon">&#x1F4C5;</span>
                 <span class="nav-label">カレンダー</span>
             </button>
             <button id="navImportBtn" class="nav-btn" data-tooltip="Excel読み込み・バックアップ">
-                <span class="nav-icon">📁</span>
+                <span class="nav-icon">&#x1F4C1;</span>
                 <span class="nav-label">ファイル操作</span>
             </button>
             <button id="navClassBtn" class="nav-btn" data-tooltip="自分の授業を登録・管理">
-                <span class="nav-icon">📖</span>
+                <span class="nav-icon">&#x1F4D6;</span>
                 <span class="nav-label">授業設定</span>
             </button>
             <button id="navSettingsBtn" class="nav-btn" data-tooltip="名簿や候補などの各種設定">
@@ -86,7 +86,7 @@
             <!-- カレンダー本体 -->
             <section id="calendarSection" class="card">
                 <div class="card-header">
-                    <div class="card-icon">📆</div>
+                    <div class="card-icon">&#x1F4C6;</div>
                     <h2>カレンダー表示</h2>
                 </div>
 
@@ -107,12 +107,12 @@
             <!-- ファイルアップロードセクション -->
             <section class="card">
                 <div class="card-header">
-                    <div class="card-icon">📁</div>
+                    <div class="card-icon">&#x1F4C1;</div>
                     <h2>Excelファイルの読み込み</h2>
                 </div>
 
                 <div class="upload-area" id="uploadArea">
-                    <div class="upload-icon">📤</div>
+                    <div class="upload-icon">&#x1F4E4;</div>
                     <div class="upload-text">ファイルをドラッグ&ドロップ</div>
                     <div class="upload-hint">または クリックしてファイルを選択</div>
                     <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls">
@@ -128,15 +128,15 @@
                         <div style="display: flex; gap: 8px;">
                             <button class="btn btn-outline-primary btn-sm" onclick="downloadBackup()"
                                 title="現在の全データをJSON形式で保存">
-                                <span>📤 バックアップ</span>
+                                <span>&#x1F4E4; バックアップ</span>
                             </button>
                             <button class="btn btn-outline-primary btn-sm"
                                 onclick="document.getElementById('backupFileInput').click()" title="保存したJSONから復元">
-                                <span>📥 復旧</span>
+                                <span>&#x1F4E5; 復旧</span>
                             </button>
                             <button id="clearDataBtn" class="btn btn-outline-danger btn-sm"
                                 onclick="clearScheduleData()">
-                                <span>🗑️ 全クリア</span>
+                                <span>&#x1F5D1;️ 全クリア</span>
                             </button>
                         </div>
                     </div>
@@ -145,7 +145,7 @@
                 <!-- 読み込み済み年度の管理リスト -->
                 <div id="cachedYearsContainer" class="mt-lg hidden"
                     style="border-top: 1px solid var(--neutral-200); padding-top: 15px;">
-                    <h3 style="font-size: 0.95rem; margin-bottom: 10px; color: var(--neutral-600);">📊 読み込み済みの年度データ</h3>
+                    <h3 style="font-size: 0.95rem; margin-bottom: 10px; color: var(--neutral-600);">&#x1F4CA; 読み込み済みの年度データ</h3>
                     <div class="table-container">
                         <table class="manage-table" style="font-size: 0.85rem;">
                             <thead>
@@ -171,7 +171,7 @@
             <!-- 読み込み済みデータ一覧 -->
             <section class="card">
                 <div class="card-header">
-                    <h2>📊 読み込み済みの年度データ</h2>
+                    <h2>&#x1F4CA; 読み込み済みの年度データ</h2>
                 </div>
                 <div id="cachedYearList" class="data-list-container">
                     <!-- JSで生成 -->
@@ -182,7 +182,7 @@
             <!-- エクスポートセクション -->
             <section id="exportSection" class="card hidden">
                 <div class="card-header">
-                    <div class="card-icon">💾</div>
+                    <div class="card-icon">&#x1F4BE;</div>
                     <h2>エクスポート</h2>
                 </div>
 
@@ -213,7 +213,7 @@
 
                 <div class="export-section">
                     <div class="export-card">
-                        <div class="export-icon">📋</div>
+                        <div class="export-icon">&#x1F4CB;</div>
                         <h3>JSON形式</h3>
                         <p>プログラムで処理しやすいJSON形式で出力</p>
                         <button class="btn btn-success" id="exportJsonBtn"
@@ -223,7 +223,7 @@
                     </div>
 
                     <div class="export-card">
-                        <div class="export-icon">📅</div>
+                        <div class="export-icon">&#x1F4C5;</div>
                         <h3>ICAL形式</h3>
                         <p>GoogleカレンダーやOutlookで利用可能</p>
                         <button class="btn btn-warning" id="exportIcalBtn"
@@ -233,7 +233,7 @@
                     </div>
 
                     <div class="export-card">
-                        <div class="export-icon">📄</div>
+                        <div class="export-icon">&#x1F4C4;</div>
                         <h3>CSV形式</h3>
                         <p>表計算ソフトで編集可能なCSV形式</p>
                         <button class="btn btn-primary" id="exportCsvBtn" title="Excel等の表計算ソフトで編集可能な形式で出力します。">
@@ -246,7 +246,7 @@
             <!-- バックアップ/復元セクション -->
             <section class="card">
                 <div class="card-header">
-                    <div class="card-icon">💾</div>
+                    <div class="card-icon">&#x1F4BE;</div>
                     <h2>バックアップ・復元管理</h2>
                 </div>
 
@@ -254,7 +254,7 @@
                     <!-- バックアップ -->
                     <div
                         style="border: 1px solid var(--neutral-200); border-radius: 8px; padding: 15px; background: rgba(34, 197, 94, 0.05);">
-                        <h3 style="margin-top: 0; font-size: 1rem; color: var(--success-600);">📤 バックアップを保存</h3>
+                        <h3 style="margin-top: 0; font-size: 1rem; color: var(--success-600);">&#x1F4E4; バックアップを保存</h3>
                         <p style="font-size: 0.85rem; color: var(--neutral-600); margin: 8px 0 12px;">
                             現在のすべてのデータをJSONファイルで保存します
                         </p>
@@ -271,11 +271,11 @@
                         <div style="display: flex; gap: 10px;">
                             <button class="btn btn-success" onclick="saveAllToLocalExplicit()"
                                 style="flex: 1; padding: 10px;" data-tooltip="編集内容をブラウザに保存">
-                                💾 すべて保存
+                                &#x1F4BE; すべて保存
                             </button>
                             <button class="btn btn-outline-success" onclick="downloadSelectiveBackup()"
                                 style="flex: 1; padding: 10px;" data-tooltip="JSON形式でファイル出力">
-                                📤 出力
+                                &#x1F4E4; 出力
                             </button>
                         </div>
                     </div>
@@ -283,7 +283,7 @@
                     <!-- 復元 -->
                     <div
                         style="border: 1px solid var(--neutral-200); border-radius: 8px; padding: 15px; background: rgba(59, 130, 246, 0.05);">
-                        <h3 style="margin-top: 0; font-size: 1rem; color: var(--primary-600);">📥 バックアップから復元</h3>
+                        <h3 style="margin-top: 0; font-size: 1rem; color: var(--primary-600);">&#x1F4E5; バックアップから復元</h3>
                         <p style="font-size: 0.85rem; color: var(--neutral-600); margin: 8px 0 12px;">
                             保存したバックアップファイルを選択して復元します
                         </p>
@@ -301,14 +301,14 @@
                         <button class="btn btn-primary btn-block"
                             onclick="document.getElementById('backupFileInput').click()"
                             style="width: 100%; padding: 10px;">
-                            📂 ファイルを選択
+                            &#x1F4C2; ファイルを選択
                         </button>
                     </div>
                 </div>
 
                 <!-- バックアップ履歴 -->
                 <div style="border-top: 1px solid var(--neutral-200); padding-top: 15px;">
-                    <h3 style="font-size: 0.95rem; margin-bottom: 12px; color: var(--neutral-700);">📋 バックアップ情報</h3>
+                    <h3 style="font-size: 0.95rem; margin-bottom: 12px; color: var(--neutral-700);">&#x1F4CB; バックアップ情報</h3>
                     <div id="backupInfoContainer"
                         style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
                         <div
@@ -334,14 +334,14 @@
         <!-- 授業登録セクション (デフォルト非表示) -->
         <section id="myClassesSection" class="card hidden">
             <div class="card-header">
-                <div class="card-icon">📖</div>
+                <div class="card-icon">&#x1F4D6;</div>
                 <h2>自分の授業登録</h2>
             </div>
 
             <!-- 時間割表 -->
             <div class="timetable-section" style="margin-top: 0; padding-top: 0; border-top: none;">
                 <div class="timetable-header">
-                    <h3 class="form-section-title" id="timetableTitle">📆 あなたの時間割</h3>
+                    <h3 class="form-section-title" id="timetableTitle">&#x1F4C6; あなたの時間割</h3>
                     <div style="display: flex; gap: 10px; align-items: center;">
                         <div class="timetable-switcher">
                             <button class="active" onclick="switchTimetableSemester('first')"
@@ -366,7 +366,11 @@
                 <div class="registered-header">
                     <h3>登録済み授業（<span id="classCount">0</span>件）</h3>
                     <button id="showClassScheduleBtn" class="btn btn-secondary btn-sm" title="登録した授業の年間日程を一覧で確認します">
-                        <span>📅 日程表を表示</span>
+                        <span>&#x1F4C5; 日程表を表示</span>
+                    </button>
+                    <button id="showVacationCandidatesBtn" class="btn btn-success btn-sm"
+                        title="年休の候補日（予定のない営業日）を抽出して一覧表示します">
+                        <span>&#x1F3D6;️ 年休候補日を抽出</span>
                     </button>
                 </div>
                 <div id="classList" class="class-list">
@@ -384,9 +388,9 @@
         </div>
 
         <div class="settings-tabs">
-            <button id="tabManageCourses" class="settings-tab active" onclick="switchSettingsTab('courses')">📚
+            <button id="tabManageCourses" class="settings-tab active" onclick="switchSettingsTab('courses')">&#x1F4DA;
                 授業候補の修正</button>
-            <button id="tabManageTeachers" class="settings-tab" onclick="switchSettingsTab('teachers')">👤
+            <button id="tabManageTeachers" class="settings-tab" onclick="switchSettingsTab('teachers')">&#x1F464;
                 教員リスト管理</button>
         </div>
 
@@ -504,7 +508,7 @@
                                     <input type="text" id="className" placeholder="例：データ構造とアルゴリズム" class="form-input"
                                         style="flex: 1;">
                                     <button id="searchCourseBtn" class="btn btn-outline-primary btn-sm"
-                                        style="padding: 8px 12px; white-space: nowrap;" title="科目一覧から検索">🔍 検索</button>
+                                        style="padding: 8px 12px; white-space: nowrap;" title="科目一覧から検索">&#x1F50D; 検索</button>
                                 </div>
                                 <div id="courseSuggestions" class="course-suggestions hidden"></div>
                             </div>
@@ -532,7 +536,7 @@
                                             class="form-input" style="flex: 1;">
                                         <button type="button" id="toggleTeacherListBtn"
                                             class="btn btn-outline-secondary btn-sm"
-                                            style="padding: 8px 12px; white-space: nowrap;" title="教員リストを表示">👥
+                                            style="padding: 8px 12px; white-space: nowrap;" title="教員リストを表示">&#x1F465;
                                             リスト</button>
                                         <button type="button" id="addTeacherBtn" class="btn btn-outline-primary btn-sm"
                                             style="padding: 8px 12px; white-space: nowrap;" title="教員を追加">➕ 追加</button>
@@ -750,7 +754,7 @@
                         <div id="quickEditParticipateFields" class="form-group"
                             style="flex-direction: row; align-items: center; gap: 10px;">
                             <input type="checkbox" id="quickEditParticipate">
-                            <label for="quickEditParticipate" style="margin-bottom: 0;">📌 行事に参加する</label>
+                            <label for="quickEditParticipate" style="margin-bottom: 0;">&#x1F4CC; 行事に参加する</label>
                         </div>
                     </div>
 
@@ -801,7 +805,7 @@
                     <div style="margin-top: 25px; display: flex; gap: 10px; justify-content: flex-end;">
                         <button type="button" class="btn btn-secondary" onclick="closeQuickEditModal()">キャンセル</button>
                         <button type="submit" class="btn btn-primary" style="padding-left: 30px; padding-right: 30px;">
-                            <span>💾 保存</span>
+                            <span>&#x1F4BE; 保存</span>
                         </button>
                     </div>
                 </form>
@@ -897,21 +901,13 @@
                     <label style="cursor: pointer; display: flex; align-items: center; gap: 5px; margin-right: 15px;">
                         <input type="checkbox" id="filterCustomEvents" checked> オリジナル予定
                     </label>
-                    <div style="border-left: 1px solid #ccc; height: 24px; margin-right: 15px;"></div>
-                    <label id="vacationFilterLabel"
-                        style="cursor: pointer; display: flex; align-items: center; gap: 5px; color: var(--success-green); font-weight: bold; background: #e8f5e9; padding: 4px 10px; border-radius: 20px;">
-                        <input type="checkbox" id="filterVacationOnly"> 🏖️ 年休候補日
-                    </label>
-                    <button id="extractVacationBtn" class="btn btn-sm btn-success" style="margin-left: auto;">
-                        <span>🔍 候補日を抽出</span>
-                    </button>
                 </div>
                 <div class="schedule-table-container">
                     <table class="schedule-table">
                         <thead>
                             <tr>
-                                <th style="width: 50px;" title="📌（ピン）マークがない日程が年休候補となります">📌</th>
-                                <th style="width: 60px;">日付</th>
+                                <th style="width: 50px;">&#x1F4CC;</th>
+                                <th style="width: 80px;">日付</th>
                                 <th style="width: 40px;">曜</th>
                                 <th style="width: 50px;">時限</th>
                                 <th style="width: 120px;">時間</th>
@@ -929,12 +925,50 @@
             </div>
             <div class="modal-footer">
                 <button id="csvExportScheduleBtn" class="btn btn-outline-primary">
-                    <span>📄 CSV出力</span>
+                    <span>&#x1F4C4; CSV出力</span>
                 </button>
                 <button id="printScheduleBtn" class="btn btn-primary">
-                    <span>🖨️ 印刷する</span>
+                    <span>&#x1F5A8;️ 印刷する</span>
                 </button>
                 <button class="btn btn-secondary" onclick="closeClassScheduleModal()">閉じる</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 年休候補日表示モーダル -->
+    <div id="vacationCandidateModal" class="modal hidden">
+        <div class="modal-content" style="max-width: 800px; width: 95%;">
+            <div class="modal-header">
+                <h2>&#x1F3D6;️ 年休候補日一覧</h2>
+                <button class="close-modal-btn" onclick="closeVacationCandidateModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 10px; font-size: 0.9rem; color: #666;">
+                    ※ ピン留め（&#x1F4CC;）されていない営業日（月〜金、および補講日）を抽出しています。祝日は除外されています。
+                </p>
+                <div class="schedule-table-container">
+                    <table class="schedule-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 120px;">日付</th>
+                                <th style="width: 60px;">曜</th>
+                                <th>状況・備考</th>
+                            </tr>
+                        </thead>
+                        <tbody id="vacationCandidateBody">
+                            <!-- JSで生成 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="csvExportVacationBtn" class="btn btn-outline-success">
+                    <span>&#x1F4C4; CSV出力</span>
+                </button>
+                <button id="printVacationCandidateBtn" class="btn btn-success">
+                    <span>&#x1F5A8;️ 印刷する</span>
+                </button>
+                <button class="btn btn-secondary" onclick="closeVacationCandidateModal()">閉じる</button>
             </div>
         </div>
     </div>
@@ -950,11 +984,11 @@
     <!-- 右クリックコンテキストメニュー -->
     <div id="calendarContextMenu" class="context-menu hidden">
         <ul class="context-menu-list">
-            <li id="ctxParticipate" onclick="handleContextAction('participate')">📌 参加にする</li>
-            <li id="ctxNotParticipate" onclick="handleContextAction('not_participate')">🚫 非参加にする</li>
+            <li id="ctxParticipate" onclick="handleContextAction('participate')">&#x1F4CC; 参加にする</li>
+            <li id="ctxNotParticipate" onclick="handleContextAction('not_participate')">&#x1F6AB; 非参加にする</li>
             <li class="divider"></li>
             <li onclick="handleContextAction('edit')">✏️ 編集...</li>
-            <li onclick="handleContextAction('delete')" style="color: var(--error-red);">🗑️ 削除</li>
+            <li onclick="handleContextAction('delete')" style="color: var(--error-red);">&#x1F5D1;️ 削除</li>
         </ul>
     </div>
 

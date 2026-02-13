@@ -545,7 +545,7 @@ function editMyClass(id) {
     const addBtn = document.getElementById('addClassBtn');
     const cancelBtn = document.getElementById('cancelEditBtn');
 
-    addBtn.innerHTML = '<span>🔄 更新する</span>';
+    addBtn.innerHTML = '<span>\uD83D\uDD04 更新する</span>';
     addBtn.classList.remove('btn-primary');
     addBtn.classList.add('btn-success');
 
@@ -832,15 +832,15 @@ function renderMyClassesList() {
                         <span class="class-badge" style="background-color: #e3f2fd; color: #0d47a1;">${yearLabel} ${deptLabel}</span>
                         <span class="class-badge">${targetLabel}</span>
                         ${scheduleInfo}
-                        ${cls.location ? `<span class="class-badge class-badge-location">📍 ${cls.location}</span>` : ''}
-                        ${cls.teacher ? cls.teacher.split(/[,、]+/).map(t => `<span class="class-badge" style="background: linear-gradient(135deg, #6366f1, #4338ca); color: white;">👤 ${t.trim()}</span>`).join('') : ''}
+                        ${cls.location ? `<span class="class-badge class-badge-location">\uD83D\uDCCD ${cls.location}</span>` : ''}
+                        ${cls.teacher ? cls.teacher.split(/[,、]+/).map(t => `<span class="class-badge" style="background: linear-gradient(135deg, #6366f1, #4338ca); color: white;">\uD83D\uDC64 ${t.trim()}</span>`).join('') : ''}
                     </div>
                 </div>
                 <div class="class-actions">
-                    ${hasOverride ? `<button class="btn-icon" onclick="restoreClassDefault(${cls.id})" title="デフォルトに復元">🔄</button>` : ''}
-                    <button class="btn-icon" onclick="showClassSchedule(${cls.id})" title="この授業の日程表を表示">📅</button>
+                    ${hasOverride ? `<button class="btn-icon" onclick="restoreClassDefault(${cls.id})" title="デフォルトに復元">\uD83D\uDD04</button>` : ''}
+                    <button class="btn-icon" onclick="showClassSchedule(${cls.id})" title="この授業の日程表を表示">\uD83D\uDCC5</button>
                     <button class="btn-icon" onclick="editMyClass(${cls.id})" title="編集">✏️</button>
-                    <button class="btn-icon" onclick="deleteMyClass(${cls.id})" title="削除">🗑️</button>
+                    <button class="btn-icon" onclick="deleteMyClass(${cls.id})" title="削除">\uD83D\uDDD1️</button>
                 </div>
             </div>
         `;
@@ -1543,6 +1543,11 @@ function addMyClassesToDayCell(dayCell, date, dayEvents) {
 
 
             eventItem.addEventListener('dblclick', () => editCalendarEvent('myclass', cls.id, dateStr_key, schedule.period));
+            eventItem.oncontextmenu = (e) => {
+                if (typeof showEventContextMenu === 'function') {
+                    showEventContextMenu(e, 'myclass', cls.id, dateStr_key, schedule.period);
+                }
+            };
 
             eventItem.addEventListener('dragstart', handleEventDragStart);
             eventItem.title = `${cls.name} \n時間: ${times.start}～${times.end} \n場所: ${cls.location || '未定'} \n対象: ${targetLabel} `;
@@ -1632,6 +1637,11 @@ function addMyClassesToDayCell(dayCell, date, dayEvents) {
 
 
         eventItem.addEventListener('dblclick', () => editCalendarEvent('myclass', cls.id, dateStr_iso, ov.period));
+        eventItem.oncontextmenu = (e) => {
+            if (typeof showEventContextMenu === 'function') {
+                showEventContextMenu(e, 'myclass', cls.id, dateStr_iso, ov.period);
+            }
+        };
 
         eventItem.addEventListener('dragstart', handleEventDragStart);
 
@@ -1671,12 +1681,10 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
 // 日程表を表示
 function showClassSchedule(classId = null, options = {}) {
     console.log('日程表表示処理を開始します...');
-    // options のデフォルト値をマージ
     options = {
         showAnnual: true,
         showMyClass: true,
         showCustom: true,
-        vacationOnly: false,
         ...options
     };
 
@@ -1699,8 +1707,7 @@ function showClassSchedule(classId = null, options = {}) {
 
     // 対象年度を決定
     // 1. グローバルの年度選択 (globalYearSelect)
-    // 2. app.jsのcurrentYear
-    // 3. 現在日時より算出
+    // 対象年度を決定
     let targetYear;
     const globalYearSelect = document.getElementById('globalYearSelect');
 
@@ -1708,13 +1715,15 @@ function showClassSchedule(classId = null, options = {}) {
         targetYear = parseInt(globalYearSelect.value);
     } else {
         try {
-            // currentYear が null の場合も考慮してフォールバック
-            targetYear = (typeof currentYear !== 'undefined' && currentYear) ? currentYear : getFiscalYear(new Date());
+            // currentYear は app.js で定義されている可能性があるため window から取得を試みる
+            const cYear = typeof window.currentYear !== 'undefined' ? window.currentYear : null;
+            targetYear = (cYear && !isNaN(cYear)) ? cYear : (typeof window.getFiscalYear === 'function' ? window.getFiscalYear(new Date()) : new Date().getFullYear());
         } catch (e) {
-            console.warn('currentYear または getFiscalYear の取得に失敗しました', e);
+            console.warn('年度の取得に失敗しました', e);
             targetYear = new Date().getFullYear();
         }
     }
+    if (!targetYear || isNaN(targetYear)) targetYear = new Date().getFullYear();
 
     // タイトルを更新
     if (modalTitle) {
@@ -1722,7 +1731,6 @@ function showClassSchedule(classId = null, options = {}) {
             const cls = myClasses.find(c => c.id === classId);
             const className = cls ? cls.name : '指定授業';
             modalTitle.textContent = `授業日程表: ${className} (${targetYear}年度)`;
-            // CSVボタンにもIDを紐付ける（データ属性などで保持）
             const csvBtn = document.getElementById('csvExportScheduleBtn');
             if (csvBtn) csvBtn.dataset.classId = classId;
         } else {
@@ -1733,7 +1741,9 @@ function showClassSchedule(classId = null, options = {}) {
     }
 
     // フィルターの初期化
-    initializeScheduleFilters(targetYear, classId, options);
+    if (typeof initializeScheduleFilters === 'function') {
+        initializeScheduleFilters(targetYear, classId, options);
+    }
 
     // 1. 各ソースからデータを収集
     let classEvents = [];
@@ -1753,8 +1763,8 @@ function showClassSchedule(classId = null, options = {}) {
         const appliedData = window.getAppliedScheduleData('both');
 
         // 年度フィルタの作成 (4/1 ～ 3/31)
-        const fiscalStart = new Date(targetYear, 3, 1);
-        const fiscalEnd = new Date(targetYear + 1, 2, 31, 23, 59, 59);
+        const fiscalStart = typeof window.getFiscalYearStart === 'function' ? window.getFiscalYearStart(targetYear) : new Date(targetYear, 3, 1);
+        const fiscalEnd = typeof window.getFiscalYearEnd === 'function' ? window.getFiscalYearEnd(targetYear) : new Date(targetYear + 1, 2, 31, 23, 59, 59);
 
         // 分離 & 年度フィルタ適用
         if (showAnnual) {
@@ -1763,20 +1773,8 @@ function showClassSchedule(classId = null, options = {}) {
                     item.date >= fiscalStart && item.date <= fiscalEnd)) return false;
 
                 // 祝日は除外
-                const holidaysMap = typeof getHolidaysForYear === 'function' ? getHolidaysForYear(item.date.getFullYear()) : null;
-                const hName = holidaysMap ? getHolidayName(item.date, holidaysMap) : null;
-                if (hName && item.event) {
-                    const ev = item.event.trim();
-                    const hn = hName.trim();
-                    const isRedundant = ev === hn || ev === '祝日' || ev === '休日' ||
-                        ev.includes('(祝)') || ev.includes('（祝）') || ev.includes('【祝】') ||
-                        ev.includes(hn) ||
-                        (hn === '建国記念の日' && ev === '建国記念日') ||
-                        (hn === 'スポーツの日' && ev === '体育の日') ||
-                        (hn === '体育の日' && ev === 'スポーツの日') ||
-                        (hn === '元日' && ev.includes('元旦')) ||
-                        (hn === '振替休日' && ev.includes('振替休日'));
-                    if (isRedundant) return false;
+                if (typeof window.isRedundantHoliday === 'function' && window.isRedundantHoliday(item.event, item.date)) {
+                    return false;
                 }
 
                 return true;
@@ -1799,7 +1797,8 @@ function showClassSchedule(classId = null, options = {}) {
                     const isSameClass = item.targetClass === targetCls.targetClass;
                     return (item.targetType === 'grade' && isSameGrade) || (isSameGrade && isSameClass);
                 });
-                // カスタム予定は「共通」扱いの想定だが、必要ならここで絞る（現在は全て残す）
+                // カスタム予定は「共通」扱いの想定だが、科目別日程表では混乱を招くため除外する
+                customEvents = [];
             }
         }
     }
@@ -1807,13 +1806,11 @@ function showClassSchedule(classId = null, options = {}) {
     // すべてを統合
     let scheduleData = [...classEvents, ...annualEvents, ...customEvents];
 
-    // 有効なデータ（名前またはイベント名があるもの）のみに絞る
     scheduleData = scheduleData.filter(item => item && (item.name || item.event));
 
     // 重要：日付順に並び替え
     scheduleData.sort((a, b) => a.date - b.date);
-
-    console.log(`データ構築完了: 合計 ${scheduleData.length} 件 (授業:${classEvents.length}, 行事:${annualEvents.length}, オリジナル:${customEvents.length})`);
+    console.log(`データ構築完了: 合計 ${scheduleData.length} 件`);
 
 
 
@@ -1823,7 +1820,7 @@ function showClassSchedule(classId = null, options = {}) {
     if (thead) {
         thead.innerHTML = `
             <tr>
-                <th style="width: 40px;" title="実施/担当設定">担当</th>
+                <th style="width: 40px;" title="実施/担当設定（\uD83D\uDCCCマークの日付を優先）">\uD83D\uDCCC</th>
                 <th style="width: 80px;">日付</th>
                 <th style="width: 40px;">曜</th>
                 <th style="width: 50px;">時限</th>
@@ -1839,23 +1836,48 @@ function showClassSchedule(classId = null, options = {}) {
     // テーブルをクリア
     tbody.innerHTML = '';
 
-    // 年休候補日（ピンなし）のみを表示する場合
-    if (options.vacationOnly) {
-        scheduleData = scheduleData.filter(item => !isDatePinned(item.date, item.id || classId));
-        console.log(`年休候補日でフィルタリング: 残り ${scheduleData.length} 件`);
-    }
 
     if (scheduleData.length === 0) {
-        console.warn('表示する予定がありません');
-        const msg = options.vacationOnly ? '年休候補日（予定のない日）は見つかりませんでした。' : '授業予定が見つかりません。授業を登録するか、Excelファイルを読み込んでください。';
-        tbody.innerHTML = `<tr><td colspan="9" class="center">${msg}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="center">授業予定が見つかりません。授業を登録するか、Excelファイルを読み込んでください。</td></tr>`;
     } else {
         // 日付順にソート (generateClassEventsですでにソートされているはずだが念のため)
         scheduleData.sort((a, b) => a.date - b.date);
 
         const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+        let lastMonth = -1;
+        let lastWeekKey = null;
+
+        const getWeekKey = (d) => {
+            const date = new Date(d);
+            date.setHours(0, 0, 0, 0);
+            const day = date.getDay();
+            const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+            const monday = new Date(date.setDate(diff));
+            return monday.toDateString();
+        };
 
         scheduleData.forEach(item => {
+            const currentMonth = item.date.getMonth();
+            const currentWeekKey = getWeekKey(item.date);
+
+            // 月の区切り
+            if (currentMonth !== lastMonth) {
+                const monthRow = document.createElement('tr');
+                monthRow.className = 'month-delim-row';
+                monthRow.innerHTML = `<td colspan="9">${currentMonth + 1}月</td>`;
+                tbody.appendChild(monthRow);
+                lastMonth = currentMonth;
+                lastWeekKey = currentWeekKey; // 月替わりの時は週の区切りをスキップ
+            }
+            // 週の区切り (月曜始まりを想定)
+            else if (currentWeekKey !== lastWeekKey) {
+                const weekRow = document.createElement('tr');
+                weekRow.className = 'week-delim-row';
+                weekRow.innerHTML = `<td colspan="9"></td>`;
+                tbody.appendChild(weekRow);
+                lastWeekKey = currentWeekKey;
+            }
+
             const tr = document.createElement('tr');
             const dateStr = `${item.date.getMonth() + 1}/${item.date.getDate()}`;
             const weekday = item.date.getDay();
@@ -1891,7 +1913,7 @@ function showClassSchedule(classId = null, options = {}) {
             }
 
             // 日付キーを作成 (YYYY-MM-DD形式)
-            const dateKey = formatDateKey(item.date);
+            const dateKey = typeof window.formatDateKey === 'function' ? window.formatDateKey(item.date) : `${item.date.getFullYear()}-${String(item.date.getMonth() + 1).padStart(2, '0')}-${String(item.date.getDate()).padStart(2, '0')}`;
             const classIdToUse = item.id || classId;
 
             // チェックボックスの状態を取得 (デフォルトTrueにするため、除外リストを使用)
@@ -1932,76 +1954,203 @@ function showClassSchedule(classId = null, options = {}) {
     const checkboxes = tbody.querySelectorAll('.schedule-checkbox');
     checkboxes.forEach(checkbox => {
         checkbox.addEventListener('change', (e) => {
-            const classId = e.target.dataset.classId;
-            const dateKey = e.target.dataset.dateKey;
+            const classIdToSave = e.target.dataset.classId;
+            const dateKeyToSave = e.target.dataset.dateKey;
 
             // assignmentExclusionsオブジェクトを取得または初期化
             let assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
-            if (!assignmentExclusions[classId]) {
-                assignmentExclusions[classId] = [];
+            if (!assignmentExclusions[classIdToSave]) {
+                assignmentExclusions[classIdToSave] = [];
             }
 
             // チェックOFF（担当しない）の場合、除外リストに追加
             if (!e.target.checked) {
-                if (!assignmentExclusions[classId].includes(dateKey)) {
-                    assignmentExclusions[classId].push(dateKey);
+                if (!assignmentExclusions[classIdToSave].includes(dateKeyToSave)) {
+                    assignmentExclusions[classIdToSave].push(dateKeyToSave);
                 }
             } else {
                 // チェックON（担当する）の場合、除外リストから削除
-                assignmentExclusions[classId] = assignmentExclusions[classId].filter(d => d !== dateKey);
+                assignmentExclusions[classIdToSave] = assignmentExclusions[classIdToSave].filter(d => d !== dateKeyToSave);
             }
 
             // localStorageに保存
             localStorage.setItem('assignmentExclusions', JSON.stringify(assignmentExclusions));
-            console.log('担当日設定(除外リスト)が更新されました:', assignmentExclusions);
 
-            // カレンダーを即座に更新（[担]マークの表示/非表示を反映）
             if (typeof updateCalendar === 'function') {
                 updateCalendar();
             }
         });
     });
 }
+window.showClassSchedule = showClassSchedule;
+
+function closeClassScheduleModal() {
+    const modal = document.getElementById('classScheduleModal');
+    if (modal) modal.classList.add('hidden');
+}
+window.closeClassScheduleModal = closeClassScheduleModal;
+
+/**
+ * 年休候補日を表示
+ */
+function showVacationCandidates() {
+    console.log('年休候補日の抽出を開始します...');
+    const modal = document.getElementById('vacationCandidateModal');
+    const tbody = document.getElementById('vacationCandidateBody');
+    if (!modal || !tbody) return;
+
+    let targetYear;
+    const globalYearSelect = document.getElementById('globalYearSelect');
+    if (globalYearSelect && globalYearSelect.value) {
+        targetYear = parseInt(globalYearSelect.value);
+    } else {
+        targetYear = typeof currentYear !== 'undefined' && currentYear ? currentYear : (new Date().getMonth() + 1 >= 4 ? new Date().getFullYear() : new Date().getFullYear() - 1);
+    }
+
+    tbody.innerHTML = '<tr><td colspan="3" class="center">抽出中...</td></tr>';
+    modal.classList.remove('hidden');
+
+    setTimeout(() => {
+        const fiscalStart = typeof window.getFiscalYearStart === 'function' ? window.getFiscalYearStart(targetYear) : new Date(targetYear, 3, 1);
+        const fiscalEnd = typeof window.getFiscalYearEnd === 'function' ? window.getFiscalYearEnd(targetYear) : new Date(targetYear + 1, 2, 31);
+        const candidates = [];
+
+        const holidaysMap = typeof window.getHolidaysForYear === 'function' ? window.getHolidaysForYear(targetYear) : new Map();
+
+        const classEvents = typeof window.generateClassEvents === 'function' ? window.generateClassEvents(targetYear, { includeExclusions: true }) : [];
+        const appliedData = typeof window.getAppliedScheduleData === 'function' ? window.getAppliedScheduleData('both') : [];
+        const assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
+
+        // 1日ずつチェック
+        for (let d = new Date(fiscalStart); d <= fiscalEnd; d.setDate(d.getDate() + 1)) {
+            const dateObj = new Date(d);
+            const dateKey = typeof window.formatDateKey === 'function' ? window.formatDateKey(dateObj) : `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+            const weekday = dateObj.getDay();
+            const isHolidayDay = typeof window.getHolidayName === 'function' && window.getHolidayName(dateObj, holidaysMap);
+
+            // 日曜・祝日は除外
+            if (weekday === 0 || isHolidayDay) continue;
+
+            // ピン留め判定のインライン（高速化）
+            let isPinned = false;
+
+            // 1. 授業のチェック
+            const classOnThisDay = classEvents.filter(item => (typeof window.formatDateKey === 'function' ? window.formatDateKey(item.date) : '') === dateKey);
+            if (classOnThisDay.some(cls => {
+                const classExclusions = assignmentExclusions[cls.id] || [];
+                return !classExclusions.includes(dateKey);
+            })) {
+                isPinned = true;
+            }
+
+            if (!isPinned && appliedData.length > 0) {
+                // 2. 行事・カスタム予定のチェック
+                const eventsOnThisDay = appliedData.filter(item => (typeof window.formatDateKey === 'function' ? window.formatDateKey(item.date) : '') === dateKey);
+                if (eventsOnThisDay.some(item => {
+                    const ov = (typeof classOverrides !== 'undefined' ? classOverrides : []).find(o =>
+                        (o.type === 'excel' || o.type === 'custom') &&
+                        String(o.id) === String(item.id) &&
+                        (o.date === dateKey || (o.startDate <= dateKey && o.endDate >= dateKey))
+                    );
+                    if (ov && ov.data && ov.data.isParticipating !== undefined) return ov.data.isParticipating;
+                    const name = item.event || item.name || "";
+                    if (name.includes('教職員会議') || name.includes('コース会議') || name.includes('体験入学') || name.includes('入試')) return true;
+                    return false;
+                })) {
+                    isPinned = true;
+                }
+            }
+
+            if (!isPinned) {
+                // 土曜日の場合、授業日設定がないなら休み
+                if (weekday === 6) continue;
+                candidates.push(new Date(dateObj));
+            }
+        }
+
+        tbody.innerHTML = '';
+        if (candidates.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3" class="center">年休候補日（フリーな営業日）は見つかりませんでした。</td></tr>';
+        } else {
+            const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+            let lastMonth = -1;
+            let lastWeekKey = null;
+
+            const getWeekKey = (d) => {
+                const date = new Date(d);
+                date.setHours(0, 0, 0, 0);
+                const day = date.getDay();
+                const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+                const monday = new Date(date.setDate(diff));
+                return monday.toDateString();
+            };
+
+            candidates.forEach(date => {
+                const currentMonth = date.getMonth();
+                const currentWeekKey = getWeekKey(date);
+
+                // 月の区切り
+                if (currentMonth !== lastMonth) {
+                    const monthRow = document.createElement('tr');
+                    monthRow.className = 'month-delim-row';
+                    monthRow.innerHTML = `<td colspan="3">${currentMonth + 1}月</td>`;
+                    tbody.appendChild(monthRow);
+                    lastMonth = currentMonth;
+                    lastWeekKey = currentWeekKey;
+                }
+                // 週の区切り
+                else if (currentWeekKey !== lastWeekKey) {
+                    const weekRow = document.createElement('tr');
+                    weekRow.className = 'week-delim-row';
+                    weekRow.innerHTML = `<td colspan="3"></td>`;
+                    tbody.appendChild(weekRow);
+                    lastWeekKey = currentWeekKey;
+                }
+
+                const tr = document.createElement('tr');
+                const dateStr = `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+                const weekdayStr = weekdays[date.getDay()];
+                tr.innerHTML = `
+                    <td>${dateStr}</td>
+                    <td class="center">${weekdayStr}</td>
+                    <td>候補日</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+    }, 100);
+}
+window.showVacationCandidates = showVacationCandidates;
+
+function closeVacationCandidateModal() {
+    const modal = document.getElementById('vacationCandidateModal');
+    if (modal) modal.classList.add('hidden');
+}
+window.closeVacationCandidateModal = closeVacationCandidateModal;
 
 // 日程表フィルターの初期化とイベント設定
 function initializeScheduleFilters(targetYear, classId, options) {
-    const vacationToggle = document.getElementById('filterVacationOnly');
-    const extractBtn = document.getElementById('extractVacationBtn');
     const annualCheck = document.getElementById('filterAnnualEvents');
     const myClassCheck = document.getElementById('filterMyClasses');
     const customCheck = document.getElementById('filterCustomEvents');
 
+    if (!annualCheck || !myClassCheck || !customCheck) return;
+
     // 初期状態を同期
-    if (vacationToggle) vacationToggle.checked = !!options.vacationOnly;
-    if (annualCheck) annualCheck.checked = options.showAnnual !== false;
-    if (myClassCheck) myClassCheck.checked = options.showMyClass !== false;
-    if (customCheck) customCheck.checked = options.showCustom !== false;
+    annualCheck.checked = options.showAnnual !== false;
+    myClassCheck.checked = options.showMyClass !== false;
+    customCheck.checked = options.showCustom !== false;
 
     // 再描画をトリガーする関数
     const refreshTable = () => {
         showClassSchedule(classId, {
             showAnnual: annualCheck.checked,
             showMyClass: myClassCheck.checked,
-            showCustom: customCheck.checked,
-            vacationOnly: vacationToggle.checked
+            showCustom: customCheck.checked
         });
     };
 
-    // 既存のリスナーを解除するためクローンで置き換え（簡易的な防護）
-    const newExtractBtn = extractBtn.cloneNode(true);
-    extractBtn.parentNode.replaceChild(newExtractBtn, extractBtn);
-
-    const newVacationToggle = vacationToggle.cloneNode(true);
-    vacationToggle.parentNode.replaceChild(newVacationToggle, vacationToggle);
-
-    // イベント登録
-    newVacationToggle.addEventListener('change', refreshTable);
-    newExtractBtn.addEventListener('click', () => {
-        newVacationToggle.checked = true;
-        refreshTable();
-    });
-
-    // 他のチェックボックスにも
+    // リスナー設定（datasetで重複ガード）
     [annualCheck, myClassCheck, customCheck].forEach(chk => {
         if (!chk.dataset.filterSet) {
             chk.addEventListener('change', refreshTable);
@@ -2012,20 +2161,24 @@ function initializeScheduleFilters(targetYear, classId, options) {
 
 /**
  * 年休候補日の判定・抽出
- * 📌（ピン）マークがつく要素：
+ * \uD83D\uDCCC（ピン）マークがつく要素：
  * 1. 参加チェックを入れたExcel行事/オリジナル予定
  * 2. [担]マークのついた授業
  * 3. デフォルトでピン付けされるキーワード（教職員会議、コース会議）を含む予定
  */
 function isDatePinned(date, classId) {
-    const dateKey = formatDateKey(date);
+    if (!date) return false;
+    const dateKey = typeof window.formatDateKey === 'function' ? window.formatDateKey(date) : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
     // 1. 授業のチェック
-    let classEvents = typeof window.generateClassEvents === 'function' ? window.generateClassEvents(getFiscalYear(date), { includeExclusions: true }) : [];
-    const classOnThisDay = classEvents.filter(item => formatDateKey(item.date) === dateKey);
+    const fy = typeof window.getFiscalYear === 'function' ? window.getFiscalYear(date) : (date.getMonth() + 1 >= 4 ? date.getFullYear() : date.getFullYear() - 1);
+    let classEvents = typeof window.generateClassEvents === 'function' ? window.generateClassEvents(fy, { includeExclusions: true }) : [];
+    const classOnThisDay = classEvents.filter(item => (typeof window.formatDateKey === 'function' ? window.formatDateKey(item.date) : '') === dateKey);
 
     // 授業のピン（担当中）
     const isClassPinned = classOnThisDay.some(cls => {
+        // classIdが指定されている場合はその授業のみ、指定されていない場合は全授業をチェック
+        if (classId && String(cls.id) !== String(classId)) return false;
         const exclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
         const classExclusions = exclusions[cls.id] || [];
         return !classExclusions.includes(dateKey);
@@ -2035,10 +2188,16 @@ function isDatePinned(date, classId) {
     // 2. 行事・カスタム予定のチェック
     if (typeof window.getAppliedScheduleData === 'function') {
         const appliedData = window.getAppliedScheduleData('both');
-        const eventsOnThisDay = appliedData.filter(item => formatDateKey(item.date) === dateKey);
+        const eventsOnThisDay = appliedData.filter(item => (typeof window.formatDateKey === 'function' ? window.formatDateKey(item.date) : '') === dateKey);
+
+        // 行事そのものがなくても、その日が祝日ならピン留め扱いとする（年休候補から外す）
+        const holidaysMap = typeof window.getHolidaysForYear === 'function' ? window.getHolidaysForYear(date.getFullYear()) : null;
+        if (holidaysMap && typeof window.getHolidayName === 'function' && window.getHolidayName(date, holidaysMap)) {
+            return true;
+        }
 
         const isEventPinned = eventsOnThisDay.some(item => {
-            // overrideチェック (Excel)
+            // overrideチェック (Excel or Custom)
             const ov = classOverrides.find(o =>
                 (o.type === 'excel' || o.type === 'custom') &&
                 String(o.id) === String(item.id) &&
@@ -2055,47 +2214,19 @@ function isDatePinned(date, classId) {
                 return true;
             }
 
-            // 祝日チェック (祝日は「予定あり」として扱い、年休候補から外す)
-            const holidaysMap = typeof getHolidaysForYear === 'function' ? getHolidaysForYear(date.getFullYear()) : null;
-            const hName = holidaysMap ? getHolidayName(date, holidaysMap) : null;
-            if (hName) {
-                const ev = name.trim();
-                const hn = hName.trim();
-                // 祝日名そのものの予定、または「祝日」「休日」という名前ならピン付け扱い
-                if (ev === hn || ev === '祝日' || ev === '休日' ||
-                    ev.includes('(祝)') || ev.includes('（祝）') || ev.includes('【祝】') ||
-                    ev.includes(hn) ||
-                    (hn === '建国記念の日' && ev === '建国記念日') ||
-                    (hn === 'スポーツの日' && ev === '体育の日') ||
-                    (hn === '体育の日' && ev === 'スポーツの日') ||
-                    (hn === '元日' && ev.includes('元旦')) ||
-                    (hn === '振替休日' && ev.includes('振替休日'))) {
-                    return true;
-                }
+            // 祝日冗長チェック
+            if (typeof window.isRedundantHoliday === 'function' && window.isRedundantHoliday(name, date)) {
+                return true;
             }
 
             return false;
         });
 
         if (isEventPinned) return true;
-
-        // 行事そのものがない場合でも、その日が祝日なら候補から外す（ピン留め扱いとする）
-        const holidaysMap = typeof getHolidaysForYear === 'function' ? getHolidaysForYear(date.getFullYear()) : null;
-        if (holidaysMap && typeof getHolidayName === 'function' && getHolidayName(date, holidaysMap)) {
-            return true;
-        }
     }
 
     return false;
 }
-
-window.showClassSchedule = showClassSchedule;
-window.closeClassScheduleModal = closeClassScheduleModal;
-
-// 印刷機能
-window.printClassSchedule = function () {
-    window.print();
-};
 
 // 日程表をCSV出力
 function exportClassScheduleCsv() {
@@ -2103,13 +2234,14 @@ function exportClassScheduleCsv() {
     const csvBtn = document.getElementById('csvExportScheduleBtn');
     const classId = csvBtn && csvBtn.dataset.classId ? parseInt(csvBtn.dataset.classId) : null;
 
-    // 対象年度を決定 (showClassScheduleと同様)
+    // 対象年度を決定
     let targetYear;
     const globalYearSelect = document.getElementById('globalYearSelect');
     if (globalYearSelect && globalYearSelect.value) {
         targetYear = parseInt(globalYearSelect.value);
     } else {
-        targetYear = (typeof currentYear !== 'undefined' && currentYear) ? currentYear : (typeof getFiscalYear === 'function' ? getFiscalYear(new Date()) : new Date().getFullYear());
+        const cYear = typeof window.currentYear !== 'undefined' ? window.currentYear : null;
+        targetYear = (cYear && !isNaN(cYear)) ? cYear : (typeof window.getFiscalYear === 'function' ? window.getFiscalYear(new Date()) : (new Date().getMonth() + 1 >= 4 ? new Date().getFullYear() : new Date().getFullYear() - 1));
     }
 
     // フィルタ状態の取得
@@ -2142,9 +2274,9 @@ function exportClassScheduleCsv() {
                     item.date >= fiscalStart && item.date <= fiscalEnd)) return false;
 
                 // 祝日は除外
-                const holidaysMap = typeof getHolidaysForYear === 'function' ? getHolidaysForYear(item.date.getFullYear()) : null;
-                const hName = holidaysMap ? getHolidayName(item.date, holidaysMap) : null;
-                if (hName && item.event && item.event.trim() === hName.trim()) return false;
+                if (typeof window.isRedundantHoliday === 'function' && window.isRedundantHoliday(item.event, item.date)) {
+                    return false;
+                }
 
                 return true;
             });
@@ -2257,9 +2389,6 @@ function addScheduleEventListeners() {
     console.log('日程表イベントリスナーを設定中...');
     const showBtn = document.getElementById('showClassScheduleBtn');
     const modal = document.getElementById('classScheduleModal');
-    const closeBtns = document.querySelectorAll('.close-modal-btn');
-    const printBtn = document.getElementById('printScheduleBtn');
-    const csvBtn = document.getElementById('csvExportScheduleBtn');
 
     if (showBtn) {
         showBtn.addEventListener('click', function (e) {
@@ -2267,29 +2396,29 @@ function addScheduleEventListeners() {
             showClassSchedule();
         });
         console.log('「日程表を表示」ボタンにイベントを設定しました');
-    } else {
-        console.warn('「日程表を表示」ボタンが見つかりません');
     }
 
-    closeBtns.forEach(btn => {
-        btn.addEventListener('click', closeClassScheduleModal);
-    });
-
-    // 印刷
-    if (printBtn) {
-        printBtn.addEventListener('click', printClassSchedule);
+    const vacationBtn = document.getElementById('showVacationCandidatesBtn');
+    if (vacationBtn) {
+        vacationBtn.addEventListener('click', function (e) {
+            console.log('「年休候補日を抽出」ボタンがクリックされました');
+            showVacationCandidates();
+        });
     }
 
-    // CSV出力
-    if (csvBtn) {
-        csvBtn.addEventListener('click', exportClassScheduleCsv);
-    }
-
-    // モーダル外クリックで閉じる
     if (modal) {
         window.addEventListener('click', (e) => {
             if (e.target === modal) {
                 closeClassScheduleModal();
+            }
+        });
+    }
+
+    const vacationModal = document.getElementById('vacationCandidateModal');
+    if (vacationModal) {
+        window.addEventListener('click', (e) => {
+            if (e.target === vacationModal) {
+                closeVacationCandidateModal();
             }
         });
     }
@@ -2303,8 +2432,57 @@ function addScheduleEventListeners() {
         }
     });
 
+    const printBtn = document.getElementById('printScheduleBtn');
+    if (printBtn) {
+        printBtn.addEventListener('click', printClassSchedule);
+    }
+    const csvBtn = document.getElementById('csvExportScheduleBtn');
+    if (csvBtn) {
+        csvBtn.addEventListener('click', exportClassScheduleCsv);
+    }
+
+    // 年休候補モーダル用のイベント
+    const printVacationBtn = document.getElementById('printVacationCandidateBtn');
+    if (printVacationBtn) {
+        printVacationBtn.addEventListener('click', () => window.print());
+    }
+    const csvVacationBtn = document.getElementById('csvExportVacationBtn');
+    if (csvVacationBtn) {
+        csvVacationBtn.addEventListener('click', exportVacationCandidatesCsv);
+    }
+
     scheduleEventListenersInitialized = true;
     console.log('日程表イベントリスナーを設定完了');
+}
+
+/**
+ * 年休候補日をCSV出力
+ */
+function exportVacationCandidatesCsv() {
+    const tbody = document.getElementById('vacationCandidateBody');
+    if (!tbody || tbody.rows.length === 0 || tbody.rows[0].cells.length < 2) {
+        alert('出力するデータがありません');
+        return;
+    }
+
+    let csv = '日付,曜日,備考\n';
+    Array.from(tbody.rows).forEach(row => {
+        if (row.cells.length >= 2) {
+            const date = row.cells[0].textContent;
+            const week = row.cells[1].textContent;
+            const remark = row.cells[2] ? row.cells[2].textContent : '';
+            csv += `${date},${week},${remark}\n`;
+        }
+    });
+
+    const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+    const blob = new Blob([bom, csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `年休候補日一覧.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
 }
 
 // 印刷機能
@@ -2312,19 +2490,14 @@ function printClassSchedule() {
     window.print();
 }
 
-// モーダルを閉じる
-function closeClassScheduleModal() {
-    const modal = document.getElementById('classScheduleModal');
-    if (modal) {
-        modal.classList.add('hidden');
-    }
-}
-
 // 外部公開用
 window.showClassSchedule = showClassSchedule;
 window.closeClassScheduleModal = closeClassScheduleModal;
 window.printClassSchedule = printClassSchedule;
 window.exportClassScheduleCsv = exportClassScheduleCsv;
+window.exportVacationCandidatesCsv = exportVacationCandidatesCsv;
+window.showVacationCandidates = showVacationCandidates;
+window.closeVacationCandidateModal = closeVacationCandidateModal;
 
 
 /* ===========================
@@ -2349,7 +2522,7 @@ function renderTimetable(semester) {
     // タイトルの年度表記を更新（もし必要なら）
     const titleEl = document.getElementById('timetableTitle');
     if (titleEl) {
-        titleEl.textContent = `📆 あなたの時間割（${selectedYear}年度）`;
+        titleEl.textContent = `\uD83D\uDCC6 あなたの時間割（${selectedYear}年度）`;
     }
 
     const grid = document.getElementById('timetableGrid');
@@ -2519,9 +2692,9 @@ function renderTimetable(semester) {
                 ${hasOverrides ? '<span style="color:#d32f2f; font-size:0.8em; margin-left:4px;" title="カレンダー上で一部日程の変更・移動があります">⚠️</span>' : ''}
             </div>
             <div class="timetable-class-meta">
-                <span>📚 [${deptShort}]</span>
-                <span>👥 ${targetLabel}</span>
-                ${cls.location ? `<span>📍 ${cls.location}</span>` : ''}
+                <span>\uD83D\uDCDA [${deptShort}]</span>
+                <span>\uD83D\uDC65 ${targetLabel}</span>
+                ${cls.location ? `<span>\uD83D\uDCCD ${cls.location}</span>` : ''}
             </div>
         `;
 
@@ -3490,7 +3663,7 @@ function renderManageCourses() {
                 <td>
                     <div style="display: flex; gap: 5px;">
                         <button class="btn btn-outline-primary btn-sm btn-action" onclick="openCourseEditModal(${originalIndex})">✏️</button>
-                        <button class="btn btn-outline-danger btn-sm btn-action" onclick="deleteCourseMaster(${originalIndex})">🗑️</button>
+                        <button class="btn btn-outline-danger btn-sm btn-action" onclick="deleteCourseMaster(${originalIndex})">\uD83D\uDDD1️</button>
                     </div>
                 </td>
             </tr>
@@ -3612,7 +3785,7 @@ function renderManageTeachers() {
                 <td>
                     <div style="display: flex; gap: 5px;">
                         <button class="btn btn-outline-primary btn-sm btn-action" onclick="openTeacherEditModal(${originalIndex})">✏️</button>
-                        <button class="btn btn-outline-danger btn-sm btn-action" onclick="deleteTeacher(${originalIndex})">🗑️</button>
+                        <button class="btn btn-outline-danger btn-sm btn-action" onclick="deleteTeacher(${originalIndex})">\uD83D\uDDD1️</button>
                     </div>
                 </td>
             </tr>

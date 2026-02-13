@@ -1,3 +1,4 @@
+@charset "UTF-8";
 /* ===========================
    年間行事予定表アプリ - スタイルシート
    =========================== */
@@ -47,14 +48,14 @@
     --spacing-xl: 2rem;
     --spacing-2xl: 3rem;
 
-    /* ボーダー半径 */
+    /* 繝懊・繝繝ｼ蜊雁ｾ・*/
     --radius-sm: 0.375rem;
     --radius-md: 0.5rem;
     --radius-lg: 0.75rem;
     --radius-xl: 1rem;
     --radius-full: 9999px;
 
-    /* シャドウ */
+    /* 繧ｷ繝｣繝峨え */
     --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
     --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
@@ -112,7 +113,7 @@ body {
 }
 
 /* ===========================
-   ヘッダー
+   繝倥ャ繝繝ｼ
    =========================== */
 
 .app-header {
@@ -166,7 +167,7 @@ body {
 }
 
 /* ===========================
-   カード
+   繧ｫ繝ｼ繝・
    =========================== */
 
 .card {
@@ -214,7 +215,7 @@ body {
 }
 
 /* ===========================
-   ボタン
+   繝懊ち繝ｳ
    =========================== */
 
 .btn {
@@ -321,7 +322,7 @@ body {
 }
 
 /* ===========================
-   ファイルアップロード
+   繝輔ぃ繧､繝ｫ繧｢繝・・繝ｭ繝ｼ繝・
    =========================== */
 
 .upload-area {
@@ -385,7 +386,7 @@ body {
 }
 
 /* ===========================
-   フィルター & コントロール
+   繝輔ぅ繝ｫ繧ｿ繝ｼ & 繧ｳ繝ｳ繝医Ο繝ｼ繝ｫ
    =========================== */
 
 .controls-grid {
@@ -424,7 +425,7 @@ body {
 }
 
 /* ===========================
-   カレンダー表示
+   繧ｫ繝ｬ繝ｳ繝繝ｼ表示
    =========================== */
 
 .calendar-container {
@@ -487,7 +488,7 @@ body {
     transition: all var(--transition-fast);
     cursor: pointer;
     position: relative;
-    /* 子要素の絶対配置のため */
+    /* 蟄占ｦ∫ｴ縺ｮ邨ｶ蟇ｾ驟咲ｽｮ縺ｮ縺溘ａ */
     display: flex;
     flex-direction: column;
 }
@@ -536,14 +537,14 @@ body {
     z-index: 5;
 }
 
-/* バッジ類をまとめるコンテナ用（JSで作成するか、個別に絶対配置） */
+/* 繝舌ャ繧ｸ鬘槭ｒ縺ｾ縺ｨ繧√ｋ繧ｳ繝ｳ繝・リ逕ｨ・・S縺ｧ菴懈・縺吶ｋ縺九∝句挨縺ｫ邨ｶ蟇ｾ驟咲ｽｮ・・*/
 .day-badges {
     position: absolute;
     top: var(--spacing-xs);
     right: var(--spacing-xs);
     display: flex;
     flex-direction: row;
-    /* 横並びに変更 */
+    /* 讓ｪ荳ｦ縺ｳ縺ｫ螟画峩 */
     align-items: center;
     gap: 2px;
     z-index: 10;
@@ -657,16 +658,16 @@ body {
     position: relative;
     z-index: 2;
     border-left: none;
-    /* アローヘッド（ Chevron ）の形状を作成 */
+    /* アローヘッド（Chevron）の形状を作成 */
     clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%);
     box-shadow: 2px 1px 4px rgba(0, 0, 0, 0.05);
 }
 
-/* 週の境界（土・日）での表示調整：アローの形状を維持しつつ隙間を埋める */
+/* 週の境界（土・日）での表示調整アローの形状を維持しつつ隙間を埋める */
 .calendar-day.saturday .event-item.range-start,
 .calendar-day.saturday .event-item.range-middle {
     margin-right: 0;
-    /* 週の終わりは一旦平らに（または好みで少し丸める） */
+    /* 騾ｱ縺ｮ邨ゅｏ繧翫・荳譌ｦ蟷ｳ繧峨↓・医∪縺溘・螂ｽ縺ｿ縺ｧ蟆代＠荳ｸ繧√ｋ・・*/
     clip-path: none;
     border-top-right-radius: 2px;
     border-bottom-right-radius: 2px;
@@ -700,7 +701,7 @@ body {
     position: absolute;
     top: 50%;
     right: 12px;
-    /* アローの先端に重ならないよう少し内側に移動 */
+    /* アロー縺ｮ蜈育ｫｯ縺ｫ驥阪↑繧峨↑縺・ｈ縺・ｰ代＠蜀・・縺ｫ遘ｻ蜍・*/
     width: 10px;
     height: 70%;
     transform: translateY(-50%);
@@ -729,12 +730,12 @@ body {
     opacity: 0.5 !important;
 }
 
-/* スケジュール表のカスタム行ハイライト */
+/* スケジュール陦ｨ縺ｮカスタム陦後ワ繧､繝ｩ繧､繝・*/
 #classScheduleBody tr.item-custom {
     background-color: var(--primary-blue-light);
 }
 
-/* 授業行のハイライト */
+/* 授業行のハイライト*/
 #classScheduleBody tr.item-myclass {
     background-color: #f0fdf4;
     /* 薄い緑色 */
@@ -760,7 +761,7 @@ body {
 }
 
 /* ===========================
-   エクスポート セクション
+   エクスポートセクション
    =========================== */
 
 .export-section {
@@ -853,7 +854,7 @@ body {
 }
 
 /* ========================================
-   ローディングオーバーレイ
+   ローディング繧ｪ繝ｼ繝舌・繝ｬ繧､
    ======================================== */
 .loading-overlay {
     position: fixed;
@@ -903,7 +904,7 @@ body {
 }
 
 /* ========================================
-   授業登録セクション
+   授業逋ｻ骭ｲセクション
    ======================================== */
 .my-classes-container {
     display: flex;
@@ -1132,7 +1133,7 @@ body {
     border: 1px dashed var(--neutral-300);
 }
 
-/* 授業イベント専用スタイル */
+/* 授業繧､繝吶Φ繝亥ｰら畑スタイル */
 .event-item.my-class {
     background: linear-gradient(135deg, #10B981, #059669);
     color: white;
@@ -1140,7 +1141,7 @@ body {
     border-left: 4px solid #047857;
 }
 
-/* レスポンシブ対応 */
+/* 繝ｬ繧ｹ繝昴Φ繧ｷ繝門ｯｾ蠢・*/
 @media (max-width: 768px) {
     .form-row {
         grid-template-columns: 1fr;
@@ -1159,7 +1160,7 @@ body {
 }
 
 /* ===========================
-   レスポンシブ
+   繝ｬ繧ｹ繝昴Φ繧ｷ繝・
    =========================== */
 
 @media (max-width: 768px) {
@@ -1186,7 +1187,7 @@ body {
         grid-template-columns: 1fr;
     }
 
-    /* モーダルレスポンシブ */
+    /* 繝｢繝ｼ繝繝ｫ繝ｬ繧ｹ繝昴Φ繧ｷ繝・*/
     .modal {
         padding: 8px;
     }
@@ -1344,7 +1345,7 @@ body {
 }
 
 /* ===========================
-   ユーティリティ
+   繝ｦ繝ｼ繝・ぅ繝ｪ繝・ぅ
    =========================== */
 
 .hidden {
@@ -1364,10 +1365,10 @@ body {
 }
 
 /* ===========================
-   授業日程表モーダル
+   授業譌･遞玖｡ｨ繝｢繝ｼ繝繝ｫ
    =========================== */
 
-/* 登録済みクラスリストのヘッダー */
+/* 逋ｻ骭ｲ貂医∩繧ｯ繝ｩ繧ｹリスト医・繝倥ャ繝繝ｼ */
 .registered-header {
     display: flex;
     justify-content: space-between;
@@ -1386,7 +1387,7 @@ body {
     font-weight: 600;
 }
 
-/* モーダル */
+/* 繝｢繝ｼ繝繝ｫ */
 .modal {
     position: fixed;
     top: 0;
@@ -1486,7 +1487,7 @@ body {
     color: var(--neutral-700);
 }
 
-/* 日程表テーブル */
+/* 譌･遞玖｡ｨ繝・・繝悶Ν */
 .schedule-table-container {
     overflow-x: auto;
 }
@@ -1523,7 +1524,7 @@ body {
     text-align: center;
 }
 
-/* 印刷用スタイル */
+/* 蜊ｰ蛻ｷ逕ｨスタイル */
 @media print {
     body * {
         visibility: hidden;
@@ -1608,7 +1609,7 @@ body {
 }
 
 .event-item.is-participating .event-text::before {
-    content: '📌 ';
+    content: '\1F4CC ';
     font-style: normal;
 }
 
@@ -1694,7 +1695,7 @@ body {
 }
 
 /* ===========================
-   ナビゲーションツールバー
+   繝翫ン繧ｲ繝ｼ繧ｷ繝ｧ繝ｳ繝・・繝ｫ繝舌・
    =========================== */
 
 .app-toolbar {
@@ -1746,7 +1747,7 @@ body {
     font-weight: 600;
 }
 
-/* モバイル対応 */
+/* 繝｢繝舌う繝ｫ蟇ｾ蠢・*/
 @media (max-width: 600px) {
     .app-toolbar {
         gap: var(--spacing-sm);
@@ -1765,7 +1766,7 @@ body {
 }
 
 /* ===========================
-   時間割表
+   譎る俣蜑ｲ陦ｨ
    =========================== */
 .timetable-section {
     margin-top: var(--spacing-lg);
@@ -1916,7 +1917,7 @@ body {
     line-height: 1.3;
 }
 
-/* HR時限用スタイル */
+/* HR譎る剞逕ｨスタイル */
 .timetable-cell.hr-period {
     background-color: linear-gradient(135deg, var(--neutral-100) 0%, var(--neutral-50) 100%);
     font-size: 0.8em;
@@ -1933,13 +1934,13 @@ body {
     font-size: 0.8rem;
 }
 
-/* 放課後用スタイル */
+/* 謾ｾ隱ｲ蠕檎畑スタイル */
 .timetable-cell.after-period {
     background: linear-gradient(135deg, var(--neutral-100) 0%, var(--neutral-50) 100%);
     font-size: 0.8em;
 }
 
-/* インタラクティブ要素のホバー効果 */
+/* 繧､繝ｳ繧ｿ繝ｩ繧ｯ繝・ぅ繝冶ｦ∫ｴ縺ｮ繝帙ヰ繝ｼ蜉ｹ譫・*/
 .timetable-cell:hover {
     background: linear-gradient(135deg, rgba(240, 248, 255, 0.6) 0%, rgba(240, 248, 255, 0.3) 100%);
     transform: translateY(-1px);
@@ -1955,7 +1956,7 @@ body {
 }
 
 /* ===========================
-   授業科目検索サジェスト
+   授業遘醍岼讀懃ｴ｢繧ｵ繧ｸ繧ｧ繧ｹ繝・
    =========================== */
 .course-suggestions {
     position: absolute;
@@ -2004,7 +2005,7 @@ body {
 }
 
 /* ===========================
-   教員リスト・ドロップ機能
+   教員リストのドラッグ機能
    =========================== */
 .teacher-list-container {
     position: fixed;
@@ -2018,7 +2019,7 @@ body {
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-2xl);
     z-index: 3000;
-    /* モーダル(1000)より上に表示 */
+    /* 繝｢繝ｼ繝繝ｫ(1000)繧医ｊ荳翫↓表示 */
     display: flex;
     flex-direction: column;
 }
@@ -2077,7 +2078,7 @@ body {
     color: var(--neutral-500);
 }
 
-/* ドロップ先の強調 */
+/* ドラップ蜈医・強調 */
 .form-input.drop-over {
     background-color: #e3f2fd;
     border-color: var(--primary-blue);
@@ -2195,7 +2196,7 @@ body {
     text-align: center;
 }
 
-/* カレンダー日付内の担当日ラベル */
+/* カレンダー内担当日ラベル */
 .day-assignment {
     font-size: 0.75rem;
     color: var(--success-green);
@@ -2207,7 +2208,7 @@ body {
     text-align: center;
 }
 
-/* 教員ペースト処理ダイアログ */
+/* 教員ペースト亥・逅・ム繧､繧｢繝ｭ繧ｰ */
 .teacher-paste-dialog-overlay {
     position: fixed;
     top: 0;
@@ -2264,7 +2265,202 @@ body {
 }
 
 /* ========================================
-   ヘルプバルーン (Tooltips)
+   ツールチップ (Tooltips)
+   ======================================== */
+[data-tooltip] {
+    position: relative;
+}
+
+[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 125%;
+    left: 50%;
+    transform: translateX(-50%) translateY(10px);
+    background: var(--neutral-800);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s ease;
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+}
+
+[data-tooltip]::before {
+    content: '';
+    position: absolute;
+    bottom: 110%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: var(--neutral-800);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s ease;
+    z-index: 1000;
+}
+
+[data-tooltip]:hover::after {
+    cursor: pointer;
+    transition: all 0.2s;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+}
+
+.settings-tab:hover {
+    color: var(--primary-blue);
+}
+
+.settings-tab.active {
+    color: var(--primary-blue);
+    border-bottom-color: var(--primary-blue);
+}
+
+.settings-tab-content {
+    background: white;
+}
+
+.settings-action-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.settings-action-bar h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--neutral-700);
+}
+
+/* 管理テーブル */
+.table-container {
+    overflow-x: auto;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--neutral-200);
+}
+
+.manage-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.manage-table th,
+.manage-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid var(--neutral-100);
+}
+
+.manage-table th {
+    background: var(--neutral-50);
+    font-weight: 600;
+    color: var(--neutral-600);
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+}
+
+.manage-table tbody tr:hover {
+    background-color: var(--neutral-50);
+}
+
+.manage-table .btn-action {
+    padding: 4px 8px;
+    font-size: 0.8rem;
+}
+
+/* 担当日チェックボックス */
+.schedule-checkbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--primary-blue);
+}
+
+.schedule-checkbox:hover {
+    opacity: 0.8;
+}
+
+#classScheduleModal td.center {
+    text-align: center;
+}
+
+/* カレンダー内の担当日ラベル */
+.day-assignment {
+    font-size: 0.75rem;
+    color: var(--success-green);
+    font-weight: bold;
+    padding: 2px 4px;
+    background-color: rgba(69, 169, 84, 0.1);
+    border-radius: 2px;
+    margin-top: 2px;
+    text-align: center;
+}
+
+/* 教員一括登録ダイアログ */
+.teacher-paste-dialog-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.teacher-paste-dialog {
+    background: white;
+    border: 2px solid var(--primary-blue);
+    border-radius: 8px;
+    padding: 1.5rem;
+    z-index: 10000;
+    max-width: 500px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.teacher-paste-dialog h3 {
+    margin: 0 0 1rem 0;
+    color: var(--primary-blue);
+    font-size: 1.1rem;
+}
+
+.teacher-paste-section {
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    border-radius: 4px;
+}
+
+.teacher-paste-section.found {
+    background: #e8f5e9;
+    color: #2e7d32;
+    border-left: 4px solid #4caf50;
+}
+
+.teacher-paste-section.unknown {
+    background: #fff3e0;
+    color: #e65100;
+    border-left: 4px solid #ff9800;
+}
+
+.teacher-paste-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    cursor: pointer;
+}
+
+/* ========================================
+   ツールチップ (Tooltips)
    ======================================== */
 [data-tooltip] {
     position: relative;
@@ -2312,4 +2508,27 @@ body {
 [data-tooltip]:hover::before {
     opacity: 1;
     visibility: visible;
+}
+
+/* スケジュール表の区切り線 */
+.month-delim-row {
+    background-color: var(--neutral-100) !important;
+}
+
+.month-delim-row td {
+    font-weight: 700 !important;
+    text-align: center !important;
+    color: var(--neutral-700) !important;
+    padding: 12px !important;
+    font-size: var(--font-size-base) !important;
+    border-top: 2px solid var(--neutral-300) !important;
+    border-bottom: 2px solid var(--neutral-200) !important;
+    letter-spacing: 0.2rem;
+}
+
+.week-delim-row td {
+    border-top: 1px solid var(--neutral-200) !important;
+    height: 4px;
+    padding: 0 !important;
+    background-color: var(--neutral-50) !important;
 }

@@ -53,7 +53,9 @@ const SPECIAL_MARKS = {
     '■': '運営会議',
     '○': 'コース会議(R)',
     '△': '全日休講',
-    '□': '一般科目系会議/コース会議(H)'
+    '□': '一般科目系会議/コース会議(H)',
+    '\uD83D\uDD32': '一般科目系会議/コース会議(H)',
+    '⬜': '一般科目系会議/コース会議(H)'
 };
 
 const MARU_NUM_DICT = {
@@ -85,7 +87,7 @@ window.PERIOD_TIMES = PERIOD_TIMES;
 
 // 祝日名のリスト（イベントから除外するため）
 const HOLIDAY_NAMES = [
-    '元日', '成人の日', '建国記念の日', '天皇誕生日', '春分の日', '昭和の日',
+    '元日', '元旦', '成人の日', '建国記念の日', '天皇誕生日', '春分の日', '昭和の日',
     '憲法記念日', 'みどりの日', 'こどもの日', '海の日', '山の日', '敬老の日',
     '秋分の日', 'スポーツの日', '体育の日', '文化の日', '勤労感謝の日',
     '振替休日', '国民の休日'
@@ -306,6 +308,7 @@ function getHolidayName(date, holidaysMap) {
     const key = formatDateKey(date);
     return holidaysMap.get(key) || null;
 }
+window.getHolidayName = getHolidayName;
 
 // 祝日キャッシュ（年度ごとにキャッシュ）
 const holidayCache = new Map();
@@ -319,6 +322,31 @@ function getHolidaysForYear(year) {
     }
     return holidayCache.get(year);
 }
+window.getHolidaysForYear = getHolidaysForYear;
+
+/**
+ * 祝日冗長チェック関数（グローバル）
+ * イベント名が祝日名に関連する冗長なものか判定
+ */
+function isRedundantHoliday(eventText, date) {
+    if (!eventText) return false;
+    const holidaysMap = getHolidaysForYear(date.getFullYear());
+    const hName = getHolidayName(date, holidaysMap);
+    if (!hName) return false;
+
+    const ev = eventText.trim();
+    const hn = hName.trim();
+
+    return ev === hn || ev === '祝日' || ev === '休日' ||
+        ev.includes('(祝)') || ev.includes('（祝）') || ev.includes('【祝】') ||
+        ev.includes(hn) ||
+        (hn === '建国記念の日' && ev === '建国記念日') ||
+        (hn === 'スポーツの日' && ev === '体育の日') ||
+        (hn === '体育の日' && ev === 'スポーツの日') ||
+        (hn === '元日' && (ev.includes('元旦') || ev === '元日')) ||
+        (hn === '振替休日' && ev.includes('振替休日'));
+}
+window.isRedundantHoliday = isRedundantHoliday;
 
 // =============================
 // 初期化
@@ -1182,8 +1210,8 @@ function processWeekdayCount(value, dateObj) {
 
 function replaceSpecialMarks(text) {
     let result = text;
-    for (const [mark, label] of Object.entries(SPECIAL_MARKS)) {
-        result = result.replace(new RegExp(mark, 'g'), label);
+    for (const mark in SPECIAL_MARKS) {
+        result = result.split(mark).join(SPECIAL_MARKS[mark]);
     }
     // 丸数字も変換
     for (const [mark, num] of Object.entries(MARU_NUM_DICT)) {
@@ -1477,7 +1505,7 @@ function createDayCell(date, target, laneMap = new Map(), customLaneCount = 0) {
     if (isHolidayDay) {
         const holidayLabel = document.createElement('div');
         holidayLabel.className = 'day-holiday';
-        holidayLabel.textContent = `🎌 ${holidayName}`;
+        holidayLabel.textContent = `\uD83C\uDF8C ${holidayName}`;
         dayCell.appendChild(holidayLabel);
     }
 
@@ -1607,7 +1635,7 @@ function createDayCell(date, target, laneMap = new Map(), customLaneCount = 0) {
         if (isParticipating) eventItem.classList.add('is-participating');
 
         eventItem.innerHTML = `
-            <span class="event-text">${timeDisplay}${item.event}</span>
+            <span class="event-text">${timeDisplay}${typeof replaceSpecialMarks === 'function' ? replaceSpecialMarks(item.event) : item.event}</span>
             <button class="event-delete-btn" onclick="deleteCalendarEvent(event, 'custom', '${ov.id}', '${dateStr}')" title="削除">×</button>
         `;
 
@@ -1647,18 +1675,8 @@ function createDayCell(date, target, laneMap = new Map(), customLaneCount = 0) {
         if (!item.event || item.event.trim() === '') return;
 
         // 祝日はバッジ（右上）で表示するため、イベントリストからは除外
-        if (isHolidayDay) {
-            const ev = item.event.trim();
-            const hn = holidayName.trim();
-            const isRedundant = ev === hn || ev === '祝日' || ev === '休日' ||
-                ev.includes('(祝)') || ev.includes('（祝）') || ev.includes('【祝】') ||
-                ev.includes(hn) ||
-                (hn === '建国記念の日' && ev === '建国記念日') ||
-                (hn === 'スポーツの日' && ev === '体育の日') ||
-                (hn === '体育の日' && ev === 'スポーツの日') ||
-                (hn === '元日' && ev.includes('元旦')) ||
-                (hn === '振替休日' && ev.includes('振替休日'));
-            if (isRedundant) return;
+        if (isHolidayDay && typeof isRedundantHoliday === 'function' && isRedundantHoliday(item.event, date)) {
+            return;
         }
 
         // オーバライドチェック
@@ -1697,7 +1715,7 @@ function createDayCell(date, target, laneMap = new Map(), customLaneCount = 0) {
         if (isParticipating) eventItem.classList.add('is-participating');
 
         eventItem.innerHTML = `
-            <span class="event-text">${item.event}</span>
+            <span class="event-text">${typeof replaceSpecialMarks === 'function' ? replaceSpecialMarks(item.event) : item.event}</span>
             <button class="event-delete-btn" onclick="deleteCalendarEvent(event, 'excel', '${item.id}', '${dateStr}')" title="この日だけ削除">×</button>
         `;
 
@@ -1725,18 +1743,8 @@ function createDayCell(date, target, laneMap = new Map(), customLaneCount = 0) {
         if (!item) return;
 
         // 祝日は除外
-        if (isHolidayDay && holidayName) {
-            const ev = item.event.trim();
-            const hn = holidayName.trim();
-            const isRedundant = ev === hn || ev === '祝日' || ev === '休日' ||
-                ev.includes('(祝)') || ev.includes('（祝）') || ev.includes('【祝】') ||
-                ev.includes(hn) ||
-                (hn === '建国記念の日' && ev === '建国記念日') ||
-                (hn === 'スポーツの日' && ev === '体育の日') ||
-                (hn === '体育の日' && ev === 'スポーツの日') ||
-                (hn === '元日' && ev.includes('元旦')) ||
-                (hn === '振替休日' && ev.includes('振替休日'));
-            if (isRedundant) return;
+        if (isHolidayDay && typeof isRedundantHoliday === 'function' && isRedundantHoliday(item.event, date)) {
+            return;
         }
         let timeDisplay = '';
         let fullTimeRange = '';
@@ -2512,25 +2520,6 @@ function getAppliedScheduleData(target) {
         filtered = scheduleData.filter(item => item.type === 'student');
     }
 
-    // 祝日冗長チェック関数
-    const isRedundantHoliday = (eventText, date) => {
-        if (!eventText) return false;
-        const holidaysMap = getHolidaysForYear(date.getFullYear());
-        const hName = getHolidayName(date, holidaysMap);
-        if (!hName) return false;
-
-        const ev = eventText.trim();
-        const hn = hName.trim();
-        return ev === hn || ev === '祝日' || ev === '休日' ||
-            ev.includes('(祝)') || ev.includes('（祝）') || ev.includes('【祝】') ||
-            ev.includes(hn) ||
-            (hn === '建国記念の日' && ev === '建国記念日') ||
-            (hn === 'スポーツの日' && ev === '体育の日') ||
-            (hn === '体育の日' && ev === 'スポーツの日') ||
-            (hn === '元日' && ev.includes('元旦')) ||
-            (hn === '振替休日' && ev.includes('振替休日'));
-    };
-
     // 2. 削除・移動元の除外 & 祝日除外
     const result = filtered.filter(item => {
         const dateStr = formatDateKey(item.date);
@@ -2952,7 +2941,9 @@ function exportToCsv() {
         const startYear = getFiscalYear(startDate);
         const endYear = getFiscalYear(endDate);
         let allClassEvents = [];
-        allClassEvents = allClassEvents.concat(generateClassEvents(y, { includeExclusions: false }));
+        for (let y = startYear; y <= endYear; y++) {
+            allClassEvents = allClassEvents.concat(generateClassEvents(y, { includeExclusions: false }));
+        }
 
 
         let filteredClassEvents = allClassEvents.filter(cls => cls.date >= startDate && cls.date <= endDate);
@@ -3109,7 +3100,7 @@ function renderCachedYearList() {
                 <td class="text-center">${classDays}</td>
                 <td>
                     <button class="btn btn-outline-danger btn-sm" onclick="deleteCachedYear('${year}')" style="padding: 2px 6px;">
-                        🗑️ 削除
+                        \uD83D\uDDD1️ 削除
                     </button>
                 </td>
             </tr>
