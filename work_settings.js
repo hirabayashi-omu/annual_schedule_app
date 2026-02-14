@@ -22,14 +22,7 @@ const WORK_PERIODS = [
 
 const WEEKDAYS_SHORT = ['月', '火', '水', '木', '金'];
 
-let workSettings = {
-    spring_vac: {},
-    first_semester: {},
-    summer_vac: {},
-    second_semester: {},
-    winter_vac: {},
-    end_year_vac: {}
-};
+let workSettings = {}; // { 2026: { spring_vac: { 1: { shift: 'B' } } } }
 
 let workOverrides = {}; // { '2026-04-01': { shift: 'B' }, ... }
 
@@ -40,7 +33,15 @@ function initWorkSettings() {
     const saved = localStorage.getItem('workSettings');
     if (saved) {
         try {
-            workSettings = JSON.parse(saved);
+            const parsed = JSON.parse(saved);
+            // 互換性チェック：トップレベルが period_id の場合は古い形式（2025年度以前とみなす）
+            if (parsed.spring_vac || parsed.first_semester) {
+                const legacyYear = 2025; // 便宜上
+                workSettings = {};
+                workSettings[legacyYear] = parsed;
+            } else {
+                workSettings = parsed;
+            }
         } catch (e) {
             console.error('Failed to load workSettings:', e);
         }
@@ -55,25 +56,38 @@ function initWorkSettings() {
         }
     }
 
-    // 各期間の初期値を設定
-    WORK_PERIODS.forEach(period => {
-        if (!workSettings[period.id]) workSettings[period.id] = {};
-
-        // デフォルト値の決定：平日はB(8:45~)、休業期間はC(9:30~)
-        let defaultShift = 'B';
-        if (period.id.includes('vac')) {
-            defaultShift = 'C';
-        }
-
-        WEEKDAYS_SHORT.forEach((day, idx) => {
-            if (!workSettings[period.id][idx + 1]) {
-                workSettings[period.id][idx + 1] = { shift: defaultShift };
-            }
-        });
-    });
+    // 現在選択されている年度の初期設定を確認
+    const targetYear = typeof currentYear !== 'undefined' ? currentYear : new Date().getFullYear();
+    ensureWorkSettingsYear(targetYear);
 
     renderWorkPeriodConfig();
     if (typeof updateCalendar === 'function') updateCalendar();
+}
+
+/**
+ * 特定の年度の勤務設定が存在することを保証する
+ */
+function ensureWorkSettingsYear(year) {
+    if (!workSettings) workSettings = {};
+    if (!workSettings[year]) {
+        workSettings[year] = {};
+        WORK_PERIODS.forEach(period => {
+            workSettings[year][period.id] = {};
+            let defaultShift = period.id.includes('vac') ? 'C' : 'B';
+            WEEKDAYS_SHORT.forEach((day, idx) => {
+                workSettings[year][period.id][idx + 1] = { shift: defaultShift };
+            });
+        });
+    }
+}
+
+/**
+ * 現在の年度の勤務設定を取得
+ */
+function getCurrentWorkSettings() {
+    const targetYear = typeof currentYear !== 'undefined' ? currentYear : new Date().getFullYear();
+    ensureWorkSettingsYear(targetYear);
+    return workSettings[targetYear];
 }
 
 /**
@@ -128,7 +142,7 @@ function getOccupiedPeriods(periodId, dayNum) {
     if (typeof myClasses === 'undefined' || !myClasses) return [];
 
     let targetSemester = '';
-    if (periodId === 'first_semester' || periodId === 'spring_vac') targetSemester = 'first';
+    if (periodId === 'first_semester') targetSemester = 'first';
     if (periodId === 'second_semester') targetSemester = 'second';
 
     if (!targetSemester) return [];
@@ -214,6 +228,7 @@ function renderWorkPeriodConfig() {
 
     container.innerHTML = '';
     const vacationDates = getVacationPeriods();
+    const currentSettings = getCurrentWorkSettings();
 
     WORK_PERIODS.forEach(period => {
         const periodCard = document.createElement('div');
@@ -249,7 +264,7 @@ function renderWorkPeriodConfig() {
 
         WEEKDAYS_SHORT.forEach((dayName, idx) => {
             const dayNum = idx + 1; // 1=月, 5=金
-            const current = workSettings[period.id][dayNum] || { shift: 'B' };
+            const current = currentSettings[period.id][dayNum] || { shift: 'B' };
 
             // 授業情報の取得と推奨の計算
             const occupiedPeriods = getOccupiedPeriods(period.id, dayNum);
@@ -310,10 +325,12 @@ function renderWorkPeriodConfig() {
  * メモリ内の設定を更新（セレクトボックス変更時）
  */
 window.updateWorkSettingInMemory = function (periodId, dayNum, shift) {
-    if (!workSettings[periodId]) workSettings[periodId] = {};
-    if (!workSettings[periodId][dayNum]) workSettings[periodId][dayNum] = {};
+    const targetYear = typeof currentYear !== 'undefined' ? currentYear : new Date().getFullYear();
+    ensureWorkSettingsYear(targetYear);
+    if (!workSettings[targetYear][periodId]) workSettings[targetYear][periodId] = {};
+    if (!workSettings[targetYear][periodId][dayNum]) workSettings[targetYear][periodId][dayNum] = {};
 
-    workSettings[periodId][dayNum].shift = shift;
+    workSettings[targetYear][periodId][dayNum].shift = shift;
 
     // 「その他」の入力欄の表示切り替え
     const customDiv = document.getElementById(`custom-time-${periodId}-${dayNum}`);
@@ -329,10 +346,12 @@ window.updateWorkSettingInMemory = function (periodId, dayNum, shift) {
  * メモリ内の自由入力時間を更新
  */
 window.updateWorkTimeInMemory = function (periodId, dayNum, field, value) {
-    if (!workSettings[periodId]) workSettings[periodId] = {};
-    if (!workSettings[periodId][dayNum]) workSettings[periodId][dayNum] = {};
+    const targetYear = typeof currentYear !== 'undefined' ? currentYear : new Date().getFullYear();
+    ensureWorkSettingsYear(targetYear);
+    if (!workSettings[targetYear][periodId]) workSettings[targetYear][periodId] = {};
+    if (!workSettings[targetYear][periodId][dayNum]) workSettings[targetYear][periodId][dayNum] = {};
 
-    workSettings[periodId][dayNum][field] = value;
+    workSettings[targetYear][periodId][dayNum][field] = value;
 
     // カレンダー表示に即座に同期
     if (typeof updateCalendar === 'function') updateCalendar();
@@ -1164,7 +1183,10 @@ function getWorkTimeForDate(date, ignoreOverride = false) {
         }
     }
 
-    const config = workSettings[periodId] ? workSettings[periodId][dayNum] : null;
+    const targetYear = getFiscalYear(date);
+    const yearSettings = workSettings[targetYear] || getCurrentWorkSettings();
+
+    const config = yearSettings[periodId] ? yearSettings[periodId][dayNum] : null;
     if (!config) {
         const defaultShift = periodId.includes('vac') ? 'C' : 'B';
         return WORK_SHIFTS[defaultShift];
@@ -1368,6 +1390,12 @@ window.renderApplicationStats = function () {
                 return m === targetM;
             }
             return true;
+        });
+    } else {
+        // 'all' の場合 (年度内: 4月-3月)
+        statsData = statsData.filter(d => {
+            const date = parseDateKey(d.date);
+            return getFiscalYear(date) === currentYear;
         });
     }
 

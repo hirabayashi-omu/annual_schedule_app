@@ -16,55 +16,73 @@
 </head>
 
 <body>
-    <div class="app-container">
-        <!-- ヘッダー -->
-        <header class="app-header">
-            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                <div>
-                    <h1>&#x1F4C5; 年間行事予定表アプリ</h1>
-                    <p>学校の年間スケジュールを簡単に管理・エクスポート</p>
-                </div>
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <label for="globalYearSelect" style="color: white; font-weight: bold;">年度:</label>
-                    <select id="globalYearSelect" class="form-select"
-                        style="width: auto; padding: 5px 10px; font-weight: bold;" title="表示する年度を切り替えます">
+    <header class="app-header-compact">
+        <div class="header-content">
+            <div class="header-left">
+                <button id="menuToggleBtn" class="menu-btn" title="メニューを開く">
+                    <span class="hamburger-icon"></span>
+                </button>
+                <h1>📅 <span>年間行事予定表アプリ</span></h1>
+            </div>
+            <div class="header-right">
+                <div class="year-selector">
+                    <label for="globalYearSelect">年度:</label>
+                    <select id="globalYearSelect" class="year-select">
                         <!-- JSで生成 -->
                     </select>
                 </div>
             </div>
-        </header>
+        </div>
+    </header>
 
-        <!-- ナビゲーションツールバー -->
-        <nav class="app-toolbar">
-            <button id="navCalendarBtn" class="nav-btn active" data-tooltip="カレンダーで予定を表示">
-                <span class="nav-icon">&#x1F4C5;</span>
-                <span class="nav-label">カレンダー</span>
-            </button>
-            <button id="navImportBtn" class="nav-btn" data-tooltip="Excel読み込み・バックアップ">
-                <span class="nav-icon">&#x1F4C1;</span>
-                <span class="nav-label">ファイル操作</span>
-            </button>
-            <button id="navClassBtn" class="nav-btn" data-tooltip="自分の授業を登録・管理">
-                <span class="nav-icon">&#x1F4D6;</span>
-                <span class="nav-label">授業設定</span>
-            </button>
-            <button id="navSettingsBtn" class="nav-btn" data-tooltip="名簿や候補などの各種設定">
-                <span class="nav-icon">⚙️</span>
-                <span class="nav-label">各種設定</span>
-            </button>
-            <button id="navWorkBtn" class="nav-btn" data-tooltip="勤務時間・パターンの設定">
-                <span class="nav-icon">&#x231B;</span>
-                <span class="nav-label">勤務設定</span>
-            </button>
-            <button id="navStatsBtn" class="nav-btn" data-tooltip="勤怠・申請状況の管理">
-                <span class="nav-icon">📊</span>
-                <span class="nav-label">勤怠管理</span>
-            </button>
-            <button id="navHelpBtn" class="nav-btn" data-tooltip="使い方の説明を表示">
-                <span class="nav-icon">&#x2753;</span>
-                <span class="nav-label">使い方</span>
-            </button>
-        </nav>
+    <div class="app-container">
+
+        <!-- サイドメニュー (ドロワー) -->
+        <div id="sideDrawer" class="side-drawer">
+            <div class="drawer-header">
+                <h3>メニュー</h3>
+                <button id="closeDrawerBtn" class="close-btn">&times;</button>
+            </div>
+            <nav class="drawer-nav">
+                <button data-view="calendarView" class="drawer-item active">
+                    <span class="nav-icon">📅</span>
+                    <span class="nav-label">カレンダー</span>
+                </button>
+                <button data-view="importContainer" class="drawer-item">
+                    <span class="nav-icon">📁</span>
+                    <span class="nav-label">ファイル操作</span>
+                </button>
+                <button data-view="exportSection" class="drawer-item">
+                    <span class="nav-icon">📤</span>
+                    <span class="nav-label">エクスポート</span>
+                </button>
+                <button data-view="myClassesSection" class="drawer-item">
+                    <span class="nav-icon">📖</span>
+                    <span class="nav-label">授業設定</span>
+                </button>
+                <button data-view="settingsSection" class="drawer-item">
+                    <span class="nav-icon">⚙️</span>
+                    <span class="nav-label">各種設定</span>
+                </button>
+                <button data-view="workSection" class="drawer-item">
+                    <span class="nav-icon">⌛</span>
+                    <span class="nav-label">勤務設定</span>
+                </button>
+                <button data-view="statsView" class="drawer-item">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-label">勤怠管理</span>
+                </button>
+                <button data-view="helpSection" class="drawer-item">
+                    <span class="nav-icon">❓</span>
+                    <span class="nav-label">使い方</span>
+                </button>
+            </nav>
+            <div class="drawer-footer">
+                <p>&copy; 2026 Annual Schedule App</p>
+            </div>
+        </div>
+        <div id="drawerOverlay" class="drawer-overlay"></div>
+
 
         <!-- カレンダー表示 (デフォルト表示) -->
         <div id="calendarView">
@@ -185,209 +203,212 @@
                     </div>
                 </div>
             </section>
-
-
-
-            <!-- エクスポートセクション -->
-            <section id="exportSection" class="card hidden">
-                <div class="card-header">
-                    <div class="card-icon">&#x1F4BE;</div>
-                    <h2>エクスポート</h2>
-                </div>
-
-                <div class="export-controls"
-                    style="margin-bottom: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 8px;">
-                    <h3 style="margin-top: 0; margin-bottom: 10px; font-size: 1rem;">期間指定</h3>
-                    <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
-                        <div class="form-group" style="margin-bottom: 0;">
-                            <label for="exportStartDate" style="font-size: 0.9rem;">開始日</label>
-                            <input type="date" id="exportStartDate" class="form-input" style="padding: 5px;">
-                        </div>
-                        <span style="align-self: flex-end; margin-bottom: 5px;">～</span>
-                        <div class="form-group" style="margin-bottom: 0;">
-                            <label for="exportEndDate" style="font-size: 0.9rem;">終了日</label>
-                            <input type="date" id="exportEndDate" class="form-input" style="padding: 5px;">
-                        </div>
-                        <div class="form-group" style="margin-bottom: 0; margin-left: 10px;">
-                            <label for="exportContentSelect" style="font-size: 0.9rem;">出力内容</label>
-                            <select id="exportContentSelect" class="form-select" style="padding: 5px;">
-                                <option value="all">両方（行事＋全授業）</option>
-                                <option value="schedule_only">年間行事予定のみ</option>
-                                <option value="undergrad_only">本科授業のみ</option>
-                                <option value="advanced_only">専攻科授業のみ</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="export-section">
-                    <div class="export-card">
-                        <div class="export-icon">&#x1F4CB;</div>
-                        <h3>JSON形式</h3>
-                        <p>プログラムで処理しやすいJSON形式で出力</p>
-                        <button class="btn btn-success" id="exportJsonBtn"
-                            title="データをJSON形式でダウンロードします。他の端末への移行やシステム連携に利用できます。">
-                            <span>JSON出力</span>
-                        </button>
-                    </div>
-
-                    <div class="export-card">
-                        <div class="export-icon">&#x1F4C5;</div>
-                        <h3>ICAL形式</h3>
-                        <p>GoogleカレンダーやOutlookで利用可能</p>
-                        <button class="btn btn-warning" id="exportIcalBtn"
-                            title="カレンダー形式(iCal)で出力します。GoogleカレンダーやiPhone等で読み込めます。">
-                            <span>ICAL出力</span>
-                        </button>
-                    </div>
-
-                    <div class="export-card">
-                        <div class="export-icon">&#x1F4C4;</div>
-                        <h3>CSV形式</h3>
-                        <p>表計算ソフトで編集可能なCSV形式</p>
-                        <button class="btn btn-primary" id="exportCsvBtn" title="Excel等の表計算ソフトで編集可能な形式で出力します。">
-                            <span>CSV出力</span>
-                        </button>
-                    </div>
-                </div>
-            </section>
-
-            <!-- バックアップ/復元セクション -->
-            <section class="card">
-                <div class="card-header">
-                    <div class="card-icon">&#x1F4BE;</div>
-                    <h2>バックアップ・復元管理</h2>
-                </div>
-
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-                    <!-- バックアップ -->
-                    <div
-                        style="border: 1px solid var(--neutral-200); border-radius: 8px; padding: 15px; background: rgba(34, 197, 94, 0.05);">
-                        <h3 style="margin-top: 0; font-size: 1rem; color: var(--success-600);">&#x1F4E4; バックアップを保存</h3>
-                        <p style="font-size: 0.85rem; color: var(--neutral-600); margin: 8px 0 12px;">
-                            現在のすべてのデータをJSONファイルで保存します
-                        </p>
-                        <div class="form-group" style="margin-bottom: 8px;">
-                            <label class="form-label" for="backupTypeSelect">バックアップ対象:</label>
-                            <select id="backupTypeSelect" class="form-select" style="padding: 6px;"
-                                title="保存するデータの範囲を選択します">
-                                <option value="all">全データ（スケジュール＋授業＋設定）</option>
-                                <option value="schedule">スケジュールのみ</option>
-                                <option value="classes">授業登録のみ</option>
-                                <option value="settings">設定のみ</option>
-                            </select>
-                        </div>
-                        <div style="display: flex; gap: 10px;">
-                            <button class="btn btn-success" onclick="saveAllToLocalExplicit()"
-                                style="flex: 1; padding: 10px;" data-tooltip="編集内容をブラウザに保存">
-                                &#x1F4BE; すべて保存
-                            </button>
-                            <button class="btn btn-outline-success" onclick="downloadSelectiveBackup()"
-                                style="flex: 1; padding: 10px;" data-tooltip="JSON形式でファイル出力">
-                                &#x1F4E4; 出力
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- 復元 -->
-                    <div
-                        style="border: 1px solid var(--neutral-200); border-radius: 8px; padding: 15px; background: rgba(59, 130, 246, 0.05);">
-                        <h3 style="margin-top: 0; font-size: 1rem; color: var(--primary-600);">&#x1F4E5; バックアップから復元</h3>
-                        <p style="font-size: 0.85rem; color: var(--neutral-600); margin: 8px 0 12px;">
-                            保存したバックアップファイルを選択して復元します
-                        </p>
-                        <div class="form-group" style="margin-bottom: 8px;">
-                            <label class="form-label" for="restoreTypeSelect">復元対象:</label>
-                            <select id="restoreTypeSelect" class="form-select" style="padding: 6px;"
-                                title="復元する方法（上書きか追加か）を選択します">
-                                <option value="all">全データを復元</option>
-                                <option value="schedule">スケジュールのみ復元</option>
-                                <option value="classes">授業登録のみ復元</option>
-                                <option value="settings">設定のみ復元</option>
-                                <option value="merge">現在のデータにマージ</option>
-                            </select>
-                        </div>
-                        <button class="btn btn-primary btn-block"
-                            onclick="document.getElementById('backupFileInput').click()"
-                            style="width: 100%; padding: 10px;">
-                            &#x1F4C2; ファイルを選択
-                        </button>
-                    </div>
-                </div>
-
-                <!-- バックアップ履歴 -->
-                <div style="border-top: 1px solid var(--neutral-200); padding-top: 15px;">
-                    <h3 style="font-size: 0.95rem; margin-bottom: 12px; color: var(--neutral-700);">&#x1F4CB; バックアップ情報
-                    </h3>
-                    <div id="backupInfoContainer"
-                        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
-                        <div
-                            style="background: rgba(99, 102, 241, 0.05); padding: 12px; border-radius: 6px; border-left: 3px solid var(--primary-500);">
-                            <div style="font-size: 0.8rem; color: var(--neutral-600);">最後のバックアップ</div>
-                            <div id="lastBackupTime" style="font-weight: bold; margin-top: 4px;">未保存</div>
-                        </div>
-                        <div
-                            style="background: rgba(34, 197, 94, 0.05); padding: 12px; border-radius: 6px; border-left: 3px solid var(--success-500);">
-                            <div style="font-size: 0.8rem; color: var(--neutral-600);">スケジュール件数</div>
-                            <div id="scheduleCountInfo" style="font-weight: bold; margin-top: 4px;">0件</div>
-                        </div>
-                        <div
-                            style="background: rgba(168, 85, 247, 0.05); padding: 12px; border-radius: 6px; border-left: 3px solid var(--secondary-purple);">
-                            <div style="font-size: 0.8rem; color: var(--neutral-600);">授業登録件数</div>
-                            <div id="classesCountInfo" style="font-weight: bold; margin-top: 4px;">0件</div>
-                        </div>
-                    </div>
-                </div>
-            </section>
         </div>
 
-        <!-- 授業登録セクション (デフォルト非表示) -->
-        <section id="myClassesSection" class="card hidden">
+
+
+        <!-- エクスポートセクション -->
+        <section id="exportSection" class="card hidden">
             <div class="card-header">
-                <div class="card-icon">&#x1F4D6;</div>
-                <h2>自分の授業登録</h2>
+                <div class="card-icon">&#x1F4BE;</div>
+                <h2>エクスポート</h2>
             </div>
 
-            <!-- 時間割表 -->
-            <div class="timetable-section" style="margin-top: 0; padding-top: 0; border-top: none;">
-                <div class="timetable-header">
-                    <h3 class="form-section-title" id="timetableTitle">&#x1F4C6; あなたの時間割</h3>
-                    <div style="display: flex; gap: 10px; align-items: center;">
-                        <div class="timetable-switcher">
-                            <button class="active" onclick="switchTimetableSemester('first')"
-                                title="前期の時間割を表示します">前期</button>
-                            <button onclick="switchTimetableSemester('second')" title="後期の時間割を表示します">後期</button>
+            <div class="export-controls"
+                style="margin-bottom: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 8px;">
+                <h3 style="margin-top: 0; margin-bottom: 10px; font-size: 1rem;">期間指定</h3>
+                <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label for="exportStartDate" style="font-size: 0.9rem;">開始日</label>
+                        <input type="date" id="exportStartDate" class="form-input" style="padding: 5px;">
+                    </div>
+                    <span style="align-self: flex-end; margin-bottom: 5px;">～</span>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label for="exportEndDate" style="font-size: 0.9rem;">終了日</label>
+                        <input type="date" id="exportEndDate" class="form-input" style="padding: 5px;">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0; margin-left: 10px;">
+                        <label style="font-size: 0.9rem; display: block; margin-bottom: 5px;">出力内容</label>
+                        <div
+                            style="display: flex; gap: 12px; font-size: 0.85rem; background: white; padding: 4px 10px; border-radius: 4px; border: 1px solid var(--neutral-300);">
+                            <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;"><input
+                                    type="checkbox" id="exportAnnual" checked> 年間行事</label>
+                            <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;"><input
+                                    type="checkbox" id="exportClass" checked> 授業予定</label>
+                            <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;"><input
+                                    type="checkbox" id="exportApplied" checked> 申請予定</label>
                         </div>
                     </div>
                 </div>
-                <div class="timetable-grid" id="timetableGrid">
-                    <!-- JSで生成 -->
+            </div>
+
+            <div class="export-section">
+                <div class="export-card">
+                    <div class="export-icon">&#x1F4CB;</div>
+                    <h3>JSON形式</h3>
+                    <p>プログラムで処理しやすいJSON形式で出力</p>
+                    <button class="btn btn-success" id="exportJsonBtn"
+                        title="データをJSON形式でダウンロードします。他の端末への移行やシステム連携に利用できます。">
+                        <span>JSON出力</span>
+                    </button>
+                </div>
+
+                <div class="export-card">
+                    <div class="export-icon">&#x1F4C5;</div>
+                    <h3>ICAL形式</h3>
+                    <p>GoogleカレンダーやOutlookで利用可能</p>
+                    <button class="btn btn-warning" id="exportIcalBtn"
+                        title="カレンダー形式(iCal)で出力します。GoogleカレンダーやiPhone等で読み込めます。">
+                        <span>ICAL出力</span>
+                    </button>
+                </div>
+
+                <div class="export-card">
+                    <div class="export-icon">&#x1F4C4;</div>
+                    <h3>CSV形式</h3>
+                    <p>表計算ソフトで編集可能なCSV形式</p>
+                    <button class="btn btn-primary" id="exportCsvBtn" title="Excel等の表計算ソフトで編集可能な形式で出力します。">
+                        <span>CSV出力</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- バックアップ/復元セクション -->
+        <section class="card">
+            <div class="card-header">
+                <div class="card-icon">&#x1F4BE;</div>
+                <h2>バックアップ・復元管理</h2>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                <!-- バックアップ -->
+                <div
+                    style="border: 1px solid var(--neutral-200); border-radius: 8px; padding: 15px; background: rgba(34, 197, 94, 0.05);">
+                    <h3 style="margin-top: 0; font-size: 1rem; color: var(--success-600);">&#x1F4E4; バックアップを保存</h3>
+                    <p style="font-size: 0.85rem; color: var(--neutral-600); margin: 8px 0 12px;">
+                        現在のすべてのデータをJSONファイルで保存します
+                    </p>
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <label class="form-label" for="backupTypeSelect">バックアップ対象:</label>
+                        <select id="backupTypeSelect" class="form-select" style="padding: 6px;"
+                            title="保存するデータの範囲を選択します">
+                            <option value="all">全データ（スケジュール＋授業＋設定）</option>
+                            <option value="schedule">スケジュールのみ</option>
+                            <option value="classes">授業登録のみ</option>
+                            <option value="settings">設定のみ</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-success" onclick="saveAllToLocalExplicit()"
+                            style="flex: 1; padding: 10px;" data-tooltip="編集内容をブラウザに保存">
+                            &#x1F4BE; すべて保存
+                        </button>
+                        <button class="btn btn-outline-success" onclick="downloadSelectiveBackup()"
+                            style="flex: 1; padding: 10px;" data-tooltip="JSON形式でファイル出力">
+                            &#x1F4E4; 出力
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 復元 -->
+                <div
+                    style="border: 1px solid var(--neutral-200); border-radius: 8px; padding: 15px; background: rgba(59, 130, 246, 0.05);">
+                    <h3 style="margin-top: 0; font-size: 1rem; color: var(--primary-600);">&#x1F4E5; バックアップから復元</h3>
+                    <p style="font-size: 0.85rem; color: var(--neutral-600); margin: 8px 0 12px;">
+                        保存したバックアップファイルを選択して復元します
+                    </p>
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <label class="form-label" for="restoreTypeSelect">復元対象:</label>
+                        <select id="restoreTypeSelect" class="form-select" style="padding: 6px;"
+                            title="復元する方法（上書きか追加か）を選択します">
+                            <option value="all">全データを復元</option>
+                            <option value="schedule">スケジュールのみ復元</option>
+                            <option value="classes">授業登録のみ復元</option>
+                            <option value="settings">設定のみ復元</option>
+                            <option value="merge">現在のデータにマージ</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary btn-block"
+                        onclick="document.getElementById('backupFileInput').click()"
+                        style="width: 100%; padding: 10px;">
+                        &#x1F4C2; ファイルを選択
+                    </button>
                 </div>
             </div>
 
-            <div style="text-align: center; margin: 20px 0;">
-                <button class="btn btn-primary btn-lg" onclick="openClassInputModal()" title="新しい自コマ（自分の授業）を登録します">
-                    <span>➕ 授業を追加</span>
+            <!-- バックアップ履歴 -->
+            <div style="border-top: 1px solid var(--neutral-200); padding-top: 15px;">
+                <h3 style="font-size: 0.95rem; margin-bottom: 12px; color: var(--neutral-700);">&#x1F4CB; バックアップ情報
+                </h3>
+                <div id="backupInfoContainer"
+                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+                    <div
+                        style="background: rgba(99, 102, 241, 0.05); padding: 12px; border-radius: 6px; border-left: 3px solid var(--primary-500);">
+                        <div style="font-size: 0.8rem; color: var(--neutral-600);">最後のバックアップ</div>
+                        <div id="lastBackupTime" style="font-weight: bold; margin-top: 4px;">未保存</div>
+                    </div>
+                    <div
+                        style="background: rgba(34, 197, 94, 0.05); padding: 12px; border-radius: 6px; border-left: 3px solid var(--success-500);">
+                        <div style="font-size: 0.8rem; color: var(--neutral-600);">スケジュール件数</div>
+                        <div id="scheduleCountInfo" style="font-weight: bold; margin-top: 4px;">0件</div>
+                    </div>
+                    <div
+                        style="background: rgba(168, 85, 247, 0.05); padding: 12px; border-radius: 6px; border-left: 3px solid var(--secondary-purple);">
+                        <div style="font-size: 0.8rem; color: var(--neutral-600);">授業登録件数</div>
+                        <div id="classesCountInfo" style="font-weight: bold; margin-top: 4px;">0件</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- 授業登録セクション (デフォルト非表示) -->
+    <section id="myClassesSection" class="card hidden">
+        <div class="card-header">
+            <div class="card-icon">&#x1F4D6;</div>
+            <h2>自分の授業登録</h2>
+        </div>
+
+        <!-- 時間割表 -->
+        <div class="timetable-section" style="margin-top: 0; padding-top: 0; border-top: none;">
+            <div class="timetable-header">
+                <h3 class="form-section-title" id="timetableTitle">&#x1F4C6; あなたの時間割</h3>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <div class="timetable-switcher">
+                        <button class="active" onclick="switchTimetableSemester('first')"
+                            title="前期の時間割を表示します">前期</button>
+                        <button onclick="switchTimetableSemester('second')" title="後期の時間割を表示します">後期</button>
+                    </div>
+                </div>
+            </div>
+            <div class="timetable-grid" id="timetableGrid">
+                <!-- JSで生成 -->
+            </div>
+        </div>
+
+        <div style="text-align: center; margin: 20px 0;">
+            <button class="btn btn-primary btn-lg" onclick="openClassInputModal()" title="新しい自コマ（自分の授業）を登録します">
+                <span>➕ 授業を追加</span>
+            </button>
+        </div>
+
+        <!-- 登録済み授業リスト -->
+        <div class="registered-classes">
+            <div class="registered-header">
+                <h3>登録済み授業（<span id="classCount">0</span>件）</h3>
+                <button id="showClassScheduleBtn" class="btn btn-secondary btn-sm" title="登録した授業の年間日程を一覧で確認します">
+                    <span>&#x1F4C5; 日程表を表示</span>
+                </button>
+                <button id="showVacationCandidatesBtn" class="btn btn-success btn-sm"
+                    title="年休の候補日（予定のない営業日）を抽出して一覧表示します">
+                    <span>&#x1F3D6;️ 年休候補日を抽出</span>
                 </button>
             </div>
-
-            <!-- 登録済み授業リスト -->
-            <div class="registered-classes">
-                <div class="registered-header">
-                    <h3>登録済み授業（<span id="classCount">0</span>件）</h3>
-                    <button id="showClassScheduleBtn" class="btn btn-secondary btn-sm" title="登録した授業の年間日程を一覧で確認します">
-                        <span>&#x1F4C5; 日程表を表示</span>
-                    </button>
-                    <button id="showVacationCandidatesBtn" class="btn btn-success btn-sm"
-                        title="年休の候補日（予定のない営業日）を抽出して一覧表示します">
-                        <span>&#x1F3D6;️ 年休候補日を抽出</span>
-                    </button>
-                </div>
-                <div id="classList" class="class-list">
-                    <p class="empty-message">まだ授業が登録されていません</p>
-                </div>
+            <div id="classList" class="class-list">
+                <p class="empty-message">まだ授業が登録されていません</p>
             </div>
-    </div>
+        </div>
     </section>
 
     <!-- 各種設定セクション (デフォルト非表示) -->
@@ -530,58 +551,52 @@
         </div>
     </section>
 
-    <!-- 使い方セクション (デフォルト非表示) -->
+    <!-- ヘルプセクション -->
     <section id="helpSection" class="card hidden">
         <div class="card-header">
-            <div class="card-icon">&#x2753;</div>
-            <h2>アプリの使い方ガイド</h2>
+            <div class="card-icon">❓</div>
+            <h2>アプリの使い方ガイド & 機能詳細</h2>
         </div>
-        <div class="help-content" style="padding: 10px; line-height: 1.6;">
-            <div class="help-item" style="margin-bottom: 25px;">
-                <h3
-                    style="border-left: 4px solid var(--primary-blue); padding-left: 12px; margin-bottom: 12px; color: var(--neutral-800);">
-                    📅 カレンダー画面</h3>
-                <ul style="list-style: none; padding-left: 5px;">
-                    <li style="margin-bottom: 8px;"><strong>・行事の表示:</strong>
-                        読み込んだExcelデータが自動配置されます。ピン留め（📌）された行事は太字で強調されます。</li>
-                    <li style="margin-bottom: 8px;"><strong>・📌ピン留め操作:</strong> 行事を右クリック（スマホは長押し）で「参加/非参加」を切り替えられます。
-                    </li>
-                    <li style="margin-bottom: 8px;"><strong>・ドラッグ＆ドロップ:</strong> 予定を掴んで別の日に移動できます。</li>
-                    <li style="margin-bottom: 8px;"><strong>・休暇のヒント:</strong>
-                        自分の予定がない平日は自動で<strong>グレーアウト</strong>され、年休の相談がしやすい日として表示されます。</li>
-                </ul>
-            </div>
-
-            <div class="help-item" style="margin-bottom: 25px;">
-                <h3
-                    style="border-left: 4px solid var(--success-600); padding-left: 12px; margin-bottom: 12px; color: var(--neutral-800);">
-                    📁 ファイル操作</h3>
-                <ul style="list-style: none; padding-left: 5px;">
-                    <li style="margin-bottom: 8px;"><strong>・Excel読込:</strong> 配布された行事予定表をドラッグ＆ドロップするだけで解析されます。</li>
-                    <li style="margin-bottom: 8px;"><strong>・バックアップ:</strong> 自分で入力した授業やピンの設定をファイル(JSON)として保存・復元できます。
-                    </li>
-                    <li style="margin-bottom: 8px;"><strong>・データ管理:</strong> 年度ごとのデータを個別に削除したり、すべて初期化したりできます。</li>
-                </ul>
-            </div>
-
-            <div class="help-item" style="margin-bottom: 25px;">
-                <h3
-                    style="border-left: 4px solid var(--secondary-purple); padding-left: 12px; margin-bottom: 12px; color: var(--neutral-800);">
-                    📖 授業設定</h3>
-                <ul style="list-style: none; padding-left: 5px;">
-                    <li style="margin-bottom: 8px;"><strong>・自コマ登録:</strong> 自分の担当授業を登録すると、カレンダーに自動で表示されます。</li>
-                    <li style="margin-bottom: 8px;"><strong>・時間割自動生成:</strong> 登録した授業から、前後期の時間割が自動的に作られます。</li>
-                </ul>
-            </div>
-
-            <div class="help-item">
-                <h3
-                    style="border-left: 4px solid var(--neutral-600); padding-left: 12px; margin-bottom: 12px; color: var(--neutral-800);">
-                    ⚙️ 各種設定</h3>
-                <ul style="list-style: none; padding-left: 5px;">
-                    <li style="margin-bottom: 8px;"><strong>・教員・授業マスタ:</strong> 登録時に入力補助（サジェスト）として使われるリストを自由に編集できます。
-                    </li>
-                </ul>
+        <div class="help-content">
+            <div class="help-grid">
+                <div class="help-item">
+                    <h3>📅 カレンダーの操作</h3>
+                    <p>マウスやタッチ操作で直感的にスケジュールを管理できます。</p>
+                    <ul>
+                        <li><strong>行事クリック:</strong> 詳細の確認や編集ができます。</li>
+                        <li><strong>右クリック（長押し）:</strong> 参加/非参加の切替、イベントのコピー・移動・削除が可能です。</li>
+                        <li><strong>ドラッグ＆ドロップ:</strong> 予定を掴んで別の日付へ移動したり、コピー（Altキー併用）したりできます。</li>
+                        <li><strong>空きスペース右クリック:</strong> 年休や出張のクイック登録、オリジナル予定の追加ができます。</li>
+                    </ul>
+                </div>
+                <div class="help-item">
+                    <h3>📝 授業・名簿の登録</h3>
+                    <p>入力の手間を省くための強力な補助機能があります。</p>
+                    <ul>
+                        <li><strong>教員の割当:</strong> 授業編集画面で、教員リストからドラッグ＆ドロップで担当者を追加できます。</li>
+                        <li><strong>時間割の一括作成:</strong> 学校のExcel等から教員名リストをコピーし、本アプリの教員管理でまとめて貼り付け登録が可能です。</li>
+                        <li><strong>振替自動追従:</strong> 授業を登録しておけば、Excel取込された「曜日カウント」に従い、振替授業日にも自動で予定が表示されます。</li>
+                    </ul>
+                </div>
+                <div class="help-item">
+                    <h3>📄 対応している申請・統計</h3>
+                    <p>「勤怠管理」メニューから以下の状況を一覧・集計できます。</p>
+                    <ul>
+                        <li><strong>休暇類:</strong> 年次有給休暇（全日・半日・時間単位）、特別休暇、病気休暇など。</li>
+                        <li><strong>業務類:</strong> 出張（宿泊対応）、在宅勤務（テレワーク）、休日出勤。</li>
+                        <li><strong>振替休日:</strong> 休日出勤時の振替希望日と、その消化状況の管理。</li>
+                        <li><strong>自動提案:</strong> 授業時間に合わせて、A~Eの勤務シフトをAIが自動的に推奨します。</li>
+                    </ul>
+                </div>
+                <div class="help-item">
+                    <h3>💾 データとエクスポート</h3>
+                    <p>作成した予定を外部サービスやファイルと共有します。</p>
+                    <ul>
+                        <li><strong>iCalエクスポート:</strong> GoogleカレンダーやiPhone等にスケジュールを同期できます。</li>
+                        <li><strong>CSV出力:</strong> 期間を指定して、行事・授業・申請内容をExcel等で開ける形式で出力します。</li>
+                        <li><strong>自動保存:</strong> 入力内容はブラウザに即時保存されます。端末を替える際は「ファイル操作」からバックアップを取得してください。</li>
+                    </ul>
+                </div>
             </div>
         </div>
     </section>
@@ -1161,26 +1176,15 @@
                         <input type="checkbox" id="filterMyClasses" checked> 授業
                     </label>
                     <label style="cursor: pointer; display: flex; align-items: center; gap: 5px; margin-right: 15px;">
-                        <input type="checkbox" id="filterCustomEvents" checked> オリジナル予定
                     </label>
                 </div>
-                <div class="schedule-table-container">
-                    <table class="schedule-table">
+                <div id="classScheduleContent">
+                    <table class="schedule-table table-container manage-table">
                         <thead>
-                            <tr>
-                                <th style="width: 50px;">&#x1F4CC;</th>
-                                <th style="width: 80px;">日付</th>
-                                <th style="width: 40px;">曜</th>
-                                <th style="width: 50px;">時限</th>
-                                <th style="width: 120px;">時間</th>
-                                <th>授業名</th>
-                                <th>クラス</th>
-                                <th>場所</th>
-                                <th>備考</th>
-                            </tr>
+                            <!-- JSで動的生成 -->
                         </thead>
                         <tbody id="classScheduleBody">
-                            <!-- JSで生成 -->
+                            <!-- JSで動的生成 -->
                         </tbody>
                     </table>
                 </div>
@@ -1192,12 +1196,15 @@
                 <button id="printScheduleBtn" class="btn btn-primary">
                     <span>&#x1F5A8;️ 印刷する</span>
                 </button>
+                <button class="btn btn-outline-primary" onclick="exportToCsv()" title="現在の表示内容をCSV形式で保存します">
+                    <span>&#x1F4C4; CSV出力</span>
+                </button>
                 <button class="btn btn-secondary" onclick="closeClassScheduleModal()">閉じる</button>
             </div>
         </div>
     </div>
 
-    <button class="btn btn-secondary" onclick="closeVacationCandidateModal()">閉じる</button>
+
     </div>
     </div>
     </div>
@@ -1453,6 +1460,8 @@
             <li onclick="handleContextAction('edit')">✏️ 編集...</li>
             <li onclick="handleContextAction('delete')" style="color: var(--error-red);">&#x1F5D1;️ 削除</li>
         </ul>
+    </div>
+
     </div>
 
     <!-- メインスクリプト -->

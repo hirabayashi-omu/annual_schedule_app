@@ -588,7 +588,11 @@ function resetForm() {
     }
 
     // デフォルトに戻す
-    updateClassYearOptions(); // 今の年に戻す
+    const globalYear = document.getElementById('globalYearSelect')?.value;
+    if (document.getElementById('classYear')) {
+        document.getElementById('classYear').value = globalYear || (typeof currentYear !== 'undefined' ? currentYear : new Date().getFullYear());
+    }
+    updateClassYearOptions(); // オプションを更新
     if (document.getElementById('departmentType')) {
         document.getElementById('departmentType').value = 'teacher';
         updateGradeOptions(); // これで1年に戻るはず
@@ -1049,12 +1053,14 @@ function generateClassEvents(year, options = {}) {
 
     console.log(`generateClassEvents: sourceData.length=${sourceData.length}, myClasses.length=${myClasses.length}, classOverrides.length=${classOverrides.length}`);
 
+    // 指定された年度の授業日（weekdayCountがある日）のみを抽出
+    const classDays = sourceData.filter(item => {
+        const d = item.date instanceof Date ? item.date : new Date(item.date);
+        return item.weekdayCount && getFiscalYear(d) === year;
+    });
+
     let uniqueClassDays = [];
-
-    if (sourceData.length > 0) {
-        // 授業日（weekdayCountがある日）のみを抽出
-        const classDays = sourceData.filter(item => item.weekdayCount);
-
+    if (classDays.length > 0) {
         const dateToBestCount = new Map();
 
         classDays.forEach(item => {

@@ -853,106 +853,113 @@ window.clearScheduleData = clearScheduleData;
 // =============================
 // ナビゲーション
 // =============================
+/**
+ * サイドドロワー（ハンバーガーメニュー）の初期化
+ */
+function initSideDrawer() {
+    const menuBtn = document.getElementById('menuToggleBtn');
+    const closeBtn = document.getElementById('closeDrawerBtn');
+    const drawer = document.getElementById('sideDrawer');
+    const overlay = document.getElementById('drawerOverlay');
+
+    if (!menuBtn || !drawer || !overlay) return;
+
+    menuBtn.addEventListener('click', () => {
+        drawer.classList.add('open');
+        overlay.classList.add('visible');
+    });
+
+    const closeDrawer = () => {
+        drawer.classList.remove('open');
+        overlay.classList.remove('visible');
+    };
+
+    if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
+    if (overlay) overlay.addEventListener('click', closeDrawer);
+
+    // ドロワー内のアイテムクリックで閉じる
+    drawer.querySelectorAll('.drawer-item').forEach(item => {
+        item.addEventListener('click', closeDrawer);
+    });
+}
+
+/**
+ * ナビゲーション（表示切り替え）の初期化
+ */
 function initNavigation() {
-    const navCalendarBtn = document.getElementById('navCalendarBtn');
-    const navImportBtn = document.getElementById('navImportBtn');
-    const navClassBtn = document.getElementById('navClassBtn');
-    const navSettingsBtn = document.getElementById('navSettingsBtn');
-    const navWorkBtn = document.getElementById('navWorkBtn');
-    const navStatsBtn = document.getElementById('navStatsBtn');
-    const navHelpBtn = document.getElementById('navHelpBtn');
+    const drawerItems = document.querySelectorAll('.drawer-item');
+    const sections = {
+        'calendarView': document.getElementById('calendarView'),
+        'importContainer': document.getElementById('importContainer'),
+        'exportSection': document.getElementById('exportSection'),
+        'myClassesSection': document.getElementById('myClassesSection'),
+        'settingsSection': document.getElementById('settingsSection'),
+        'workSection': document.getElementById('workSection'),
+        'statsView': document.getElementById('statsView'),
+        'helpSection': document.getElementById('helpSection')
+    };
 
-    const calendarView = document.getElementById('calendarView');
-    const importContainer = document.getElementById('importContainer');
-    const myClassesSection = document.getElementById('myClassesSection');
-    const settingsSection = document.getElementById('settingsSection');
-    const workSection = document.getElementById('workSection');
-    const statsView = document.getElementById('statsView');
-    const helpSection = document.getElementById('helpSection');
+    function setActiveTab(targetId) {
+        // 全てのアイテムのactiveを外す
+        drawerItems.forEach(item => item.classList.remove('active'));
 
-    function setActiveTab(tab) {
-        // Reset all buttons
-        navCalendarBtn.classList.remove('active');
-        navImportBtn.classList.remove('active');
-        navClassBtn.classList.remove('active');
-        if (navSettingsBtn) navSettingsBtn.classList.remove('active');
-        if (navWorkBtn) navWorkBtn.classList.remove('active');
-        if (navStatsBtn) navStatsBtn.classList.remove('active');
-        if (navHelpBtn) navHelpBtn.classList.remove('active');
+        // ターゲットをactiveにする
+        const activeItem = Array.from(drawerItems).find(item => item.dataset.view === targetId);
+        if (activeItem) activeItem.classList.add('active');
 
-        // Hide all views
-        calendarView.classList.add('hidden');
-        importContainer.classList.add('hidden');
-        myClassesSection.classList.add('hidden');
-        if (settingsSection) settingsSection.classList.add('hidden');
-        if (workSection) workSection.classList.add('hidden');
-        if (statsView) statsView.classList.add('hidden');
-        if (helpSection) helpSection.classList.add('hidden');
+        // 全てのセクションを隠す
+        Object.values(sections).forEach(section => {
+            if (section) {
+                section.classList.add('hidden');
+                section.style.display = ''; // styleによる強制表示をリセット
+            }
+        });
 
-        // Remove direct style display manipulations if any
-        calendarView.style.display = '';
-        importContainer.style.display = '';
-        myClassesSection.style.display = '';
-        if (settingsSection) settingsSection.style.display = '';
-        if (workSection) workSection.style.display = '';
-        if (statsView) statsView.style.display = '';
-        if (helpSection) helpSection.style.display = '';
+        // ターゲットセクションを表示
+        const targetSection = sections[targetId];
+        if (targetSection) {
+            targetSection.classList.remove('hidden');
 
-        switch (tab) {
-            case 'calendar':
-                navCalendarBtn.classList.add('active');
-                calendarView.classList.remove('hidden');
-                break;
-            case 'import':
-                navImportBtn.classList.add('active');
-                importContainer.classList.remove('hidden');
-                break;
-            case 'class':
-                navClassBtn.classList.add('active');
-                myClassesSection.classList.remove('hidden');
-                break;
-            case 'settings':
-                if (navSettingsBtn) navSettingsBtn.classList.add('active');
-                if (settingsSection) settingsSection.classList.remove('hidden');
-                // 初期表示時にリストを更新
+            // 特殊処理
+            if (targetId === 'settingsSection') {
                 if (typeof renderManageTeachers === 'function') renderManageTeachers();
                 if (typeof renderManageCourses === 'function') renderManageCourses();
-                break;
-            case 'work':
-                if (navWorkBtn) navWorkBtn.classList.add('active');
-                if (workSection) workSection.classList.remove('hidden');
+            } else if (targetId === 'workSection') {
                 if (typeof renderWorkPeriodConfig === 'function') renderWorkPeriodConfig();
-                break;
-            case 'stats':
-                if (navStatsBtn) navStatsBtn.classList.add('active');
-                if (statsView) statsView.classList.remove('hidden');
+            } else if (targetId === 'statsView') {
                 if (typeof renderApplicationStats === 'function') renderApplicationStats();
-                break;
-            case 'help':
-                if (navHelpBtn) navHelpBtn.classList.add('active');
-                if (helpSection) helpSection.classList.remove('hidden');
-                break;
+            } else if (targetId === 'exportSection') {
+                updateExportDatesByFiscalYear(currentYear);
+            }
         }
     }
 
-    navCalendarBtn.addEventListener('click', () => setActiveTab('calendar'));
-    navImportBtn.addEventListener('click', () => setActiveTab('import'));
-    navClassBtn.addEventListener('click', () => setActiveTab('class'));
-    if (navSettingsBtn) {
-        navSettingsBtn.addEventListener('click', () => setActiveTab('settings'));
-    }
-    if (navWorkBtn) {
-        navWorkBtn.addEventListener('click', () => setActiveTab('work'));
-    }
-    if (navStatsBtn) {
-        navStatsBtn.addEventListener('click', () => setActiveTab('stats'));
-    }
-    if (navHelpBtn) {
-        navHelpBtn.addEventListener('click', () => setActiveTab('help'));
+    /**
+     * 年度に合わせてエクスポート期間のデフォルト値を設定
+     */
+    function updateExportDatesByFiscalYear(year) {
+        if (!year) return;
+        const start = `${year}-04-01`;
+        const end = `${year + 1}-03-31`;
+        const startInput = document.getElementById('exportStartDate');
+        const endInput = document.getElementById('exportEndDate');
+        if (startInput) startInput.value = start;
+        if (endInput) endInput.value = end;
     }
 
-    // Initialize with Calendar view
-    setActiveTab('calendar');
+    // イベントリスナー設定
+    drawerItems.forEach(item => {
+        item.addEventListener('click', () => {
+            const targetId = item.dataset.view;
+            setActiveTab(targetId);
+        });
+    });
+
+    // ドロワーの開閉初期化
+    initSideDrawer();
+
+    // 初期表示
+    setActiveTab('calendarView');
 }
 
 function initializeEventListeners() {
@@ -1934,14 +1941,18 @@ window.updateCalendar = function updateCalendar() {
                 label = `出張: ${item.tripDetails?.destination || item.location || ''}`;
                 const fmt = (dStr, tStr) => {
                     const d = parseDateKey(dStr);
-                    return `${d.getMonth() + 1}/${d.getDate()} ${tStr || '00:00'}`;
+                    return `<span>${d.getMonth() + 1}/${d.getDate()} </span><span class="time-start">${tStr || '00:00'}</span>`;
                 };
-                td = `${fmt(seg.startDate, item.startTime)} ～ ${fmt(seg.endDate, item.endTime)}`;
+                td = `${fmt(seg.startDate, item.startTime)}<span class="time-separator"> ～ </span>${fmt(seg.endDate, item.endTime)}`;
             } else {
                 if (item.isWfhCard) label = `🏠 在宅勤務`;
                 const sT = getEffectiveTime(seg, seg.segStart);
                 const eT = getEndTime(seg, seg.segEnd);
-                td = (sT !== '00:00' || eT !== '23:59') ? `${sT}-${eT}` : '';
+                if (sT !== '00:00' || eT !== '23:59') {
+                    td = `<span class="time-start">${sT}</span><span class="time-separator">-</span><span class="time-end">${eT}</span>`;
+                } else {
+                    td = '';
+                }
             }
 
             // アイコン設定: 申請済み(📄) + 重要/参加(📌)
@@ -1956,10 +1967,10 @@ window.updateCalendar = function updateCalendar() {
                 el.classList.add('not-participating');
             }
             if (isProc) {
-                el.innerHTML = `<div class="process-card-label">${icon}${label}</div>${td ? `<div class="process-card-time">${td}</div>` : ''}<button class="event-delete-btn" onclick="deleteCalendarEvent(event, '${seg.type}', '${seg.id}', '${seg.segStart}')">×</button>`;
+                el.innerHTML = `<div class="process-card-label">${icon}${label}</div>${td ? `<div class="process-card-time ${seg.type === 'myclass' ? 'mobile-time-only' : ''}">${td}</div>` : ''}<button class="event-delete-btn" onclick="deleteCalendarEvent(event, '${seg.type}', '${seg.id}', '${seg.segStart}')">×</button>`;
             } else {
                 const mark = typeof replaceSpecialMarks === 'function' ? replaceSpecialMarks(label) : label;
-                el.innerHTML = `<span class="event-text">${icon}${td ? td + ' ' : ''}${mark}</span><button class="event-delete-btn" onclick="deleteCalendarEvent(event, '${seg.type}', '${seg.id}', '${seg.segStart}')">×</button>`;
+                el.innerHTML = `<span class="event-text">${icon} ${td ? `<span class="calendar-event-time ${seg.type === 'myclass' ? 'mobile-time-only' : ''}">${td}</span> ` : ''}${mark}</span><button class="event-delete-btn" onclick="deleteCalendarEvent(event, '${seg.type}', '${seg.id}', '${seg.segStart}')">×</button>`;
             }
             el.draggable = true;
             el.dataset.type = seg.type;
@@ -2992,10 +3003,21 @@ window.getAppliedScheduleData = getAppliedScheduleData;
  * JSONエクスポート
  */
 function exportToJson() {
-    const target = document.getElementById('targetSelect').value;
-    const contentSelect = document.getElementById('exportContentSelect').value;
-    const startStr = document.getElementById('exportStartDate').value;
-    const endStr = document.getElementById('exportEndDate').value;
+    const showAnnual = document.getElementById('exportAnnual').checked;
+    const showClass = document.getElementById('exportClass').checked;
+    const showApplied = document.getElementById('exportApplied').checked;
+    const startInput = document.getElementById('exportStartDate');
+    const endInput = document.getElementById('exportEndDate');
+
+    // 未入力の場合は現在の年度で補完
+    if (!startInput.value || !endInput.value) {
+        const fiscalYear = typeof currentYear !== 'undefined' ? currentYear : new Date().getFullYear();
+        if (!startInput.value) startInput.value = `${fiscalYear}-04-01`;
+        if (!endInput.value) endInput.value = `${fiscalYear + 1}-03-31`;
+    }
+
+    const startStr = startInput.value;
+    const endStr = endInput.value;
 
     if (!startStr || !endStr) {
         alert('出力期間を指定してください。');
@@ -3006,13 +3028,14 @@ function exportToJson() {
     const endDate = new Date(endStr);
     endDate.setHours(23, 59, 59, 999);
 
-    const appliedData = getAppliedScheduleData(target);
+    const appliedData = getAppliedScheduleData('both');
     let filteredData = appliedData.filter(item => item.date >= startDate && item.date <= endDate);
 
-    // 行事予定をスキップする場合
-    if (contentSelect === 'undergrad_only' || contentSelect === 'advanced_only') {
-        filteredData = [];
-    }
+    // フィルタリング
+    filteredData = filteredData.filter(item => {
+        if (item.type === 'custom') return showApplied;
+        return showAnnual;
+    });
 
     // 祝日データの準備
     const allHolidays = new Map();
@@ -3039,7 +3062,7 @@ function exportToJson() {
     });
 
     let classData = [];
-    if (typeof generateClassEvents === 'function' && contentSelect !== 'schedule_only') {
+    if (typeof generateClassEvents === 'function' && showClass) {
         const startYear = getFiscalYear(startDate);
         const endYear = getFiscalYear(endDate);
         let allClassEvents = [];
@@ -3047,15 +3070,7 @@ function exportToJson() {
             allClassEvents = allClassEvents.concat(generateClassEvents(y, { includeExclusions: false }));
         }
 
-
         let filteredClassEvents = allClassEvents.filter(cls => cls.date >= startDate && cls.date <= endDate);
-
-        // 授業データのフィルタリング
-        if (contentSelect === 'undergrad_only') {
-            filteredClassEvents = filteredClassEvents.filter(cls => cls.departmentType === 'teacher');
-        } else if (contentSelect === 'advanced_only') {
-            filteredClassEvents = filteredClassEvents.filter(cls => cls.departmentType === 'student');
-        }
 
         classData = filteredClassEvents.map(cls => {
             const targetLabel = cls.targetType === 'grade'
@@ -3084,8 +3099,7 @@ function exportToJson() {
             exportDate: new Date().toISOString(),
             rangeStart: startStr,
             rangeEnd: endStr,
-            target: target,
-            contentType: contentSelect
+            options: { showAnnual, showClass, showApplied }
         },
         schedule: jsonData,
         myClasses: classData
@@ -3096,10 +3110,21 @@ function exportToJson() {
 }
 
 function exportToIcal() {
-    const target = document.getElementById('targetSelect').value;
-    const contentSelect = document.getElementById('exportContentSelect').value;
-    const startStr = document.getElementById('exportStartDate').value;
-    const endStr = document.getElementById('exportEndDate').value;
+    const showAnnual = document.getElementById('exportAnnual').checked;
+    const showClass = document.getElementById('exportClass').checked;
+    const showApplied = document.getElementById('exportApplied').checked;
+    const startInput = document.getElementById('exportStartDate');
+    const endInput = document.getElementById('exportEndDate');
+
+    // 未入力の場合は現在の年度で補完
+    if (!startInput.value || !endInput.value) {
+        const fiscalYear = typeof currentYear !== 'undefined' ? currentYear : new Date().getFullYear();
+        if (!startInput.value) startInput.value = `${fiscalYear}-04-01`;
+        if (!endInput.value) endInput.value = `${fiscalYear + 1}-03-31`;
+    }
+
+    const startStr = startInput.value;
+    const endStr = endInput.value;
 
     if (!startStr || !endStr) {
         alert('出力期間を指定してください。');
@@ -3110,13 +3135,14 @@ function exportToIcal() {
     const endDate = new Date(endStr);
     endDate.setHours(23, 59, 59, 999);
 
-    const appliedData = getAppliedScheduleData(target);
+    const appliedData = getAppliedScheduleData('both');
     let filteredData = appliedData.filter(item => item.date >= startDate && item.date <= endDate);
 
-    // 行事予定をスキップする場合
-    if (contentSelect === 'undergrad_only' || contentSelect === 'advanced_only') {
-        filteredData = [];
-    }
+    // フィルタリング
+    filteredData = filteredData.filter(item => {
+        if (item.type === 'custom') return showApplied;
+        return showAnnual;
+    });
 
     // ICAL形式生成
     let icalContent = [
@@ -3206,7 +3232,7 @@ function exportToIcal() {
     });
 
     // 授業データを追加
-    if (typeof generateClassEvents === 'function' && contentSelect !== 'schedule_only') {
+    if (typeof generateClassEvents === 'function' && showClass) {
         const startYear = getFiscalYear(startDate);
         const endYear = getFiscalYear(endDate);
         let allClassEvents = [];
@@ -3216,13 +3242,6 @@ function exportToIcal() {
 
 
         let filteredClassEvents = allClassEvents.filter(cls => cls.date >= startDate && cls.date <= endDate);
-
-        // 授業データのフィルタリング
-        if (contentSelect === 'undergrad_only') {
-            filteredClassEvents = filteredClassEvents.filter(cls => cls.departmentType === 'teacher');
-        } else if (contentSelect === 'advanced_only') {
-            filteredClassEvents = filteredClassEvents.filter(cls => cls.departmentType === 'student');
-        }
 
         filteredClassEvents.forEach(cls => {
             const targetLabel = cls.targetType === 'grade'
@@ -3291,10 +3310,21 @@ function exportToIcal() {
 }
 
 function exportToCsv() {
-    const target = document.getElementById('targetSelect').value;
-    const contentSelect = document.getElementById('exportContentSelect').value;
-    const startStr = document.getElementById('exportStartDate').value;
-    const endStr = document.getElementById('exportEndDate').value;
+    const showAnnual = document.getElementById('exportAnnual').checked;
+    const showClass = document.getElementById('exportClass').checked;
+    const showApplied = document.getElementById('exportApplied').checked;
+    const startInput = document.getElementById('exportStartDate');
+    const endInput = document.getElementById('exportEndDate');
+
+    // 未入力の場合は現在の年度で補完
+    if (!startInput.value || !endInput.value) {
+        const fiscalYear = typeof currentYear !== 'undefined' ? currentYear : new Date().getFullYear();
+        if (!startInput.value) startInput.value = `${fiscalYear}-04-01`;
+        if (!endInput.value) endInput.value = `${fiscalYear + 1}-03-31`;
+    }
+
+    const startStr = startInput.value;
+    const endStr = endInput.value;
 
     if (!startStr || !endStr) {
         alert('出力期間を指定してください。');
@@ -3305,13 +3335,14 @@ function exportToCsv() {
     const endDate = new Date(endStr);
     endDate.setHours(23, 59, 59, 999);
 
-    const appliedData = getAppliedScheduleData(target);
+    const appliedData = getAppliedScheduleData('both');
     let filteredData = appliedData.filter(item => item.date >= startDate && item.date <= endDate);
 
-    // 行事予定をスキップする場合
-    if (contentSelect === 'undergrad_only' || contentSelect === 'advanced_only') {
-        filteredData = [];
-    }
+    // フィルタリング
+    filteredData = filteredData.filter(item => {
+        if (item.type === 'custom') return showApplied;
+        return showAnnual;
+    });
 
     // 全ての年度の祝日を取得
     const allHolidays = new Map();
@@ -3354,7 +3385,7 @@ function exportToCsv() {
     });
 
     // 授業データを追加
-    if (typeof generateClassEvents === 'function' && contentSelect !== 'schedule_only') {
+    if (typeof generateClassEvents === 'function' && showClass) {
         const startYear = getFiscalYear(startDate);
         const endYear = getFiscalYear(endDate);
         let allClassEvents = [];
@@ -3364,13 +3395,6 @@ function exportToCsv() {
 
 
         let filteredClassEvents = allClassEvents.filter(cls => cls.date >= startDate && cls.date <= endDate);
-
-        // 授業データのフィルタリング
-        if (contentSelect === 'undergrad_only') {
-            filteredClassEvents = filteredClassEvents.filter(cls => cls.departmentType === 'teacher');
-        } else if (contentSelect === 'advanced_only') {
-            filteredClassEvents = filteredClassEvents.filter(cls => cls.departmentType === 'student');
-        }
 
         const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
 
