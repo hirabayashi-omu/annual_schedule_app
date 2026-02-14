@@ -341,6 +341,13 @@ function loadMyClasses() {
         const savedOverrides = localStorage.getItem('classOverrides');
         if (savedOverrides) {
             classOverrides = JSON.parse(savedOverrides);
+            // 日付形式の正規化 (スラッシュをハイフンに統一)
+            classOverrides = classOverrides.map(ov => {
+                if (ov.date) ov.date = ov.date.replace(/\//g, '-');
+                if (ov.startDate) ov.startDate = ov.startDate.replace(/\//g, '-');
+                if (ov.endDate) ov.endDate = ov.endDate.replace(/\//g, '-');
+                return ov;
+            });
             console.log(`loadMyClasses: ${classOverrides.length}件のオーバーライドを読み込みました`);
         } else {
             classOverrides = [];

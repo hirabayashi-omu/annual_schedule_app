@@ -529,6 +529,12 @@ body {
     opacity: 0.3;
 }
 
+.calendar-day.has-overlap {
+    border: 2px solid var(--error-red) !important;
+    background-color: rgba(225, 29, 72, 0.05) !important;
+    box-shadow: inset 0 0 0 1px var(--error-red);
+}
+
 /* 年休候補日（予定がない営業日）のグレーアウト */
 .calendar-day.vacation-candidate {
     background-color: var(--neutral-100) !important;
@@ -816,6 +822,58 @@ body {
     display: none !important;
 }
 
+/* 出張カード */
+.event-item.trip-card {
+    background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+    border: 1px solid #93c5fd;
+    color: #1e40af;
+    border-radius: var(--radius-sm);
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.1);
+    padding: 2px 6px;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.trip-time {
+    font-weight: 700;
+    margin-right: 4px;
+    font-size: 0.75rem;
+    background: rgba(255, 255, 255, 0.5);
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+.trip-dest {
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+/* 在宅勤務カード */
+.event-item.wfh-card {
+    background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+    border: 1px solid #86efac;
+    border-left: 6px solid #10b981;
+    color: #065f46;
+    border-radius: var(--radius-sm);
+    box-shadow: 0 2px 4px rgba(16, 185, 129, 0.1);
+    padding: 4px 8px;
+    font-weight: 700;
+}
+
+.event-item.wfh-card::before {
+    content: '🏠 ';
+    font-size: 0.9rem;
+}
+
+.event-item.wfh-card .resize-handle-right,
+.event-item.wfh-card::after {
+    display: none !important;
+}
+
 .event-item.teacher {
     border-left-color: var(--primary-blue);
 }
@@ -888,9 +946,62 @@ body {
     background: hsl(145, 65%, 96%);
 }
 
-/* ===========================
-   エクスポートセクション
-   =========================== */
+.badge {
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.badge-custom {
+    background: var(--primary-blue-light);
+    color: var(--primary-blue);
+}
+
+.badge-work {
+    background: var(--warning-orange-light);
+    color: var(--warning-orange);
+}
+
+.badge-leave {
+    background: #fee2e2;
+    color: #ef4444;
+}
+
+.badge-trip {
+    background: #dbeafe;
+    color: #3b82f6;
+}
+
+.badge-wfh {
+    background: #d1fae5;
+    color: #10b981;
+}
+
+.badge-shift {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.modal-footer {
+    padding: 15px 20px;
+    border-top: 1px solid var(--neutral-100);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* 統計カードのスタイル */
+.stat-card .stat-value {
+    font-size: 1.5rem;
+    color: var(--primary-blue);
+    font-weight: 700;
+}
+
+.stat-card .stat-label {
+    font-size: 0.8rem;
+    color: var(--neutral-500);
+}
 
 .export-section {
     display: grid;
@@ -1515,7 +1626,7 @@ body {
     font-weight: 600;
 }
 
-/* 繝｢繝ｼ繝繝ｫ */
+/* モーダル */
 .modal {
     position: fixed;
     top: 0;

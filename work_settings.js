@@ -353,16 +353,17 @@ window.addMinutes = function addMinutes(timeStr, minutes) {
 }
 
 /**
- * 年休カードをカレンダーに追加
+ * 年休をカレンダーに追加
  */
 window.addAnnualLeaveCard = function (dateStr, label, leaveType, hours, extra = 0) {
     const id = 'original-leave-' + Date.now();
+    const normalizedDate = dateStr.replace(/\//g, '-');
     const newEvent = {
         type: 'custom',
         id: id,
-        date: dateStr,
-        startDate: dateStr,
-        endDate: dateStr,
+        date: normalizedDate,
+        startDate: normalizedDate,
+        endDate: normalizedDate,
         action: 'add',
         data: {
             event: label,
@@ -370,7 +371,7 @@ window.addAnnualLeaveCard = function (dateStr, label, leaveType, hours, extra = 
             leaveHours: hours,
             leaveExtra: extra,
             allDay: false,
-            memo: 'オリジナルの年休カード（勤務時間と完全同期）',
+            memo: 'オリジナルの年休（勤務時間と完全同期）',
             isParticipating: true,
             color: '#ef4444',
             isLeaveCard: true
@@ -385,27 +386,24 @@ window.addAnnualLeaveCard = function (dateStr, label, leaveType, hours, extra = 
 };
 
 /**
- * 年休メニューの表示
+ * 日付セル右クリック時の操作メニューを表示
  */
-window.showAnnualLeaveMenu = function (e, dateStr) {
+window.showDayInteractionMenu = function (e, dateStr) {
     e.preventDefault();
     e.stopPropagation();
 
     // 既存のメニューがあれば削除
-    const existing = document.getElementById('annual-leave-menu');
+    const existing = document.getElementById('day-interaction-menu');
     if (existing) existing.remove();
 
     const d = parseDateKey(dateStr);
-    const workTime = getWorkTimeForDate(d);
-    if (!workTime || !workTime.start || !workTime.end) {
-        alert('この日の勤務時間が設定されていないため、年休カードを作成できません。');
-        return;
-    }
-
-    const { start, end } = workTime;
+    const weekday = d.getDay();
+    const isHolidayDay = typeof getHolidayName === 'function' && getHolidayName(d, getHolidaysForYear(d.getFullYear())) !== null;
+    const isBusinessDay = weekday !== 0 && weekday !== 6 && !isHolidayDay;
 
     const menu = document.createElement('div');
-    menu.id = 'annual-leave-menu';
+    menu.id = 'day-interaction-menu';
+    menu.className = 'context-menu'; // CSSで定義されたスタイルを利用
     menu.style.cssText = `
         position: fixed;
         top: ${e.clientY}px;
@@ -415,69 +413,36 @@ window.showAnnualLeaveMenu = function (e, dateStr) {
         box-shadow: 0 4px 15px rgba(0,0,0,0.2);
         padding: 5px;
         z-index: 6000;
-        min-width: 200px;
+        min-width: 180px;
         border: 1px solid var(--neutral-200);
-        max-height: 80vh;
-        overflow-y: auto;
+        display: block;
     `;
 
     const title = document.createElement('div');
-    title.innerHTML = `<div style="font-weight:700; color:var(--neutral-700)">${dateStr} 年休カード作成</div>
-                       <div style="font-size:0.7rem; color:var(--neutral-400)">勤務: ${start} ～ ${end}</div>`;
-    title.style.cssText = `padding: 10px 12px; font-size: 0.85rem; border-bottom: 1px solid var(--neutral-100);`;
+    title.textContent = `${dateStr} の操作`;
+    title.style.cssText = `padding: 8px 12px; font-size: 0.75rem; color: var(--neutral-500); font-weight: 700; border-bottom: 1px solid var(--neutral-100);`;
     menu.appendChild(title);
 
-    // オプション定義
-    const options = [
-        { label: '前半1時間休', type: 'early', hours: 1, base: start },
-        { label: '前半2時間休', type: 'early', hours: 2, base: start },
-        { label: '前半3時間休', type: 'early', hours: 3, base: start },
-        { label: '前半4時間休（半日）', type: 'early', hours: 4, base: start },
-        { label: '前半5時間休（45分休含）', type: 'early', hours: 5, extra: 45, base: start },
-        { label: '前半6時間休（45分休含）', type: 'early', hours: 6, extra: 45, base: start },
-        { divider: true },
-        { label: '後半1時間休', type: 'late', hours: 1, base: end },
-        { label: '後半2時間休', type: 'late', hours: 2, base: end },
-        { label: '後半3時間休', type: 'late', hours: 3, base: end },
-        { label: '後半4時間休（半日）', type: 'late', hours: 4, base: end },
-        { label: '後半5時間休（45分休含）', type: 'late', hours: 5, extra: 45, base: end },
-        { label: '後半6時間休（45分休含）', type: 'late', hours: 6, extra: 45, base: end },
-        { divider: true },
-        { label: '1日休', type: 'full', start: start, end: end }
+    const items = [
+        { label: '&#x1F343; 年休の登録...', action: () => openAnnualLeaveModal(dateStr), disabled: !isBusinessDay },
+        { label: '&#x1F4BC; 出張の登録...', action: () => openBusinessTripModal(dateStr) },
+        { label: '&#x1F3E1; 在宅勤務の登録...', action: () => openWfhModal(dateStr) },
     ];
 
-    options.forEach(opt => {
-        if (opt.divider) {
-            const hr = document.createElement('div');
-            hr.style.cssText = `height: 1px; background: var(--neutral-100); margin: 4px 0;`;
-            menu.appendChild(hr);
-            return;
+    items.forEach(item => {
+        const div = document.createElement('div');
+        div.innerHTML = item.label;
+        div.style.cssText = `padding: 10px 12px; cursor: ${item.disabled ? 'not-allowed' : 'pointer'}; border-radius: 4px; font-size: 0.9rem; transition: background 0.2s; opacity: ${item.disabled ? '0.5' : '1'};`;
+
+        if (!item.disabled) {
+            div.onmouseover = () => div.style.background = 'var(--neutral-50)';
+            div.onmouseout = () => div.style.background = 'transparent';
+            div.onclick = () => {
+                item.action();
+                menu.remove();
+            };
         }
-
-        const item = document.createElement('div');
-        item.style.cssText = `padding: 8px 12px; cursor: pointer; border-radius: 4px; font-size: 0.85rem; transition: background 0.1s; display: flex; justify-content: space-between;`;
-
-        let targetStart, targetEnd;
-        if (opt.type === 'early') {
-            targetStart = start;
-            targetEnd = addMinutes(start, opt.hours * 60 + (opt.extra || 0));
-        } else if (opt.type === 'late') {
-            targetStart = addMinutes(end, -(opt.hours * 60 + (opt.extra || 0)));
-            targetEnd = end;
-        } else {
-            targetStart = opt.start;
-            targetEnd = opt.end;
-        }
-
-        item.innerHTML = `<span>${opt.label}</span><span style="color:var(--neutral-400); font-size:0.7rem;">${targetStart}-${targetEnd}</span>`;
-        item.onmouseover = () => item.style.background = 'var(--neutral-50)';
-        item.onmouseout = () => item.style.background = 'transparent';
-        item.onclick = () => {
-            // 時間を渡すのではなく、ルール（種類と時間数）を渡して保存
-            addAnnualLeaveCard(dateStr, opt.label.split('（')[0], opt.type, opt.hours, opt.extra || 0);
-            menu.remove();
-        };
-        menu.appendChild(item);
+        menu.appendChild(div);
     });
 
     document.body.appendChild(menu);
@@ -492,6 +457,372 @@ window.showAnnualLeaveMenu = function (e, dateStr) {
         };
         document.addEventListener('click', closeMenu);
     }, 10);
+};
+
+// 互換性のために古い名前も残すか差し替える（app.jsで呼び出しているため）
+window.showAnnualLeaveMenu = window.showDayInteractionMenu;
+
+/**
+ * 指定した期間内のイベント重複をチェックする
+ */
+/**
+ * 指定した期間内のイベント重複をチェックする
+ * @param {string} startDate 'yyyy/mm/dd'
+ * @param {string} endDate 'yyyy/mm/dd'
+ * @param {Object} newEventTimes { startTime, endTime, isTrip } (新規登録する予定の時間情報)
+ */
+window.checkEventConflicts = function (startDate, endDate, newEventTimes = null) {
+    const conflicts = [];
+    const dStart = parseDateKey(startDate);
+    const dEnd = parseDateKey(endDate);
+    const curr = new Date(dStart);
+
+    while (curr <= dEnd) {
+        const dStr = formatDateKey(curr);
+
+        // 新しい予定のこの日における時間帯を決定
+        let nStart = '00:00';
+        let nEnd = '23:59';
+        if (newEventTimes) {
+            if (newEventTimes.isTrip) {
+                if (dStr === startDate) nStart = newEventTimes.startTime || '00:00';
+                if (dStr === endDate) nEnd = newEventTimes.endTime || '23:59';
+            } else {
+                nStart = newEventTimes.startTime || '00:00';
+                nEnd = newEventTimes.endTime || '23:59';
+            }
+        }
+
+        const checkOverlap = (s1, e1, s2, e2) => {
+            return s1 < e2 && s2 < e1;
+        };
+
+        // 1. 年間行事(Excel)との重複チェック
+        if (typeof scheduleData !== 'undefined') {
+            scheduleData.forEach(item => {
+                if (formatDateKey(item.date) === dStr && item.event) {
+                    // Excel行事は時間指定がない場合が多いので原則重複とするが、
+                    // もし時間があれば時間でチェックする
+                    const eStart = item.startTime || '00:00';
+                    const eEnd = item.endTime || '23:59';
+                    if (checkOverlap(nStart, nEnd, eStart, eEnd)) {
+                        conflicts.push(`${dStr}: ${item.event}`);
+                    }
+                }
+            });
+        }
+
+        // 2. 自分の授業との重複チェック
+        if (typeof getDisplayableClassesForDate === 'function') {
+            const classes = getDisplayableClassesForDate(curr, []);
+            classes.forEach(cls => {
+                const PERIOD_TIMES_LOCAL = window.PERIOD_TIMES || (typeof PERIOD_TIMES !== 'undefined' ? PERIOD_TIMES : {});
+                const pKey = cls.displayPeriod || cls.originalPeriod;
+                let times = PERIOD_TIMES_LOCAL[pKey];
+                if (!times && typeof pKey === 'string' && pKey.includes('-')) {
+                    const parts = pKey.split('-');
+                    const first = PERIOD_TIMES_LOCAL[parts[0]];
+                    const last = PERIOD_TIMES_LOCAL[parts[parts.length - 1]];
+                    if (first && last) times = { start: first.start, end: last.end };
+                }
+                const cStart = times ? times.start : '00:00';
+                const cEnd = times ? times.end : '23:59';
+
+                if (checkOverlap(nStart, nEnd, cStart, cEnd)) {
+                    conflicts.push(`${dStr}: 【授業】${cls.name} (${cls.originalPeriod}限)`);
+                }
+            });
+        }
+
+        // 3. 他のカスタム予定（年休など）との重複チェック
+        if (typeof classOverrides !== 'undefined') {
+            classOverrides.forEach(ov => {
+                if (ov.type === 'custom' && ov.action === 'add' && ov.data) {
+                    const ovStart = ov.startDate || ov.date;
+                    const ovEnd = ov.endDate || ov.date || ov.startDate;
+                    if (dStr >= ovStart && dStr <= ovEnd) {
+                        // 既存予定のこの日における時間帯
+                        let eStart = ov.data.startTime || '00:00';
+                        let eEnd = ov.data.endTime || '23:59';
+
+                        // 出張や年休の特殊な時間計算
+                        if (ov.data.isTripCard) {
+                            if (dStr !== ovStart) eStart = '00:00';
+                            if (dStr !== ovEnd) eEnd = '23:59';
+                        } else if (ov.data.isLeaveCard) {
+                            // 年休の時間は render 時のロジックと同様に算出
+                            const d = parseDateKey(dStr);
+                            const work = getWorkTimeForDate(d, true);
+                            if (work && work.start && work.end) {
+                                if (ov.data.leaveType === 'early' || ov.data.leaveType === 'full') eStart = work.start;
+                                if (ov.data.leaveType === 'late') eStart = addMinutes(work.end, -(ov.data.leaveHours * 60 + (ov.data.leaveExtra || 0)));
+                                if (ov.data.leaveType === 'late' || ov.data.leaveType === 'full') eEnd = work.end;
+                                if (ov.data.leaveType === 'early') eEnd = addMinutes(work.start, ov.data.leaveHours * 60 + (ov.data.leaveExtra || 0));
+                            }
+                        }
+
+                        if (checkOverlap(nStart, nEnd, eStart, eEnd)) {
+                            conflicts.push(`${dStr}: ${ov.data.event}`);
+                        }
+                    }
+                }
+            });
+        }
+
+        curr.setDate(curr.getDate() + 1);
+    }
+
+    return [...new Set(conflicts)];
+};
+
+/**
+ * 年休モーダルを開く
+ */
+window.openAnnualLeaveModal = function (dateStr) {
+    const d = parseDateKey(dateStr);
+    const workTime = getWorkTimeForDate(d);
+    if (!workTime || !workTime.start || !workTime.end) {
+        alert('この日の勤務時間が設定されていないため、年休を登録できません。');
+        return;
+    }
+
+    const modal = document.getElementById('annualLeaveModal');
+    document.getElementById('leaveDateLabel').textContent = `日付: ${dateStr}`;
+    document.getElementById('leaveWorkTimeLabel').textContent = `勤務時間: ${workTime.start} ～ ${workTime.end}`;
+
+    const list = document.getElementById('leaveOptionsList');
+    list.innerHTML = '';
+
+    const { start, end } = workTime;
+    const options = [
+        { label: '前半1時間休', type: 'early', hours: 1 },
+        { label: '前半2時間休', type: 'early', hours: 2 },
+        { label: '前半3時間休', type: 'early', hours: 3 },
+        { label: '前半4時間休（半日）', type: 'early', hours: 4 },
+        { label: '前半5時間休（45分休含）', type: 'early', hours: 5, extra: 45 },
+        { label: '前半6時間休（45分休含）', type: 'early', hours: 6, extra: 45 },
+        { divider: true },
+        { label: '後半1時間休', type: 'late', hours: 1 },
+        { label: '後半2時間休', type: 'late', hours: 2 },
+        { label: '後半3時間休', type: 'late', hours: 3 },
+        { label: '後半4時間休（半日）', type: 'late', hours: 4 },
+        { label: '後半5時間休（45分休含）', type: 'late', hours: 5, extra: 45 },
+        { label: '後半6時間休（45分休含）', type: 'late', hours: 6, extra: 45 },
+        { divider: true },
+        { label: '1日休', type: 'full' }
+    ];
+
+    options.forEach(opt => {
+        if (opt.divider) {
+            const hr = document.createElement('div');
+            hr.style.cssText = `height: 1px; background: var(--neutral-100); margin: 4px 0;`;
+            list.appendChild(hr);
+            return;
+        }
+
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-outline-primary';
+        btn.style.justifyContent = 'space-between';
+
+        let timeRange = '';
+        if (opt.type === 'early') {
+            timeRange = `${start}-${addMinutes(start, opt.hours * 60 + (opt.extra || 0))}`;
+        } else if (opt.type === 'late') {
+            timeRange = `${addMinutes(end, -(opt.hours * 60 + (opt.extra || 0)))}-${end}`;
+        } else {
+            timeRange = `${start}-${end}`;
+        }
+
+        btn.innerHTML = `<span>${opt.label}</span> <span style="font-size: 0.75rem; opacity: 0.7;">${timeRange}</span>`;
+        btn.onclick = () => {
+            // 重複チェック
+            const conflicts = checkEventConflicts(dateStr, dateStr, { startTime: timeRange.split('-')[0], endTime: timeRange.split('-')[1], isTrip: false });
+            if (conflicts.length > 0) {
+                if (!confirm(`以下の予定と重複していますが、登録しますか？\n\n${conflicts.join('\n')}`)) {
+                    return;
+                }
+            }
+            addAnnualLeaveCard(dateStr, opt.label.split('（')[0], opt.type, opt.hours || 0, opt.extra || 0);
+            closeAnnualLeaveModal();
+        };
+        list.appendChild(btn);
+    });
+
+    modal.classList.remove('hidden');
+};
+
+window.closeAnnualLeaveModal = function () {
+    document.getElementById('annualLeaveModal').classList.add('hidden');
+};
+
+/**
+ * 出張モーダルを開く
+ */
+window.openBusinessTripModal = function (dateStr) {
+    const modal = document.getElementById('businessTripModal');
+
+    // 値をリセット
+    const isoDate = dateStr.replace(/\//g, '-');
+    document.getElementById('tripStartDate').value = isoDate;
+    document.getElementById('tripEndDate').value = isoDate;
+    document.getElementById('tripDestination').value = '';
+    document.getElementById('tripDeparturePoint').value = 'school';
+    document.getElementById('tripArrivalPoint').value = 'home';
+
+    const d = parseDateKey(dateStr);
+    const workTime = getWorkTimeForDate(d) || { start: '08:30', end: '17:00' };
+    document.getElementById('tripDepartureTime').value = workTime.start;
+    document.getElementById('tripArrivalTime').value = workTime.end;
+
+    modal.classList.remove('hidden');
+};
+
+window.closeBusinessTripModal = function () {
+    document.getElementById('businessTripModal').classList.add('hidden');
+};
+
+window.saveBusinessTrip = function () {
+    const dest = document.getElementById('tripDestination').value;
+    const startDate = document.getElementById('tripStartDate').value;
+    const endDate = document.getElementById('tripEndDate').value;
+    const depPoint = document.getElementById('tripDeparturePoint').value;
+    const arrPoint = document.getElementById('tripArrivalPoint').value;
+    const depTime = document.getElementById('tripDepartureTime').value;
+    const arrTime = document.getElementById('tripArrivalTime').value;
+
+    if (!dest) {
+        alert('用務先を入力してください。');
+        return;
+    }
+    if (!startDate || !endDate) {
+        alert('期間を選択してください。');
+        return;
+    }
+
+    const dStart = parseDateKey(startDate);
+    const dEnd = parseDateKey(endDate);
+
+    // 日付の前後チェック
+    if (dEnd < dStart) {
+        alert('終了日が開始日より前になっています。');
+        return;
+    }
+
+    // 📌予定や授業との重複チェック
+    const conflicts = checkEventConflicts(startDate, endDate, { startTime: depTime, endTime: arrTime, isTrip: true });
+    if (conflicts.length > 0) {
+        if (!confirm(`以下の予定と重複していますが、登録しますか？\n\n${conflicts.join('\n')}`)) {
+            return;
+        }
+    }
+
+    let memo = `${dest} (${depPoint === 'school' ? '学校発' : '自宅発'} / ${arrPoint === 'school' ? '学校着' : '自宅着'})`;
+
+    const id = 'trip-' + Date.now();
+    const newEvent = {
+        type: 'custom',
+        id: id,
+        date: startDate,
+        startDate: startDate,
+        endDate: endDate,
+        action: 'add',
+        data: {
+            event: `出張: ${dest}`,
+            startTime: depTime,
+            endTime: arrTime,
+            // 期間予定の場合、時間は初日と最終日にのみ表示される（app.jsのロジック）
+            allDay: false,
+            memo: memo,
+            location: dest,
+            isParticipating: true,
+            color: '#3b82f6',
+            isTripCard: true,
+            isApplied: document.getElementById('tripApplied') ? document.getElementById('tripApplied').checked : false,
+            tripDetails: {
+                destination: dest,
+                depPoint,
+                arrPoint,
+                depTime,
+                arrTime
+            }
+        }
+    };
+
+    if (typeof classOverrides === 'undefined') window.classOverrides = [];
+    classOverrides.push(newEvent);
+
+    if (typeof saveAllToLocal === 'function') saveAllToLocal();
+    if (typeof updateCalendar === 'function') updateCalendar();
+    closeBusinessTripModal();
+};
+
+/**
+ * 在宅勤務モーダル
+ */
+let currentWfhDate = '';
+window.openWfhModal = function (dateStr) {
+    currentWfhDate = dateStr;
+    document.getElementById('wfhDateLabel').textContent = `日付: ${dateStr}`;
+    document.getElementById('wfhLocation').value = '自宅';
+    document.getElementById('wfhAllDay').checked = true;
+
+    const d = parseDateKey(dateStr);
+    const workTime = getWorkTimeForDate(d) || { start: '08:30', end: '17:00' };
+    document.getElementById('wfhStartTime').value = workTime.start;
+    document.getElementById('wfhEndTime').value = workTime.end;
+
+    toggleWfhTimeFields();
+    document.getElementById('wfhModal').classList.remove('hidden');
+};
+
+window.closeWfhModal = function () {
+    document.getElementById('wfhModal').classList.add('hidden');
+};
+
+window.toggleWfhTimeFields = function () {
+    const isAllDay = document.getElementById('wfhAllDay').checked;
+    const fields = document.getElementById('wfhTimeFields');
+    if (isAllDay) {
+        fields.classList.add('hidden');
+    } else {
+        fields.classList.remove('hidden');
+    }
+};
+
+window.saveWfh = function () {
+    const location = document.getElementById('wfhLocation').value || '自宅';
+    const allDay = document.getElementById('wfhAllDay').checked;
+    const startTime = document.getElementById('wfhStartTime').value;
+    const endTime = document.getElementById('wfhEndTime').value;
+
+    const id = 'wfh-' + Date.now();
+    const normalizedDate = currentWfhDate.replace(/\//g, '-');
+    const newEvent = {
+        type: 'custom',
+        id: id,
+        date: normalizedDate,
+        startDate: normalizedDate,
+        endDate: normalizedDate,
+        action: 'add',
+        data: {
+            event: `在宅勤務 (${location})`,
+            startTime: allDay ? null : startTime,
+            endTime: allDay ? null : endTime,
+            allDay: allDay,
+            isParticipating: true,
+            color: '#10b981',
+            isWfhCard: true,
+            isApplied: document.getElementById('wfhApplied') ? document.getElementById('wfhApplied').checked : false,
+            location: location
+        }
+    };
+
+    if (typeof classOverrides === 'undefined') window.classOverrides = [];
+    classOverrides.push(newEvent);
+
+    if (typeof saveAllToLocal === 'function') saveAllToLocal();
+    if (typeof updateCalendar === 'function') updateCalendar();
+    closeWfhModal();
 };
 
 window.saveWorkSettings = function () {
@@ -617,7 +948,7 @@ function getWorkTimeForDate(date, ignoreOverride = false) {
         const res = ov.shift === 'Other'
             ? { start: ov.start || '08:30', end: ov.end || '17:00', name: 'その他' }
             : WORK_SHIFTS[ov.shift];
-        return { ...res, isOverride: true };
+        return { ...res, isOverride: true, isApplied: !!ov.isApplied };
     }
 
     const ranges = getVacationPeriods();
@@ -657,6 +988,209 @@ function getWorkTimeForDate(date, ignoreOverride = false) {
 
     return WORK_SHIFTS[config.shift] || WORK_SHIFTS['A'];
 }
-window.getWorkTimeForDate = getWorkTimeForDate;
+/**
+ * 申請統計モーダルを開く
+ */
+window.openApplicationStatsModal = function () {
+    const btn = document.getElementById('navStatsBtn');
+    if (btn) btn.click();
+};
 
-// 初期化は app.js の loadSequence で明示的に呼び出すため、ここでは行わない
+window.closeApplicationStatsModal = function () {
+    // モーダルではなくなったので何もしない、またはカレンダーに戻る
+    const btn = document.getElementById('navCalendarBtn');
+    if (btn) btn.click();
+};
+
+window.renderApplicationStats = function () {
+    const body = document.getElementById('applicationStatsBody');
+    body.innerHTML = '';
+
+    let leaveTotalMinutes = 0;
+    let tripCount = 0;
+    let wfhCount = 0;
+    let shiftChangeCount = 0;
+
+    const statsData = [];
+
+    // 1. 年休・出張・在宅勤務 (classOverrides)
+    if (typeof classOverrides !== 'undefined') {
+        classOverrides.forEach(ov => {
+            if (ov.type === 'custom' && ov.action === 'add' && ov.data) {
+                const item = ov.data;
+                let type = '';
+                let content = item.event;
+                let condition = '';
+
+                let type_class = '';
+                if (item.isLeaveCard) {
+                    type = '年休';
+                    type_class = 'leave';
+                    const mins = (item.leaveHours || 0) * 60 + (item.leaveExtra || 0);
+                    leaveTotalMinutes += mins;
+                    condition = `${item.leaveHours}時間${item.leaveExtra ? item.leaveExtra + '分' : ''}`;
+                } else if (item.isTripCard) {
+                    type = '出張';
+                    type_class = 'trip';
+                    tripCount++;
+                    condition = `${item.startTime || ''}～${item.endTime || ''}`;
+                    content = `${item.tripDetails?.destination || item.location || '不明'}`;
+                } else if (item.isWfhCard) {
+                    type = '在宅勤務';
+                    type_class = 'wfh';
+                    wfhCount++;
+                    condition = '終日';
+                } else {
+                    return; // その他カスタム予定は除外
+                }
+
+                statsData.push({
+                    date: ov.date,
+                    type,
+                    type_class,
+                    content,
+                    condition,
+                    id: ov.id,
+                    isApplied: !!item.isApplied,
+                    source: 'custom'
+                });
+            }
+        });
+    }
+
+    // 2. 勤務パターン変更 (workOverrides)
+    if (typeof workOverrides !== 'undefined') {
+        Object.entries(workOverrides).forEach(([dateStr, ov]) => {
+            shiftChangeCount++;
+            let shiftName = ov.shift;
+            if (shiftName === 'Other') shiftName = `その他 (${ov.start}-${ov.end})`;
+            else if (WORK_SHIFTS[shiftName]) shiftName = WORK_SHIFTS[shiftName].name;
+
+            statsData.push({
+                date: dateStr,
+                type: '勤務変更',
+                type_class: 'shift',
+                content: `区分変更: ${shiftName}`,
+                condition: '-',
+                id: dateStr,
+                isApplied: !!ov.isApplied,
+                source: 'work'
+            });
+        });
+    }
+
+    // ソート（日付順）
+    statsData.sort((a, b) => a.date.localeCompare(b.date));
+
+    // 集計表示の更新
+    document.getElementById('statLeaveTotal').textContent = `${(leaveTotalMinutes / 60).toFixed(1)}h`;
+    document.getElementById('statTripTotal').textContent = `${tripCount}回`;
+    document.getElementById('statWfhTotal').textContent = `${wfhCount}日`;
+    document.getElementById('statShiftChangeTotal').textContent = `${shiftChangeCount}回`;
+
+    // テーブル描画
+    statsData.forEach(item => {
+        const tr = document.createElement('tr');
+        const appliedState = item.isApplied ?
+            '<span style="color: var(--success-600); font-weight: bold;">📄 申請済み</span>' :
+            '<span style="color: var(--neutral-400);">未申請</span>';
+
+        tr.innerHTML = `
+            <td>${item.date}</td>
+            <td><span class="badge badge-${item.type_class}">${item.type}</span></td>
+            <td>${item.content}</td>
+            <td>${item.condition}</td>
+            <td>${appliedState}</td>
+            <td>
+                <div style="display: flex; gap: 5px;">
+                    <button class="btn btn-outline-primary btn-sm" onclick="toggleApplicationAppliedStatus('${item.source}', '${item.id}', ${!item.isApplied})" title="申請状況を切り替え">
+                        ${item.isApplied ? '未申請へ' : '申請済みへ'}
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" onclick="deleteApplicationItem('${item.source}', '${item.id}')">削除</button>
+                </div>
+            </td>
+        `;
+        body.appendChild(tr);
+    });
+
+    if (statsData.length === 0) {
+        body.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px; color: var(--neutral-400);">対象の申請データはありません</td></tr>';
+    }
+};
+
+window.deleteApplicationItem = function (source, id) {
+    if (!confirm('この申請データを削除しますか？')) return;
+
+    if (source === 'custom') {
+        const index = classOverrides.findIndex(ov => String(ov.id) === String(id));
+        if (index !== -1) classOverrides.splice(index, 1);
+    } else if (source === 'work') {
+        delete workOverrides[id];
+    }
+
+    if (typeof saveAllToLocal === 'function') saveAllToLocal();
+    if (typeof updateCalendar === 'function') updateCalendar();
+    renderApplicationStats();
+};
+
+window.toggleApplicationAppliedStatus = function (source, id, newStatus) {
+    if (source === 'custom') {
+        const ov = classOverrides.find(ov => String(ov.id) === String(id));
+        if (ov && ov.data) {
+            ov.data.isApplied = newStatus;
+        }
+    } else if (source === 'work') {
+        if (workOverrides[id]) {
+            workOverrides[id].isApplied = newStatus;
+        }
+    }
+
+    if (typeof saveAllToLocal === 'function') saveAllToLocal();
+    if (typeof updateCalendar === 'function') updateCalendar();
+    renderApplicationStats();
+};
+
+window.exportApplicationStatsCsv = function () {
+    // データの収集（renderApplicationStats と同様）
+    const statsData = [];
+    if (typeof classOverrides !== 'undefined') {
+        classOverrides.forEach(ov => {
+            if (ov.type === 'custom' && ov.action === 'add' && ov.data) {
+                const item = ov.data;
+                if (item.isLeaveCard) statsData.push({ date: ov.date, type: '年休', content: item.event, condition: `${item.leaveHours}h${item.leaveExtra}m` });
+                else if (item.isTripCard) statsData.push({ date: ov.date, type: '出張', content: item.tripDetails?.destination || item.location, condition: `${item.startTime}-${item.endTime}` });
+                else if (item.isWfhCard) statsData.push({ date: ov.date, type: '在宅勤務', content: '在宅勤務', condition: '終日' });
+            }
+        });
+    }
+    if (typeof workOverrides !== 'undefined') {
+        Object.entries(workOverrides).forEach(([dateStr, ov]) => {
+            statsData.push({ date: dateStr, type: '勤務変更', content: ov.shift, condition: '-' });
+        });
+    }
+
+    statsData.sort((a, b) => a.date.localeCompare(b.date));
+
+    let csv = '日付,種別,内容/用務先,時間/条件\n';
+    statsData.forEach(row => {
+        csv += `"${row.date}","${row.type}","${row.content}","${row.condition}"\n`;
+    });
+
+    const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+    const blob = new Blob([bom, csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `申請・統計リスト_${new Date().toLocaleDateString()}.csv`;
+    link.click();
+};
+
+// ナビゲーションボタンのイベント設定（app.jsの初期化時に呼ばれることを期待するが、ここで保険で定義）
+document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('navStatsBtn');
+    if (btn) {
+        btn.onclick = () => {
+            // 他のセクションを隠す必要があればここで（現状はモーダルなので開くだけ）
+            openApplicationStatsModal();
+        };
+    }
+});
