@@ -68,45 +68,39 @@
 
         <!-- カレンダー表示 (デフォルト表示) -->
         <div id="calendarView">
-            <!-- フィルター＆コントロール -->
-            <section id="controlsSection" class="card">
-                <div class="card-header">
-                    <div class="card-icon">⚙️</div>
-                    <h2>表示設定</h2>
-                </div>
-
-                <div class="controls-grid">
-                    <div class="control-group">
-                        <label class="control-label" for="targetSelect">表示対象</label>
-                        <select id="targetSelect" class="control-select" title="カレンダーに表示する対象を選択します（本科教員向け/専攻科学生向け）">
-                            <option value="teacher">本科用</option>
-                            <option value="student">専攻科用</option>
-                            <option value="both">両方</option>
-                        </select>
-                    </div>
-
-
-
-                    <div class="control-group">
-                        <label class="control-label" for="monthSelect">月</label>
-                        <select id="monthSelect" class="control-select" title="表示する月を直接選択します"></select>
-                    </div>
-
-
-                </div>
-            </section>
-
             <!-- カレンダー本体 -->
             <section id="calendarSection" class="card">
-                <div class="card-header">
-                    <div class="card-icon">&#x1F4C6;</div>
-                    <h2>カレンダー表示</h2>
-                </div>
+                <div class="calendar-header"
+                    style="display: flex; gap: 15px; align-items: center; justify-content: space-between; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <button class="btn btn-secondary btn-sm" id="prevMonthBtn" title="前の月に移動します">◀</button>
+                        <button class="btn btn-primary btn-today btn-sm" id="todayBtn" title="今日の月へ移動し、ハイライト表示します"
+                            style="font-weight: 700;">今日</button>
+                        <button class="btn btn-secondary btn-sm" id="nextMonthBtn" title="次の月に移動します">▶</button>
+                    </div>
 
-                <div class="calendar-header">
-                    <button class="btn btn-secondary" id="prevMonthBtn" title="前の月に移動します">◀ 前月</button>
-                    <h3 class="calendar-title" id="calendarTitle">2026年 4月</h3>
-                    <button class="btn btn-secondary" id="nextMonthBtn" title="次の月に移動します">次月 ▶</button>
+                    <h3 class="calendar-title" id="calendarTitle"
+                        style="margin: 0; flex: 1; text-align: center; min-width: 150px;">2026年 4月</h3>
+
+                    <div
+                        style="display: flex; align-items: center; gap: 12px; background: var(--neutral-50); padding: 5px 12px; border-radius: var(--radius-md); border: 1px solid var(--neutral-200);">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <label for="monthSelect"
+                                style="font-size: 0.8rem; font-weight: 700; color: var(--neutral-600); white-space: nowrap;">表示月:</label>
+                            <select id="monthSelect" class="control-select"
+                                style="padding: 3px 6px; font-size: 0.85rem; width: auto; height: auto; border-color: var(--neutral-300);"></select>
+                        </div>
+                        <div style="height: 15px; width: 1px; background: var(--neutral-300);"></div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <label for="targetSelect"
+                                style="font-size: 0.8rem; font-weight: 700; color: var(--neutral-600); white-space: nowrap;">曜日カウント:</label>
+                            <select id="targetSelect" class="control-select"
+                                style="padding: 3px 6px; font-size: 0.85rem; width: auto; height: auto; border-color: var(--neutral-300);">
+                                <option value="both">バッチあり</option>
+                                <option value="teacher">バッチなし</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="calendar-grid" id="calendarGrid">
@@ -600,10 +594,10 @@
         </div>
         <div class="card-body" style="padding: 20px;">
             <div class="stats-summary"
-                style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 30px;">
+                style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; margin-bottom: 30px;">
                 <div class="stat-card">
-                    <div class="stat-label">年休合計</div>
-                    <div id="statLeaveTotal" class="stat-value">0h</div>
+                    <div class="stat-label">年休合計(推計)</div>
+                    <div id="statLeaveTotal" class="stat-value" style="font-size: 1.2rem;">0日分</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-label">出張回数</div>
@@ -614,27 +608,79 @@
                     <div id="statWfhTotal" class="stat-value">0日</div>
                 </div>
                 <div class="stat-card">
+                    <div class="stat-label">休日出勤</div>
+                    <div id="statHolidayWorkTotal" class="stat-value">0回</div>
+                </div>
+                <div class="stat-card">
                     <div class="stat-label">パターン変更</div>
                     <div id="statShiftChangeTotal" class="stat-value">0回</div>
                 </div>
             </div>
 
-            <div class="table-actions" style="margin-bottom: 15px; display: flex; justify-content: flex-end;">
-                <button class="btn btn-outline-primary" onclick="exportApplicationStatsCsv()">
-                    <span>📂 CSV出力</span>
-                </button>
+            <div class="stats-filters"
+                style="margin-bottom: 20px; display: flex; gap: 15px; align-items: center; flex-wrap: wrap; background: var(--neutral-50); padding: 15px; border-radius: 8px; border: 1px solid var(--neutral-200);">
+                <div class="filter-group">
+                    <label for="statsFilterPeriod" style="font-weight: 600; margin-right: 8px; font-size: 0.9rem;">📅
+                        表示期間:</label>
+                    <select id="statsFilterPeriod" class="form-select" onchange="renderApplicationStats()"
+                        style="width: auto; padding: 5px 10px; font-size: 0.9rem;">
+                        <option value="calendar_year" selected>年休集計期間 (1月-12月)</option>
+                        <option value="all">全期間 (年度内: 4月-3月)</option>
+                        <optgroup label="月別 (カレンダー年)">
+                            <option value="month-1">1月</option>
+                            <option value="month-2">2月</option>
+                            <option value="month-3">3月</option>
+                            <option value="month-4">4月</option>
+                            <option value="month-5">5月</option>
+                            <option value="month-6">6月</option>
+                            <option value="month-7">7月</option>
+                            <option value="month-8">8月</option>
+                            <option value="month-9">9月</option>
+                            <option value="month-10">10月</option>
+                            <option value="month-11">11月</option>
+                            <option value="month-12">12月</option>
+                        </optgroup>
+                        <optgroup label="学期・四半期">
+                            <option value="first_half">前期 (4月-9月)</option>
+                            <option value="second_half">後期 (10月-3月)</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="statsFilterType" style="font-weight: 600; margin-right: 8px; font-size: 0.9rem;">🔍
+                        種別:</label>
+                    <select id="statsFilterType" class="form-select" onchange="renderApplicationStats()"
+                        style="width: auto; padding: 5px 10px; font-size: 0.9rem;">
+                        <option value="all">すべて</option>
+                        <option value="leave">年休</option>
+                        <option value="trip">出張</option>
+                        <option value="wfh">在宅勤務</option>
+                        <option value="holiday-work">休日出勤</option>
+                        <option value="shift">勤務変更</option>
+                    </select>
+                </div>
+                <div style="flex: 1;"></div>
+                <div class="table-actions">
+                    <button class="btn btn-outline-primary" onclick="exportApplicationStatsCsv()">
+                        <span>📂 CSV出力</span>
+                    </button>
+                </div>
             </div>
 
             <div class="table-container">
                 <table class="manage-table">
                     <thead>
                         <tr>
-                            <th style="width: 120px;">日付</th>
-                            <th style="width: 100px;">種類</th>
-                            <th>内容 / 用務先</th>
-                            <th style="width: 150px;">時間 / 条件</th>
-                            <th style="width: 100px;">申請状況</th>
-                            <th style="width: 120px;">操作</th>
+                            <th style="width: 120px; cursor: pointer;" onclick="sortApplicationStats('date')">日付 <span
+                                    id="sortIconStatsDate">⇅</span></th>
+                            <th style="width: 100px; cursor: pointer;" onclick="sortApplicationStats('type')">種類 <span
+                                    id="sortIconStatsType">⇅</span></th>
+                            <th style="width: 200px;">内容 / 用務先</th>
+                            <th>時間 / 条件</th>
+                            <th style="width: 120px; cursor: pointer;" onclick="sortApplicationStats('status')">申請状況
+                                <span id="sortIconStatsStatus">⇅</span>
+                            </th>
+                            <th style="width: 180px;">操作</th>
                         </tr>
                     </thead>
                     <tbody id="applicationStatsBody">
@@ -948,6 +994,28 @@
                         </div>
                     </div>
 
+                    <div id="quickEditDateRangeFields" class="hidden"
+                        style="padding: 12px; background: var(--neutral-50); border-radius: 8px; margin-bottom: 20px; border: 1px solid var(--neutral-100);">
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            <div
+                                style="display: grid; grid-template-columns: auto 1fr 120px; align-items: center; gap: 10px;">
+                                <span style="font-size: 0.85rem; font-weight: 600; width: 40px;">開始:</span>
+                                <input type="date" id="quickEditStartDate" class="form-input" style="padding: 5px;">
+                                <div id="quickEditStartTimeWrapper">
+                                    <input type="time" id="quickEditStartTime" class="form-input" style="padding: 5px;">
+                                </div>
+                            </div>
+                            <div
+                                style="display: grid; grid-template-columns: auto 1fr 120px; align-items: center; gap: 10px;">
+                                <span style="font-size: 0.85rem; font-weight: 600; width: 40px;">終了:</span>
+                                <input type="date" id="quickEditEndDate" class="form-input" style="padding: 5px;">
+                                <div id="quickEditEndTimeWrapper">
+                                    <input type="time" id="quickEditEndTime" class="form-input" style="padding: 5px;">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div id="quickEditTimeFields" class="hidden">
                         <div id="quickEditClassOnlyFields" class="hidden">
                             <div class="form-group" style="margin-bottom: 15px;">
@@ -969,14 +1037,18 @@
                             </div>
                         </div>
 
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                        <!-- 単一日の時刻（quickEditDateRangeFieldsが隠れている時に使用） -->
+                        <div id="quickEditSingleTimeFields"
+                            style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
                             <div class="form-group">
-                                <label for="quickEditStartTime">開始時刻</label>
-                                <input type="time" id="quickEditStartTime" class="form-input">
+                                <label for="quickEditStartTime_Single">開始時刻</label>
+                                <input type="time" id="quickEditStartTime_Single" class="form-input"
+                                    oninput="syncQuickTime(this, 'start')">
                             </div>
                             <div class="form-group">
-                                <label for="quickEditEndTime">終了時刻</label>
-                                <input type="time" id="quickEditEndTime" class="form-input">
+                                <label for="quickEditEndTime_Single">終了時刻</label>
+                                <input type="time" id="quickEditEndTime_Single" class="form-input"
+                                    oninput="syncQuickTime(this, 'end')">
                             </div>
                         </div>
                     </div>
@@ -1165,12 +1237,27 @@
                 <button class="close-modal-btn" onclick="closeBusinessTripModal()">&times;</button>
             </div>
             <div class="modal-body">
-                <div class="form-group">
-                    <label>期間 <span class="required">*</span></label>
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <input type="date" id="tripStartDate" class="form-input">
-                        <span>～</span>
-                        <input type="date" id="tripEndDate" class="form-input">
+                <div class="form-group"
+                    style="padding: 15px; background: var(--neutral-50); border-radius: 8px; border: 1px solid var(--neutral-100); margin-bottom: 20px;">
+                    <label
+                        style="color: var(--primary-600); font-weight: 700; margin-bottom: 12px; display: block; font-size: 0.95rem;">期間設定</label>
+
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <!-- 出発 -->
+                        <div
+                            style="display: grid; grid-template-columns: auto 1fr 120px; align-items: center; gap: 10px;">
+                            <span style="font-weight: 600; font-size: 0.85rem; width: 40px;">出発:</span>
+                            <input type="date" id="tripStartDate" class="form-input" style="padding: 6px;">
+                            <input type="time" id="tripDepartureTime" class="form-input" style="padding: 6px;">
+                        </div>
+
+                        <!-- 到着 -->
+                        <div
+                            style="display: grid; grid-template-columns: auto 1fr 120px; align-items: center; gap: 10px;">
+                            <span style="font-weight: 600; font-size: 0.85rem; width: 40px;">帰着:</span>
+                            <input type="date" id="tripEndDate" class="form-input" style="padding: 6px;">
+                            <input type="time" id="tripArrivalTime" class="form-input" style="padding: 6px;">
+                        </div>
                     </div>
                 </div>
 
@@ -1179,42 +1266,24 @@
                     <input type="text" id="tripDestination" class="form-input" placeholder="例：東京大学">
                 </div>
 
-                <div class="form-group">
-                    <label>出発条件</label>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                        <div>
-                            <label style="font-size: 0.8rem; color: var(--neutral-500);">出発地</label>
-                            <select id="tripDeparturePoint" class="form-select">
-                                <option value="school">学校発</option>
-                                <option value="home">自宅発</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label style="font-size: 0.8rem; color: var(--neutral-500);">出発時刻 <span
-                                    class="required">*</span></label>
-                            <input type="time" id="tripDepartureTime" class="form-input">
-                        </div>
+                <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div>
+                        <label style="font-size: 0.85rem; font-weight: 600;">出発地</label>
+                        <select id="tripDeparturePoint" class="form-select" style="padding: 6px;">
+                            <option value="school">学校発</option>
+                            <option value="home">自宅発</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size: 0.85rem; font-weight: 600;">帰先</label>
+                        <select id="tripArrivalPoint" class="form-select" style="padding: 6px;">
+                            <option value="home">自宅着</option>
+                            <option value="school">学校着</option>
+                        </select>
                     </div>
                 </div>
-
-                <div class="form-group">
-                    <label>帰還条件</label>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                        <div>
-                            <label style="font-size: 0.8rem; color: var(--neutral-500);">帰先</label>
-                            <select id="tripArrivalPoint" class="form-select">
-                                <option value="home">自宅着</option>
-                                <option value="school">学校着</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label style="font-size: 0.8rem; color: var(--neutral-500);">学校到着時刻</label>
-                            <input type="time" id="tripArrivalTime" class="form-input">
-                        </div>
-                    </div>
-                    <p style="font-size: 0.75rem; color: var(--neutral-400); margin-top: 5px;">※
-                        学校発/学校着の場合は、指定時刻まで/以降が通常勤務となります。</p>
-                </div>
+                <p style="font-size: 0.75rem; color: var(--neutral-400); margin-top: 5px;">※
+                    学校発/学校着の場合は、指定時刻まで/以降が通常勤務となります。</p>
                 <div class="form-group"
                     style="padding: 0 5px; margin-top: 15px; border-top: 1px solid var(--neutral-100); padding-top: 15px;">
                     <label style="flex-direction: row; align-items: center; gap: 8px; display: flex; cursor: pointer;">
@@ -1270,6 +1339,60 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeWfhModal()">キャンセル</button>
                 <button class="btn btn-primary" onclick="saveWfh()">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 休日出勤モーダル -->
+    <div id="holidayWorkModal" class="modal hidden">
+        <div class="modal-content" style="max-width: 550px;">
+            <div class="modal-header">
+                <h2>&#x1F4BC; 休日出勤の登録</h2>
+                <button class="close-modal-btn" onclick="closeHolidayWorkModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="holidayWorkDateLabel"
+                    style="font-weight: 700; margin-bottom: 15px; color: var(--neutral-600);">日付: 2026/02/14</div>
+
+                <div class="form-group">
+                    <label>時間範囲 <span class="required">*</span></label>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <input type="time" id="holidayWorkStartTime" class="form-input" value="09:00">
+                        <span>～</span>
+                        <input type="time" id="holidayWorkEndTime" class="form-input" value="17:00">
+                    </div>
+                    <p style="font-size: 0.75rem; color: var(--neutral-500); margin-top: 5px;">※
+                        4時間以上従事する場合、45分の休憩が自動算出されます。</p>
+                </div>
+
+                <div class="form-group">
+                    <label for="holidayWorkContent">業務内容 <span class="required">*</span></label>
+                    <input type="text" id="holidayWorkContent" class="form-input" placeholder="例：オープンキャンパス対応">
+                </div>
+
+                <div class="form-group">
+                    <label>振替希望（任意入力）</label>
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                        <input type="date" id="holidayWorkSubstituteDate" class="form-input">
+                        <select id="holidayWorkSubstituteType" class="form-select" style="width: auto;">
+                            <option value="full">全日</option>
+                            <option value="early">半日（前半）</option>
+                            <option value="late">半日（後半）</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group"
+                    style="padding: 0 5px; margin-top: 15px; border-top: 1px solid var(--neutral-100); padding-top: 15px;">
+                    <label style="flex-direction: row; align-items: center; gap: 8px; display: flex; cursor: pointer;">
+                        <input type="checkbox" id="holidayWorkApplied">
+                        <span style="font-weight: 500;">📄 事務担当へ申請済み</span>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeHolidayWorkModal()">キャンセル</button>
+                <button class="btn btn-primary" onclick="saveHolidayWork()">OK</button>
             </div>
         </div>
     </div>

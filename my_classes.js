@@ -1157,7 +1157,6 @@ function generateClassEvents(year, options = {}) {
                     ov.type === 'myclass' &&
                     ov.date === dateStrKey &&
                     ov.action === 'move' &&
-                    ov.data &&  // 「移動済み（データあり）」の記録
                     String(ov.period) === String(schedule.period)
                 );
 
@@ -1484,7 +1483,7 @@ window.getDisplayableClassesForDate = function (date, dayEvents) {
             );
             const isMoved = classOverrides.some(ov =>
                 String(ov.id) === String(cls.id) && ov.type === 'myclass' &&
-                ov.date === dateStr && ov.action === 'move' && ov.data && String(ov.period) === String(schedule.period)
+                ov.date === dateStr && ov.action === 'move' && String(ov.period) === String(schedule.period)
             );
             if (isExcluded || isMoved) return;
 

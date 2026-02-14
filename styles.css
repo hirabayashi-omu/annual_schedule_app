@@ -456,47 +456,145 @@ body {
 .calendar-grid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    gap: var(--spacing-sm);
+    /* grid-template-rows は JS で動的に生成される */
+    gap: 0;
     margin-bottom: var(--spacing-xl);
+    border-top: 1px solid var(--neutral-200);
+    border-left: 1px solid var(--neutral-200);
+    background: white;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    position: relative;
 }
 
 .calendar-day-header {
-    padding: var(--spacing-md);
+    background: var(--neutral-50);
+    padding: var(--spacing-sm);
     text-align: center;
-    font-weight: 600;
-    color: var(--neutral-700);
-    background: var(--neutral-100);
-    border-radius: var(--radius-md);
+    font-weight: 700;
+    font-size: var(--font-size-sm);
+    color: var(--neutral-600);
+    border-right: 1px solid var(--neutral-200);
+    border-bottom: 2px solid var(--neutral-300);
+    z-index: 5;
+    position: sticky;
+    top: 0;
 }
 
 .calendar-day-header.saturday {
     color: var(--primary-blue);
-    background: var(--primary-blue-light);
 }
 
 .calendar-day-header.sunday {
     color: var(--error-red);
-    background: hsl(0, 85%, 96%);
 }
 
+/* 旧構成は非表示 */
 .calendar-day {
-    min-height: 120px;
-    padding: var(--spacing-sm);
-    background: white;
-    border: 1px solid var(--neutral-200);
-    border-radius: var(--radius-md);
-    transition: all var(--transition-fast);
-    cursor: pointer;
-    position: relative;
-    /* 蟄占ｦ∫ｴ縺ｮ邨ｶ蟇ｾ驟咲ｽｮ縺ｮ縺溘ａ */
-    display: flex;
-    flex-direction: column;
+    display: none;
 }
 
-.calendar-day:hover {
-    border-color: var(--primary-blue);
-    box-shadow: var(--shadow-md);
-    transform: translateY(-2px);
+/* カレンダー背景(セル) */
+.calendar-day-bg {
+    background-color: white;
+    background-image: radial-gradient(var(--neutral-200) 1px, transparent 1px);
+    background-size: 10px 10px;
+    border-right: 1px solid var(--neutral-300);
+    border-bottom: 1px solid var(--neutral-300);
+    position: relative;
+    z-index: 1;
+    transition: background-color 0.2s;
+}
+
+.calendar-day-bg:hover {
+    background-color: var(--neutral-50);
+}
+
+.calendar-day-bg.saturday {
+    background: hsl(210, 100%, 94%);
+    /* 少し濃く */
+}
+
+.calendar-day-bg.sunday {
+    background: hsl(0, 85%, 94%);
+    /* 少し濃く */
+}
+
+.calendar-day-bg.other-month {
+    background: var(--neutral-100);
+    color: var(--neutral-400);
+}
+
+.calendar-day-bg.today {
+    box-shadow: inset 0 0 0 2px var(--primary-blue), 0 0 15px rgba(59, 130, 246, 0.3);
+    background: linear-gradient(135deg, white, var(--primary-blue-light));
+    z-index: 2;
+}
+
+.calendar-day-bg.today::after {
+    content: "TODAY";
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    font-size: 0.65rem;
+    font-weight: 800;
+    color: var(--primary-blue);
+    background: white;
+    padding: 1px 4px;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    letter-spacing: 0.05em;
+    pointer-events: none;
+    opacity: 0.8;
+}
+
+@keyframes pulse-today {
+    0% {
+        box-shadow: inset 0 0 0 2px var(--primary-blue), 0 0 0 0 rgba(59, 130, 246, 0.4);
+    }
+
+    70% {
+        box-shadow: inset 0 0 0 2px var(--primary-blue), 0 0 0 10px rgba(59, 130, 246, 0);
+    }
+
+    100% {
+        box-shadow: inset 0 0 0 2px var(--primary-blue), 0 0 0 0 rgba(59, 130, 246, 0);
+    }
+}
+
+.calendar-day-bg.today .day-number {
+    color: var(--primary-blue);
+    font-weight: 800;
+}
+
+.calendar-day-bg.has-overlap {
+    background-color: rgba(225, 29, 72, 0.1) !important;
+    box-shadow: inset 0 0 0 3px var(--error-red) !important;
+    z-index: 2;
+}
+
+.calendar-day-bg.vacation-candidate {
+    background-color: hsl(145, 65%, 96%) !important;
+    /* 薄い緑色 */
+    background-image: radial-gradient(var(--success-green) 0.5px, transparent 0.5px);
+    /* 緑のドット */
+    background-size: 8px 8px;
+}
+
+/* 日付ヘッダーレイヤー */
+.day-header {
+    z-index: 5;
+    height: auto;
+    min-height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 8px;
+    position: relative;
+    pointer-events: none;
+    border-right: 1px solid var(--neutral-200);
+    border-bottom: 1px solid transparent;
+    /* 位置合わせ用 */
 }
 
 #globalYearSelect {
@@ -551,22 +649,44 @@ body {
     font-weight: 700;
     font-size: var(--font-size-base);
     color: var(--neutral-700);
-    margin-bottom: var(--spacing-sm);
     z-index: 5;
+    line-height: 28px;
 }
 
 /* 繝舌ャ繧ｸ鬘槭ｒ縺ｾ縺ｨ繧√ｋ繧ｳ繝ｳ繝・リ逕ｨ・・S縺ｧ菴懈・縺吶ｋ縺九∝句挨縺ｫ邨ｶ蟇ｾ驟咲ｽｮ・・*/
+/* 重複警告アイコン */
+.day-overlap-icon {
+    font-size: 14px;
+    color: var(--error-red);
+    cursor: help;
+    animation: overlap-pulse 2s infinite;
+}
+
+@keyframes overlap-pulse {
+    0% {
+        transform: scale(1);
+        filter: drop-shadow(0 0 0px var(--error-red));
+    }
+
+    50% {
+        transform: scale(1.2);
+        filter: drop-shadow(0 0 5px var(--error-red));
+    }
+
+    100% {
+        transform: scale(1);
+        filter: drop-shadow(0 0 0px var(--error-red));
+    }
+}
+
 .day-badges {
-    position: absolute;
-    top: var(--spacing-xs);
-    right: var(--spacing-xs);
     display: flex;
     flex-direction: row;
-    /* 讓ｪ荳ｦ縺ｳ縺ｫ螟画峩 */
     align-items: center;
-    gap: 2px;
+    gap: 4px;
     z-index: 10;
     pointer-events: none;
+    height: 28px;
 }
 
 .day-weekday-count {
@@ -584,6 +704,17 @@ body {
     display: inline-block;
     padding: 1px 4px;
     background: var(--warning-orange);
+    color: white;
+    border-radius: var(--radius-sm);
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.day-exam-badge {
+    display: inline-block;
+    padding: 1px 4px;
+    background: #2563eb;
     color: white;
     border-radius: var(--radius-sm);
     font-size: 10px;
@@ -719,45 +850,25 @@ body {
     transform: translateX(2px);
 }
 
-/* 期間予定（アロー・リボン表示）の工夫 */
+/* 期間予定（アロー・リボン表示） */
 .event-item.range-start {
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-    border-top-left-radius: var(--radius-sm);
-    border-bottom-left-radius: var(--radius-sm);
-    margin-right: -11px;
-    padding-right: 15px;
-    position: relative;
-    z-index: 2;
-    box-shadow: -2px 1px 4px rgba(0, 0, 0, 0.05);
+    border-top-right-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
 }
 
 .event-item.range-middle {
-    border-radius: 0;
-    margin-left: -11px;
-    margin-right: -11px;
-    padding-left: 15px;
-    padding-right: 15px;
-    position: relative;
-    z-index: 1;
-    border-left: none;
-    border-right: none;
+    border-radius: 0 !important;
+    border-left: none !important;
+    border-right: none !important;
 }
 
 .event-item.range-end {
-    border-radius: 0;
-    border-top-left-radius: 0;
-    border-bottom-left-radius: 0;
-    margin-left: -11px;
-    padding-left: 15px;
-    padding-right: 25px;
-    /* アローヘッド分の余白 */
-    position: relative;
-    z-index: 2;
-    border-left: none;
-    /* アローヘッド（Chevron）の形状を作成 */
-    clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%);
-    box-shadow: 2px 1px 4px rgba(0, 0, 0, 0.05);
+    border-top-left-radius: 0 !important;
+    border-bottom-left-radius: 0 !important;
+    border-left: none !important;
+    /* アロー形状を付ける場合はここに clip-path */
+    clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%);
+    padding-right: 12px !important;
 }
 
 /* 週の境界（土・日）での表示調整アローの形状を維持しつつ隙間を埋める */
@@ -785,57 +896,124 @@ body {
     text-shadow: 0 0 1px rgba(255, 255, 255, 0.5);
 }
 
-/* 年休カード：独立した縦型カードデザイン */
-.event-item.leave-card {
+/* 授業予定（マイクラス）の強調表示 */
+.event-item.myclass {
+    background: #f0fdf4 !important;
+    /* 明るい緑 */
+    border-left: 5px solid var(--success-green) !important;
+    color: #166534 !important;
+    /* 濃い緑 */
+    font-weight: 700 !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* 申請・事務処理が必要なアイテムの共通カードデザイン (年休, 出張, 在宅, 休日出勤) */
+.event-item.process-card {
     display: flex !important;
     flex-direction: column !important;
-    padding: 8px !important;
-    background: #fffafa !important;
-    /* スノーホワイト */
-    border: 1px solid #fecaca !important;
-    border-left: 6px solid #e11d48 !important;
-    color: #9f1239 !important;
-    border-radius: 8px !important;
-    margin: 4px 2px !important;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
-    height: auto !important;
-    min-height: 40px;
+    padding: 4px 8px !important;
+    background: #ffffff !important;
+    border: 1px solid rgba(0, 0, 0, 0.1) !important;
+    border-left: 6px solid var(--primary-blue) !important;
+    color: var(--neutral-900) !important;
+    border-radius: 6px !important;
+    margin: 2px 2px !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+    height: calc(3.0rem + 2px - 4px) !important;
+    /* 2行分 (1.5rem*2 + gap 2px) - margin(2px*2) */
+    white-space: normal !important;
+    line-height: 1.2 !important;
+    position: relative;
+    z-index: 5;
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s !important;
 }
 
-.leave-card-label {
+.event-item.process-card:hover {
+    transform: translateY(-1px) scale(1.02) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+    z-index: 10;
+}
+
+/* 期間予定（リボン）表示時の調整 */
+.event-item.process-card.range-start {
+    border-top-right-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    margin-right: -13px !important;
+    padding-right: 15px !important;
+}
+
+.event-item.process-card.range-middle {
+    border-radius: 0 !important;
+    margin-left: -13px !important;
+    margin-right: -13px !important;
+    border-left: none !important;
+    border-right: none !important;
+    padding-left: 15px !important;
+    padding-right: 15px !important;
+}
+
+.event-item.process-card.range-end {
+    border-top-left-radius: 0 !important;
+    border-bottom-left-radius: 0 !important;
+    margin-left: -13px !important;
+    padding-left: 15px !important;
+    border-left: none !important;
+}
+
+/* 種類別ボーダーカラー（統一感を出しつつ種類を判別） */
+.event-item.process-card.leave-card {
+    border-left-color: #e11d48 !important;
+    background: linear-gradient(to right, #ffe4e6, #ffffff) !important;
+}
+
+/* 年休: 赤 */
+.event-item.process-card.trip-card {
+    border-left-color: #3b82f6 !important;
+    background: linear-gradient(to right, #dbeafe, #ffffff) !important;
+}
+
+/* 出張: 青 */
+.event-item.process-card.wfh-card {
+    border-left-color: #10b981 !important;
+    background: linear-gradient(to right, #d1fae5, #ffffff) !important;
+}
+
+/* 在宅: 緑 */
+.event-item.process-card.holiday-work-card {
+    border-left-color: #f59e0b !important;
+    background: linear-gradient(to right, #fef3c7, #ffffff) !important;
+}
+
+/* 休日出勤: 橙 */
+
+.process-card-label {
     font-size: 0.85rem;
-    font-weight: 800;
-    margin-bottom: 4px;
+    font-weight: 700;
+    margin-bottom: 2px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
-.leave-card-time-badge {
-    font-size: 0.7rem;
-    background: #ffe4e6;
-    padding: 2px 6px;
+.process-card-time {
+    font-size: 0.75rem;
+    color: var(--neutral-500);
+    font-weight: 600;
+    background: var(--neutral-50);
+    padding: 1px 6px;
     border-radius: 4px;
-    font-weight: 700;
     align-self: flex-start;
 }
 
-.event-item.leave-card .resize-handle-right,
-.event-item.leave-card::after {
-    display: none !important;
-}
-
-/* 出張カード */
-.event-item.trip-card {
-    background: linear-gradient(135deg, #dbeafe, #bfdbfe);
-    border: 1px solid #93c5fd;
-    color: #1e40af;
-    border-radius: var(--radius-sm);
-    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.1);
-    padding: 2px 6px;
-    font-size: 0.8rem;
-    display: flex;
-    align-items: center;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+/* 出張の時間表示（内部用） */
+.trip-time {
+    font-weight: 700;
+    margin-right: 4px;
+    font-size: 0.75rem;
+    background: rgba(0, 0, 0, 0.05);
+    padding: 1px 4px;
+    border-radius: 3px;
 }
 
 .trip-time {
@@ -852,23 +1030,7 @@ body {
     font-weight: 600;
 }
 
-/* 在宅勤務カード */
-.event-item.wfh-card {
-    background: linear-gradient(135deg, #dcfce7, #bbf7d0);
-    border: 1px solid #86efac;
-    border-left: 6px solid #10b981;
-    color: #065f46;
-    border-radius: var(--radius-sm);
-    box-shadow: 0 2px 4px rgba(16, 185, 129, 0.1);
-    padding: 4px 8px;
-    font-weight: 700;
-}
-
-.event-item.wfh-card::before {
-    content: '🏠 ';
-    font-size: 0.9rem;
-}
-
+/* 在宅勤務カードのリセット (process-cardで上書き) */
 .event-item.wfh-card .resize-handle-right,
 .event-item.wfh-card::after {
     display: none !important;
@@ -951,6 +1113,7 @@ body {
     border-radius: 12px;
     font-size: 0.75rem;
     font-weight: 600;
+    white-space: nowrap;
 }
 
 .badge-custom {
@@ -1835,9 +1998,16 @@ body {
 
 .event-item {
     position: relative;
-    padding-right: 24px !important;
+    padding: 2px 4px;
     cursor: grab;
-    transition: all 0.2s ease;
+    font-size: 0.8rem;
+    line-height: 1.3;
+    border-radius: var(--radius-sm);
+    margin: 1px 2px;
+    z-index: 10;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* 参加予定の強調表示 */
@@ -2396,9 +2566,10 @@ body {
 
 .manage-table th,
 .manage-table td {
-    padding: 12px 15px;
+    padding: 8px 10px;
     text-align: left;
     border-bottom: 1px solid var(--neutral-100);
+    vertical-align: middle;
 }
 
 .manage-table th {
@@ -2591,9 +2762,10 @@ body {
 
 .manage-table th,
 .manage-table td {
-    padding: 12px 15px;
+    padding: 8px 10px;
     text-align: left;
     border-bottom: 1px solid var(--neutral-100);
+    vertical-align: middle;
 }
 
 .manage-table th {
