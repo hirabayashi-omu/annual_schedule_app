@@ -3258,6 +3258,9 @@ function exportToIcal() {
         const itemDate = new Date(item.date);
         if (itemDate < startDate || itemDate > endDate) return false;
 
+        // 授業統合による重複を避けるため、fromMyClass属性を持つものはここでは除外（別途3で集計するため）
+        if (item.fromMyClass) return false;
+
         if (item.type === 'custom') return showApplied;
         return showAnnual;
     });
@@ -3316,7 +3319,8 @@ function exportToIcal() {
     ];
 
     filteredData.forEach(item => {
-        if (!item.event || item.event.trim() === '') return;
+        const eventTitle = item.event || item.name || '';
+        if (!eventTitle.trim()) return;
 
         const dateStrOnly = formatDateKey(item.date).replace(/-/g, '');
         const uid = generateUID(item);
@@ -3327,11 +3331,11 @@ function exportToIcal() {
 
         if (item.allDay === false && item.startTime && item.endTime) {
             const startDt = new Date(item.date);
-            const [sh, sm] = item.startTime.split(':');
-            startDt.setHours(parseInt(sh), parseInt(sm), 0);
+            const [sh, sm] = String(item.startTime).split(':');
+            startDt.setHours(parseInt(sh) || 0, parseInt(sm) || 0, 0);
             const endDt = new Date(item.date);
-            const [eh, em] = item.endTime.split(':');
-            endDt.setHours(parseInt(eh), parseInt(em), 0);
+            const [eh, em] = String(item.endTime).split(':');
+            endDt.setHours(parseInt(eh) || 0, parseInt(em) || 0, 0);
 
             // Google Calendar等での互換性のため、すべてUTC(Z付き)で出力
             icalContent.push(`DTSTART:${formatDateForIcal(startDt, true)}`);
@@ -3348,13 +3352,13 @@ function exportToIcal() {
             icalContent.push('TRANSP:TRANSPARENT');
         }
 
-        icalContent.push(`SUMMARY:${escapeIcalText(item.event)}`);
+        icalContent.push(`SUMMARY:${escapeIcalText(eventTitle)}`);
 
         if (item.location) {
             icalContent.push(`LOCATION:${escapeIcalText(item.location)}`);
         }
 
-        let desc = (item.weekdayCount ? `${item.weekdayCount} - ` : '') + item.event;
+        let desc = (item.weekdayCount ? `${item.weekdayCount} - ` : '') + eventTitle;
 
         // メタ情報の追加
         if (item.customData) {
