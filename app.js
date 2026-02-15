@@ -1801,9 +1801,19 @@ window.updateCalendar = function updateCalendar() {
                 let needsCheck = true;
                 if (!needsCheck) continue; // (実際には常に true ですが、構造を維持)
 
-                // 警告(⚠️)を出さない例外ケース (終日予定同士の重なり):
+                // 警告(⚠️)を出さない例外ケース (終日予定同士の重なり etc):
                 const isSpecial1 = isTrip1 || isWfh1;
                 const isSpecial2 = isTrip2 || isWfh2;
+
+                // 終日予定の📌（行事）と時間指定予定（授業・予定）の重複は除外 (ユーザー要望)
+                const isAllDayPinned1 = (p1 < 2 && !isSpecial1 && isPinned1);
+                const isAllDayPinned2 = (p2 < 2 && !isSpecial2 && isPinned2);
+                const isTimedOrClass1 = (ov1.type === 'myclass' || p1 === 2);
+                const isTimedOrClass2 = (ov2.type === 'myclass' || p2 === 2);
+
+                if ((isAllDayPinned1 && isTimedOrClass2) || (isTimedOrClass1 && isAllDayPinned2)) {
+                    continue;
+                }
 
                 if (p1 < 2 && p2 < 2) {
                     // 両方が通常の行事（出張・在宅でない）なら除外
@@ -2590,6 +2600,7 @@ function editCalendarEvent(type, id, date, period) {
             // updateQuickTimeFromPeriod も内部で setTimeValues を使うように修正
             updateQuickTimeFromPeriod();
         }
+        toggleQuickEditTimeFields();
 
     } else if (type.startsWith('excel')) {
         classFields.classList.add('hidden');
@@ -2833,10 +2844,14 @@ function handleQuickEditSubmit(e) {
     const id = document.getElementById('quickEditId').value;
     const date = document.getElementById('quickEditDate').value;
     const sourcePeriod = document.getElementById('quickEditSourcePeriod').value;
-    const newName = document.getElementById('quickEditName').value.trim();
     const isAllDay = document.getElementById('quickEditAllDay').checked;
-    const startTime = (isAllDay) ? '' : document.getElementById('quickEditStartTime').value;
-    const endTime = (isAllDay) ? '' : document.getElementById('quickEditEndTime').value;
+
+    // 単一日モードと範囲モードのどちらからも値を読み取る
+    const startTimeRaw = document.getElementById('quickEditStartTime').value || document.getElementById('quickEditStartTime_Single').value;
+    const endTimeRaw = document.getElementById('quickEditEndTime').value || document.getElementById('quickEditEndTime_Single').value;
+
+    const startTime = (isAllDay) ? '' : startTimeRaw;
+    const endTime = (isAllDay) ? '' : endTimeRaw;
     const location = document.getElementById('quickEditLocation').value.trim();
     const memo = document.getElementById('quickEditMemo').value.trim();
 
@@ -2870,14 +2885,16 @@ function handleQuickEditSubmit(e) {
             !(String(ov.id) === String(id) && ov.date === date && ov.type === 'myclass')
         );
 
-        // 1. 移動元を消去
-        classOverrides.push({
-            type: 'myclass',
-            id: id,
-            date: date,
-            action: 'move',
-            period: sourcePeriod // そのまま使用
-        });
+        // 1. 移動元を消去 (時限が変わる場合のみ、または常に消去を明示)
+        if (newPeriod !== sourcePeriod) {
+            classOverrides.push({
+                type: 'myclass',
+                id: id,
+                date: date,
+                action: 'move',
+                period: sourcePeriod
+            });
+        }
 
         // 2. 新しいデータ
         const updatedCls = JSON.parse(JSON.stringify(cls));
