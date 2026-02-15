@@ -26,6 +26,25 @@ let workSettings = {}; // { 2026: { spring_vac: { 1: { shift: 'B' } } } }
 
 let workOverrides = {}; // { '2026-04-01': { shift: 'B' }, ... }
 
+
+/**
+ * 現在選択されている年度（会計年度）を取得するヘルパー
+ */
+function getCurrentFiscalYear() {
+    const yearSelect = document.getElementById('globalYearSelect');
+    if (yearSelect && yearSelect.value) {
+        return parseInt(yearSelect.value);
+    }
+    // app.jsの変数が定義されている場合はそこから計算
+    if (typeof currentYear !== 'undefined' && typeof currentMonth !== 'undefined') {
+        return (currentMonth <= 3) ? currentYear - 1 : currentYear;
+    }
+    const now = new Date();
+    const m = now.getMonth() + 1;
+    const y = now.getFullYear();
+    return (m <= 3) ? y - 1 : y;
+}
+
 /**
  * 勤務設定の初期化
  */
@@ -57,7 +76,7 @@ function initWorkSettings() {
     }
 
     // 現在選択されている年度の初期設定を確認
-    const targetYear = typeof currentYear !== 'undefined' ? currentYear : new Date().getFullYear();
+    const targetYear = getCurrentFiscalYear();
     ensureWorkSettingsYear(targetYear);
 
     renderWorkPeriodConfig();
@@ -85,7 +104,7 @@ function ensureWorkSettingsYear(year) {
  * 現在の年度の勤務設定を取得
  */
 function getCurrentWorkSettings() {
-    const targetYear = typeof currentYear !== 'undefined' ? currentYear : new Date().getFullYear();
+    const targetYear = getCurrentFiscalYear();
     ensureWorkSettingsYear(targetYear);
     return workSettings[targetYear];
 }
@@ -103,7 +122,7 @@ function getVacationPeriods() {
 
     if (typeof scheduleData === 'undefined' || !scheduleData.length) return periods;
 
-    const currentTargetYear = typeof currentYear !== 'undefined' ? currentYear : new Date().getFullYear();
+    const currentTargetYear = getCurrentFiscalYear();
 
     scheduleData.forEach(item => {
         const name = item.event || "";
@@ -325,7 +344,7 @@ function renderWorkPeriodConfig() {
  * メモリ内の設定を更新（セレクトボックス変更時）
  */
 window.updateWorkSettingInMemory = function (periodId, dayNum, shift) {
-    const targetYear = typeof currentYear !== 'undefined' ? currentYear : new Date().getFullYear();
+    const targetYear = getCurrentFiscalYear();
     ensureWorkSettingsYear(targetYear);
     if (!workSettings[targetYear][periodId]) workSettings[targetYear][periodId] = {};
     if (!workSettings[targetYear][periodId][dayNum]) workSettings[targetYear][periodId][dayNum] = {};
@@ -346,7 +365,7 @@ window.updateWorkSettingInMemory = function (periodId, dayNum, shift) {
  * メモリ内の自由入力時間を更新
  */
 window.updateWorkTimeInMemory = function (periodId, dayNum, field, value) {
-    const targetYear = typeof currentYear !== 'undefined' ? currentYear : new Date().getFullYear();
+    const targetYear = getCurrentFiscalYear();
     ensureWorkSettingsYear(targetYear);
     if (!workSettings[targetYear][periodId]) workSettings[targetYear][periodId] = {};
     if (!workSettings[targetYear][periodId][dayNum]) workSettings[targetYear][periodId][dayNum] = {};

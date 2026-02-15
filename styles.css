@@ -191,8 +191,13 @@ body {
     left: 0;
 }
 
-.hamburger-icon::before { top: -6px; }
-.hamburger-icon::after { bottom: -6px; }
+.hamburger-icon::before {
+    top: -6px;
+}
+
+.hamburger-icon::after {
+    bottom: -6px;
+}
 
 .header-right {
     display: flex;
@@ -234,7 +239,8 @@ body {
 .side-drawer {
     position: fixed;
     top: 0;
-    left: -300px; /* 初期は隠す */
+    left: -300px;
+    /* 初期は隠す */
     width: 300px;
     height: 100%;
     background: white;
@@ -345,7 +351,8 @@ body {
 .app-container {
     max-width: 1400px;
     margin: 0 auto;
-    padding: 0 var(--spacing-md) var(--spacing-xl); /* 上部paddingを削る */
+    padding: 0 var(--spacing-md) var(--spacing-xl);
+    /* 上部paddingを削る */
 }
 
 /* ===========================
@@ -2293,26 +2300,33 @@ body {
    レスポンシブ (スマホ対応)
    =========================== */
 
+/* カレンダーセル内の時間表示を「開始時間のみ」にするためのクラス (幅1250px以下) */
+@media (max-width: 1250px) {
+
+    .mobile-time-only .time-end,
+    .mobile-time-only .time-separator {
+        display: none !important;
+    }
+}
+
+/* カレンダーセル内の時間表示を完全に消す (幅950px以下) - 授業名を表示するスペースを確保 */
+@media (max-width: 950px) {
+
+    .calendar-event-time,
+    .process-card-time {
+        display: none !important;
+    }
+}
+
 @media (max-width: 768px) {
     .header-left h1 span {
-        display: none; /* スマホではタイトルをアイコンのみ、または短縮 */
-    }
-
-    .calendar-event-time {
-        display: none !important; /* スマホでは時間範囲を非表示に（開始時間のみ表示するようにJSで制御するかCSSで工夫） */
+        display: none;
+        /* スマホではタイトルをアイコンのみ、または短縮 */
     }
 
     /* 授業イベントの時間表示を短縮 */
     .event-item.type-myclass .event-time {
         font-size: 0.65rem;
-    }
-    
-    /* カレンダーセル内の時間表示を「開始時間のみ」にするためのクラス */
-    .mobile-time-only .time-end {
-        display: none;
-    }
-    .mobile-time-only .time-separator {
-        display: none;
     }
 
     /* タイムテーブルの横スクロール対応 */
@@ -2322,7 +2336,8 @@ body {
     }
 
     .timetable-grid {
-        min-width: 600px; /* スクロールを発生させるための最小幅 */
+        min-width: 600px;
+        /* スクロールを発生させるための最小幅 */
     }
 }
 

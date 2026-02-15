@@ -1026,6 +1026,7 @@ function initializeEventListeners() {
             if (typeof renderTimetable === 'function') renderTimetable();
             if (typeof updateClassYearOptions === 'function') updateClassYearOptions();
             if (typeof renderApplicationStats === 'function') renderApplicationStats();
+            if (typeof renderWorkPeriodConfig === 'function') renderWorkPeriodConfig();
         });
     }
 
@@ -1843,6 +1844,7 @@ window.updateCalendar = function updateCalendar() {
                 if (e.target !== bg) return;
                 if (typeof showAnnualLeaveMenu === 'function') showAnnualLeaveMenu(e, dStr);
             };
+            bg.dataset.date = dStr;
             bg.addEventListener('dragover', handleDayDragOver);
             bg.addEventListener('dragleave', handleDayDragLeave);
             bg.addEventListener('drop', (e) => handleDayDrop(e, dStr));
@@ -1967,19 +1969,21 @@ window.updateCalendar = function updateCalendar() {
                 el.classList.add('not-participating');
             }
             if (isProc) {
-                el.innerHTML = `<div class="process-card-label">${icon}${label}</div>${td ? `<div class="process-card-time ${seg.type === 'myclass' ? 'mobile-time-only' : ''}">${td}</div>` : ''}<button class="event-delete-btn" onclick="deleteCalendarEvent(event, '${seg.type}', '${seg.id}', '${seg.segStart}')">×</button>`;
+                el.innerHTML = `<div class="process-card-label">${icon}${label}</div>${td ? `<div class="process-card-time mobile-time-only">${td}</div>` : ''}<button class="event-delete-btn" onclick="deleteCalendarEvent(event, '${seg.type}', '${seg.id}', '${seg.segStart}')">×</button>`;
             } else {
                 const mark = typeof replaceSpecialMarks === 'function' ? replaceSpecialMarks(label) : label;
-                el.innerHTML = `<span class="event-text">${icon} ${td ? `<span class="calendar-event-time ${seg.type === 'myclass' ? 'mobile-time-only' : ''}">${td}</span> ` : ''}${mark}</span><button class="event-delete-btn" onclick="deleteCalendarEvent(event, '${seg.type}', '${seg.id}', '${seg.segStart}')">×</button>`;
+                el.innerHTML = `<span class="event-text">${icon} ${td ? `<span class="calendar-event-time mobile-time-only">${td}</span> ` : ''}${mark}</span><button class="event-delete-btn" onclick="deleteCalendarEvent(event, '${seg.type}', '${seg.id}', '${seg.segStart}')">×</button>`;
             }
             el.draggable = true;
             el.dataset.type = seg.type;
             el.dataset.classId = seg.id;
             el.dataset.date = seg.segStart;
+            el.dataset.period = seg.period || (item.period !== undefined ? item.period : '');
             el.title = label + (td ? ` (${td})` : '');
             el.addEventListener('dblclick', (e) => { e.stopPropagation(); editCalendarEvent(seg.type, seg.id, seg.segStart); });
             el.addEventListener('contextmenu', (e) => showEventContextMenu(e, seg.type, seg.id, seg.segStart));
             el.addEventListener('dragstart', handleEventDragStart);
+            el.addEventListener('dragend', handleEventDragEnd);
             calendarGrid.appendChild(el);
         });
 
@@ -2107,7 +2111,7 @@ function handleEventDragStart(e) {
     // 'text/plain' を使用
     e.dataTransfer.setData('text/plain', JSON.stringify(data));
 
-    // Ctrlキーが押されている場合は copy、そうでなければ move
+    // Ctrlキーが押されている場合は copy/複製、そうでなければ move/移動
     if (e.ctrlKey || e.metaKey) {
         e.dataTransfer.effectAllowed = 'copy';
     } else {
@@ -2123,6 +2127,15 @@ function handleEventDragStart(e) {
 }
 window.handleEventDragStart = handleEventDragStart;
 
+function handleEventDragEnd(e) {
+    const el = e.target.closest('.event-item, .timetable-class-card');
+    if (el) {
+        el.classList.remove('dragging');
+        el.style.opacity = '';
+    }
+}
+window.handleEventDragEnd = handleEventDragEnd;
+
 function handleDayDragOver(e) {
     e.preventDefault();
     if (e.ctrlKey || e.metaKey) {
@@ -2137,11 +2150,11 @@ function handleDayDragLeave(e) {
     e.currentTarget.classList.remove('drag-over');
 }
 
-function handleDayDrop(e) {
+function handleDayDrop(e, dateStrFromArg) {
     e.preventDefault();
     e.currentTarget.classList.remove('drag-over');
 
-    const targetDate = e.currentTarget.dataset.date;
+    const targetDate = dateStrFromArg || e.currentTarget.dataset.date;
     const json = e.dataTransfer.getData('text/plain');
     if (!json) return;
 
@@ -3667,7 +3680,7 @@ function handleContextAction(action) {
             }
 
             localStorage.setItem('assignmentExclusions', JSON.stringify(assignmentExclusions));
-        } else if (type === 'excel') {
+        } else if (type.startsWith('excel')) {
             // Excel行事の参加切り替え
             // 既存のオーバーライド（特に移動後のデータ）を保存してから処理
             let existingOverride = classOverrides.find(ov =>
