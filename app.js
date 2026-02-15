@@ -3265,16 +3265,39 @@ function exportToIcal() {
         return showAnnual;
     });
 
-    // 3. 授業データの取得
+    // 3. 授業データの取得（カレンダー表示と完全に一致させる）
     let filteredClassEvents = [];
-    if (typeof generateClassEvents === 'function' && showClass) {
-        const startYear = getFiscalYear(startDate);
-        const endYear = getFiscalYear(endDate);
-        let allClassEvents = [];
-        for (let y = startYear; y <= endYear; y++) {
-            allClassEvents = allClassEvents.concat(generateClassEvents(y, { includeExclusions: false }));
+    if (typeof getDisplayableClassesForDate === 'function' && showClass) {
+        // 表示時と同じロジックで日ごとに取得
+        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+            const date = new Date(d);
+            // その日の行事（Excel由来など）を取得して制約を判定
+            const dayEvents = appliedData.filter(item => formatDateKey(item.date) === formatDateKey(date));
+            const classesOnDay = getDisplayableClassesForDate(date, dayEvents);
+
+            classesOnDay.forEach(cls => {
+                const periodKey = cls.displayPeriod || cls.originalPeriod;
+                const PERIOD_TIMES_LOCAL = window.PERIOD_TIMES || PERIOD_TIMES;
+                let times = PERIOD_TIMES_LOCAL[periodKey];
+
+                if (!times && typeof periodKey === 'string' && periodKey.includes('-')) {
+                    const parts = periodKey.split('-');
+                    const first = PERIOD_TIMES_LOCAL[parts[0]];
+                    const last = PERIOD_TIMES_LOCAL[parts[parts.length - 1]];
+                    if (first && last) times = { start: first.start, end: last.end };
+                }
+                if (!times) times = { start: '09:00', end: '10:35' }; // デフォルト
+
+                filteredClassEvents.push({
+                    ...cls,
+                    date: date,
+                    startTime: createDateTime(date, times.start),
+                    endTime: createDateTime(date, times.end),
+                    allDay: false,
+                    period: periodKey
+                });
+            });
         }
-        filteredClassEvents = allClassEvents.filter(cls => cls.date >= startDate && cls.date <= endDate);
     }
 
     // エクスポート確認プロセス
