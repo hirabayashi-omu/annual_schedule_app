@@ -2438,6 +2438,18 @@ function editCalendarEvent(type, id, date, period) {
     document.getElementById('quickEditSourcePeriod').value = period || '';
     participateCheckbox.checked = false;
 
+    // ヘルプ関数：両方の時刻入力（通常用とレスポンシブSingle用）を同期セット
+    const setTimeValues = (start, end) => {
+        const s1 = document.getElementById('quickEditStartTime');
+        const e1 = document.getElementById('quickEditEndTime');
+        const s2 = document.getElementById('quickEditStartTime_Single');
+        const e2 = document.getElementById('quickEditEndTime_Single');
+        if (s1) s1.value = start || '';
+        if (e1) e1.value = end || '';
+        if (s2) s2.value = start || '';
+        if (e2) e2.value = end || '';
+    };
+
     if (type === 'myclass') {
         const cls = myClasses.find(c => String(c.id) === String(id));
         if (!cls) return;
@@ -2476,9 +2488,9 @@ function editCalendarEvent(type, id, date, period) {
 
         // 時刻セット
         if (existingOv && existingOv.data && existingOv.data.startTime) {
-            document.getElementById('quickEditStartTime').value = existingOv.data.startTime;
-            document.getElementById('quickEditEndTime').value = existingOv.data.endTime;
+            setTimeValues(existingOv.data.startTime, existingOv.data.endTime);
         } else {
+            // updateQuickTimeFromPeriod も内部で setTimeValues を使うように修正
             updateQuickTimeFromPeriod();
         }
 
@@ -2495,19 +2507,24 @@ function editCalendarEvent(type, id, date, period) {
         let isAllDay = true; // 行事はデフォルト「終日=True」
         let isParticipating = false;
 
+        const item = scheduleData.find(i => String(i.id) === String(id));
         const override = classOverrides.find(ov => String(ov.id) === String(id) && ov.date === date && ov.type === 'excel' && ov.action === 'move');
+
         if (override && override.data) {
             currentText = override.data.event;
             currentLocation = override.data.location || '';
             currentStartTime = override.data.startTime || '';
             currentEndTime = override.data.endTime || '';
             currentMemo = override.data.memo || '';
-            isAllDay = override.data.allDay !== undefined ? override.data.allDay : true;
+            isAllDay = override.data.allDay !== undefined ? override.data.allDay : (currentStartTime ? false : true);
             isParticipating = override.data.isParticipating !== undefined ? override.data.isParticipating : false;
-        } else {
-            const item = scheduleData.find(i => String(i.id) === String(id));
-            currentText = item ? item.event : '';
-            // デフォルトでピン付けするキーワード
+        } else if (item) {
+            currentText = item.event || '';
+            currentLocation = item.location || '';
+            currentStartTime = item.startTime || '';
+            currentEndTime = item.endTime || '';
+            isAllDay = (item.allDay !== undefined) ? item.allDay : (currentStartTime ? false : true);
+
             if (containsPinnedKeyword(currentText)) {
                 isParticipating = true;
             }
@@ -2517,8 +2534,7 @@ function editCalendarEvent(type, id, date, period) {
         participateCheckbox.checked = isParticipating;
         document.getElementById('quickEditName').value = currentText;
         document.getElementById('quickEditLocation').value = currentLocation;
-        document.getElementById('quickEditStartTime').value = currentStartTime;
-        document.getElementById('quickEditEndTime').value = currentEndTime;
+        setTimeValues(currentStartTime, currentEndTime);
         document.getElementById('quickEditMemo').value = currentMemo;
         document.getElementById('quickEditDateRangeFields').classList.add('hidden');
     } else if (type === 'custom') {
@@ -2593,12 +2609,7 @@ function editCalendarEvent(type, id, date, period) {
                 }
             }
 
-            document.getElementById('quickEditStartTime').value = startTime;
-            document.getElementById('quickEditEndTime').value = endTime;
-            if (document.getElementById('quickEditStartTime_Single')) {
-                document.getElementById('quickEditStartTime_Single').value = startTime;
-                document.getElementById('quickEditEndTime_Single').value = endTime;
-            }
+            setTimeValues(startTime, endTime);
             document.getElementById('quickEditMemo').value = item.memo || '';
             document.getElementById('quickEditApplied').checked = !!item.isApplied; // 申請状況
             document.getElementById('quickEditStartDate').value = (override.startDate || override.date || date).replace(/\//g, '-');
@@ -2612,8 +2623,7 @@ function editCalendarEvent(type, id, date, period) {
             document.getElementById('quickEditModalTitle').textContent = title;
             document.getElementById('quickEditName').value = '';
             document.getElementById('quickEditLocation').value = '';
-            document.getElementById('quickEditStartTime').value = '';
-            document.getElementById('quickEditEndTime').value = '';
+            setTimeValues('', '');
             document.getElementById('quickEditMemo').value = '';
             document.getElementById('quickEditApplied').checked = false; // 新規は未申請
             document.getElementById('quickEditStartDate').value = date.replace(/\//g, '-');
@@ -2661,9 +2671,17 @@ function toggleQuickEditTimeFields() {
 }
 
 function syncQuickTime(el, type) {
-    const targetId = type === 'start' ? 'quickEditStartTime' : 'quickEditEndTime';
-    const target = document.getElementById(targetId);
-    if (target) target.value = el.value;
+    const mainId = type === 'start' ? 'quickEditStartTime' : 'quickEditEndTime';
+    const singleId = type === 'start' ? 'quickEditStartTime_Single' : 'quickEditEndTime_Single';
+
+    const main = document.getElementById(mainId);
+    const single = document.getElementById(singleId);
+
+    if (el.id === mainId) {
+        if (single) single.value = el.value;
+    } else {
+        if (main) main.value = el.value;
+    }
 }
 window.syncQuickTime = syncQuickTime;
 window.toggleQuickEditTimeFields = toggleQuickEditTimeFields;
@@ -2693,8 +2711,16 @@ function updateQuickTimeFromPeriod() {
     }
 
     if (times) {
-        document.getElementById('quickEditStartTime').value = times.start;
-        document.getElementById('quickEditEndTime').value = times.end;
+        // ここでも setTimeValues を使いたいが、editCalendarEventの外なので
+        // 直接代入するか、共通の同期関数を呼ぶ
+        const s1 = document.getElementById('quickEditStartTime');
+        const e1 = document.getElementById('quickEditEndTime');
+        const s2 = document.getElementById('quickEditStartTime_Single');
+        const e2 = document.getElementById('quickEditEndTime_Single');
+        if (s1) s1.value = times.start;
+        if (e1) e1.value = times.end;
+        if (s2) s2.value = times.start;
+        if (e2) e2.value = times.end;
     }
 }
 
