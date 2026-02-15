@@ -1456,6 +1456,21 @@ window.getDisplayableClassesForDate = function (date, dayEvents) {
     let isAfternoonOnly = false;
     let finalCountStr = "";
 
+    // その月のデータ状況をキャッシュして、月全体の指定がない場合に備える
+    if (!window._monthHasCountCache) window._monthHasCountCache = new Map();
+    const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
+
+    if (!window._monthHasCountCache.has(monthKey)) {
+        // scheduleData から本来のソースデータを参照
+        const source = (window.scheduleData || []).filter(item => !item.fromMyClass);
+        const hasAnyInMonth = source.some(item => {
+            const d = item.date instanceof Date ? item.date : new Date(item.date);
+            return d.getFullYear() === date.getFullYear() && (d.getMonth() + 1) === (date.getMonth() + 1) && item.weekdayCount && String(item.weekdayCount).trim() !== "";
+        });
+        window._monthHasCountCache.set(monthKey, hasAnyInMonth);
+    }
+    const monthHasAnyCount = window._monthHasCountCache.get(monthKey);
+
     if (dayEvents && dayEvents.length > 0) {
         // 中間試験チェック
         const isMidterm = dayEvents.some(item =>
@@ -1473,7 +1488,11 @@ window.getDisplayableClassesForDate = function (date, dayEvents) {
         });
 
         if (!finalCountStr) {
-            showStandardClasses = false;
+            if (monthHasAnyCount) {
+                showStandardClasses = false;
+            } else {
+                if (date.getDay() === 0 || date.getDay() === 6) showStandardClasses = false;
+            }
         } else {
             let sessionInfo = { hasMorningIndicator: false, hasAfternoonIndicator: false, hasPriorityMorning: false, hasPriorityAfternoon: false };
             dayEvents.forEach(d => {
@@ -1504,7 +1523,9 @@ window.getDisplayableClassesForDate = function (date, dayEvents) {
             }
         }
     } else {
-        showStandardClasses = false;
+        if (monthHasAnyCount || date.getDay() === 0 || date.getDay() === 6) {
+            showStandardClasses = false;
+        }
     }
 
     const displayClasses = [];

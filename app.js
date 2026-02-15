@@ -3158,15 +3158,28 @@ function exportToJson() {
     // 授業データの展開
     if (showClass && typeof getDisplayableClassesForDate === 'function') {
         for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-            const dayEvents = scheduleData.filter(item => item.date.toDateString() === d.toDateString());
-            getDisplayableClassesForDate(d, dayEvents).forEach(cls => {
+            const date = new Date(d);
+            const dayEvents = appliedData.filter(item => formatDateKey(item.date) === formatDateKey(date));
+            getDisplayableClassesForDate(date, dayEvents).forEach(cls => {
+                const periodKey = cls.displayPeriod || cls.originalPeriod;
+                const PERIOD_TIMES_LOCAL = window.PERIOD_TIMES || PERIOD_TIMES;
+                let times = PERIOD_TIMES_LOCAL[periodKey];
+
+                if (!times && typeof periodKey === 'string' && periodKey.includes('-')) {
+                    const parts = periodKey.split('-');
+                    const first = PERIOD_TIMES_LOCAL[parts[0]];
+                    const last = PERIOD_TIMES_LOCAL[parts[parts.length - 1]];
+                    if (first && last) times = { start: first.start, end: last.end };
+                }
+                if (!times) times = { start: '09:00', end: '10:35' }; // デフォルト
+
                 allEvents.push({
                     id: cls.id,
-                    date: new Date(d),
+                    date: date,
                     event: cls.name,
                     type: 'myclass',
-                    startTime: cls.startTime instanceof Date ? cls.startTime.toTimeString().substring(0, 5) : (cls.startTime || ''),
-                    endTime: cls.endTime instanceof Date ? cls.endTime.toTimeString().substring(0, 5) : (cls.endTime || ''),
+                    startTime: times.start,
+                    endTime: times.end,
                     location: cls.location || '',
                     allDay: false,
                     isClass: true,
@@ -3643,14 +3656,16 @@ function formatDateForIcal(date, isUtc = false) {
 
 function generateUID(item) {
     const dateStr = formatDateKey(item.date);
-    const eventHash = simpleHash(item.event);
+    const eventHash = simpleHash(item.event || item.name || 'noevent');
     return `${dateStr}-${eventHash}@schedule-app.local`;
 }
 
 function simpleHash(str) {
+    if (!str) return '0';
+    const s = String(str);
     let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        const char = str.charCodeAt(i);
+    for (let i = 0; i < s.length; i++) {
+        const char = s.charCodeAt(i);
         hash = ((hash << 5) - hash) + char;
         hash = hash & hash;
     }
