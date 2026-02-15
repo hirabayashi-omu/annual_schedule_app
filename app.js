@@ -2061,7 +2061,7 @@ window.updateCalendar = function updateCalendar() {
                 e.stopPropagation();
                 editCalendarEvent(seg.type, seg.id, seg.segStart, el.dataset.period);
             });
-            el.addEventListener('contextmenu', (e) => showEventContextMenu(e, seg.type, seg.id, seg.segStart));
+            el.addEventListener('contextmenu', (e) => showEventContextMenu(e, seg.type, seg.id, seg.segStart, el.dataset.period));
             el.addEventListener('dragstart', handleEventDragStart);
             el.addEventListener('dragend', handleEventDragEnd);
             calendarGrid.appendChild(el);
@@ -3264,6 +3264,39 @@ function exportToIcal() {
         return showAnnual;
     });
 
+    // 3. 授業データの取得
+    let filteredClassEvents = [];
+    if (typeof generateClassEvents === 'function' && showClass) {
+        const startYear = getFiscalYear(startDate);
+        const endYear = getFiscalYear(endDate);
+        let allClassEvents = [];
+        for (let y = startYear; y <= endYear; y++) {
+            allClassEvents = allClassEvents.concat(generateClassEvents(y, { includeExclusions: false }));
+        }
+        filteredClassEvents = allClassEvents.filter(cls => cls.date >= startDate && cls.date <= endDate);
+    }
+
+    // エクスポート確認プロセス
+    const annualCount = filteredData.length;
+    const classCount = filteredClassEvents.length;
+    const totalCount = annualCount + classCount;
+
+    if (totalCount === 0) {
+        alert('指定された期間内にエクスポート対象の予定が見つかりませんでした。');
+        return;
+    }
+
+    const confirmMsg = `以下の内容でICALエクスポートを開始しますか？\n\n` +
+        `期間: ${startStr} ～ ${endStr}\n` +
+        `年間行事・予定: ${annualCount} 件\n` +
+        `授業予定: ${classCount} 件\n` +
+        `合計: ${totalCount} 件\n\n` +
+        `※カレンダーアプリ（Google/Outlook等）で読み込み可能な形式です。`;
+
+    if (!confirm(confirmMsg)) {
+        return;
+    }
+
     // ICAL形式生成
     let icalContent = [
         'BEGIN:VCALENDAR',
@@ -3272,7 +3305,16 @@ function exportToIcal() {
         'CALSCALE:GREGORIAN',
         'METHOD:PUBLISH',
         'X-WR-CALNAME:学校カレンダー',
-        'X-WR-TIMEZONE:Asia/Tokyo'
+        'X-WR-TIMEZONE:Asia/Tokyo',
+        'BEGIN:VTIMEZONE',
+        'TZID:Asia/Tokyo',
+        'BEGIN:STANDARD',
+        'DTSTART:19700101T000000',
+        'TZOFFSETFROM:+0900',
+        'TZOFFSETTO:+0900',
+        'TZNAME:JST',
+        'END:STANDARD',
+        'END:VTIMEZONE'
     ];
 
     filteredData.forEach(item => {
@@ -3293,8 +3335,6 @@ function exportToIcal() {
             const [eh, em] = item.endTime.split(':');
             endDt.setHours(parseInt(eh), parseInt(em), 0);
 
-            // 予定あり(OPAQUE)か空き時間(TRANSPARENT)か。
-            // 時間指定のある行事は通常予定(OPAQUE)とする
             icalContent.push(`DTSTART;TZID=Asia/Tokyo:${formatDateForIcal(startDt)}`);
             icalContent.push(`DTEND;TZID=Asia/Tokyo:${formatDateForIcal(endDt)}`);
             icalContent.push('TRANSP:OPAQUE');
@@ -3351,76 +3391,67 @@ function exportToIcal() {
         icalContent.push('END:VEVENT');
     });
 
-    // 授業データを追加
-    if (typeof generateClassEvents === 'function' && showClass) {
-        const startYear = getFiscalYear(startDate);
-        const endYear = getFiscalYear(endDate);
-        let allClassEvents = [];
-        for (let y = startYear; y <= endYear; y++) {
-            allClassEvents = allClassEvents.concat(generateClassEvents(y, { includeExclusions: false }));
+    // 4. 授業データを追加
+    filteredClassEvents.forEach(cls => {
+        const targetLabel = cls.targetType === 'grade'
+            ? `${cls.targetGrade}年全体`
+            : cls.targetGrade === 1
+                ? `${cls.targetGrade}-${cls.targetClass}`
+                : `${cls.targetGrade}${cls.targetClass}`;
+
+        const dateStrOnly = formatDateKey(cls.date).replace(/-/g, '');
+        // UIDを時限情報を含めてよりユニークにする
+        const periodId = String(cls.period || '').replace(/[^0-9a-zA-Z]/g, '');
+        const uid = `my-class-${cls.id}-${dateStrOnly}-${periodId}@schedule-app`;
+
+        // 担当者マーク(★)の判定
+        const assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
+        const classExclusions = assignmentExclusions[cls.id] || [];
+        const isAssigned = !classExclusions.includes(formatDateKey(cls.date));
+        const assignedMark = isAssigned ? ' ★' : '';
+
+        // Summary: 授業名(学年クラス/コース) ★
+        const summary = `${cls.name}(${targetLabel})${assignedMark}`;
+
+        icalContent.push('BEGIN:VEVENT');
+        icalContent.push(`UID:${uid}`);
+        icalContent.push(`DTSTAMP:${formatDateForIcal(new Date())}`);
+
+        if (!cls.allDay && cls.startTime && cls.endTime) {
+            icalContent.push(`DTSTART;TZID=Asia/Tokyo:${formatDateForIcal(cls.startTime)}`);
+            icalContent.push(`DTEND;TZID=Asia/Tokyo:${formatDateForIcal(cls.endTime)}`);
+            icalContent.push('TRANSP:OPAQUE');
+        } else {
+            const nextDay = new Date(cls.date);
+            nextDay.setDate(nextDay.getDate() + 1);
+            const nextDayStr = formatDateKey(nextDay).replace(/-/g, '');
+            icalContent.push(`DTSTART;VALUE=DATE:${dateStrOnly}`);
+            icalContent.push(`DTEND;VALUE=DATE:${nextDayStr}`);
+            icalContent.push('TRANSP:TRANSPARENT');
         }
 
+        icalContent.push(`SUMMARY:${escapeIcalText(summary)}`);
 
-        let filteredClassEvents = allClassEvents.filter(cls => cls.date >= startDate && cls.date <= endDate);
+        if (cls.location) {
+            icalContent.push(`LOCATION:${escapeIcalText(cls.location)}`);
+        }
 
-        filteredClassEvents.forEach(cls => {
-            const targetLabel = cls.targetType === 'grade'
-                ? `${cls.targetGrade}年全体`
-                : cls.targetGrade === 1
-                    ? `${cls.targetGrade}-${cls.targetClass}`
-                    : `${cls.targetGrade}${cls.targetClass}`;
+        // Description: 教員リスト、学年、メモなどを統合
+        let descParts = [];
+        if (cls.teachers && cls.teachers.length > 0) {
+            descParts.push(`担当教員: ${cls.teachers.join('、')}`);
+        }
+        descParts.push(`対象: ${targetLabel} (${cls.departmentType === 'student' ? '専攻科' : '本科'})`);
+        descParts.push(`期間: ${cls.semester}`);
+        if (cls.period) descParts.push(`時限: ${cls.period}限`);
+        if (cls.memo) descParts.push(`\nメモ: ${cls.memo}`);
 
-            const dateStrOnly = formatDateKey(cls.date).replace(/-/g, '');
-            const uid = `my-class-${cls.id}-${dateStrOnly}@schedule-app`;
+        icalContent.push(`DESCRIPTION:${escapeIcalText(descParts.join('\n'))}`);
 
-            // 担当者マーク(★)の判定
-            const assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
-            const classExclusions = assignmentExclusions[cls.id] || [];
-            const isAssigned = !classExclusions.includes(formatDateKey(cls.date));
-            const assignedMark = isAssigned ? ' ★' : '';
-
-            // Summary: 授業名(学年クラス/コース) ★
-            const summary = `${cls.name}(${targetLabel})${assignedMark}`;
-
-            icalContent.push('BEGIN:VEVENT');
-            icalContent.push(`UID:${uid}`);
-            icalContent.push(`DTSTAMP:${formatDateForIcal(new Date())}`);
-
-            if (!cls.allDay && cls.startTime && cls.endTime) {
-                icalContent.push(`DTSTART;TZID=Asia/Tokyo:${formatDateForIcal(cls.startTime)}`);
-                icalContent.push(`DTEND;TZID=Asia/Tokyo:${formatDateForIcal(cls.endTime)}`);
-            } else {
-                const nextDay = new Date(cls.date);
-                nextDay.setDate(nextDay.getDate() + 1);
-                const nextDayStr = formatDateKey(nextDay).replace(/-/g, '');
-                icalContent.push(`DTSTART;VALUE=DATE:${dateStrOnly}`);
-                icalContent.push(`DTEND;VALUE=DATE:${nextDayStr}`);
-            }
-
-            icalContent.push(`SUMMARY:${escapeIcalText(summary)}`);
-
-            if (cls.location) {
-                icalContent.push(`LOCATION:${escapeIcalText(cls.location)}`);
-            }
-
-            // Description: 教員リスト、学年、メモなどを統合
-            let descParts = [];
-            if (cls.teachers && cls.teachers.length > 0) {
-                descParts.push(`担当教員: ${cls.teachers.join('、')}`);
-            }
-            descParts.push(`対象: ${targetLabel} (${cls.departmentType === 'student' ? '専攻科' : '本科'})`);
-            descParts.push(`期間: ${cls.semester}`);
-            if (cls.period) descParts.push(`時限: ${cls.period}限`);
-            if (cls.memo) descParts.push(`\nメモ: ${cls.memo}`);
-
-            icalContent.push(`DESCRIPTION:${escapeIcalText(descParts.join('\n'))}`);
-
-            icalContent.push('CATEGORIES:授業');
-            icalContent.push('STATUS:CONFIRMED');
-            icalContent.push('TRANSP:OPAQUE');
-            icalContent.push('END:VEVENT');
-        });
-    }
+        icalContent.push('CATEGORIES:授業');
+        icalContent.push('STATUS:CONFIRMED');
+        icalContent.push('END:VEVENT');
+    });
 
     icalContent.push('END:VCALENDAR');
 

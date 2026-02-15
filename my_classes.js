@@ -1058,53 +1058,50 @@ function generateClassEvents(year, options = {}) {
 
     console.log(`generateClassEvents: sourceData.length=${sourceData.length}, myClasses.length=${myClasses.length}, classOverrides.length=${classOverrides.length}`);
 
-    // 指定された年度の授業日（weekdayCountがある日）のみを抽出
-    const classDays = sourceData.filter(item => {
-        const d = item.date instanceof Date ? item.date : new Date(item.date);
-        return item.weekdayCount && getFiscalYear(d) === year;
-    });
-
+    // 各月のデータ存在確認を行い、データがない月はデフォルト（平日）で補完するロジック
+    const monthsInFiscalYear = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3];
     let uniqueClassDays = [];
-    if (classDays.length > 0) {
-        const dateToBestCount = new Map();
 
-        classDays.forEach(item => {
-            const dateStr = item.date.toDateString();
-            const currentCount = item.weekdayCount;
-            const existingItem = dateToBestCount.get(dateStr);
-
-            if (!existingItem) {
-                dateToBestCount.set(dateStr, item);
-            } else {
-                // より具体的な情報を優先する（数字が含まれている方を優先）
-                const currentHasDigit = /\d/.test(currentCount);
-                const existingHasDigit = /\d/.test(existingItem.weekdayCount);
-
-                if (currentHasDigit && !existingHasDigit) {
-                    dateToBestCount.set(dateStr, item);
-                }
-            }
+    monthsInFiscalYear.forEach(m => {
+        const mYear = (m <= 3) ? year + 1 : year;
+        const daysInMonth = sourceData.filter(item => {
+            const d = item.date instanceof Date ? item.date : new Date(item.date);
+            return d.getFullYear() === mYear && (d.getMonth() + 1) === m;
         });
 
-        uniqueClassDays = Array.from(dateToBestCount.values());
-    } else {
-        // データがない場合
-        const startDate = new Date(year, 3, 1);
-        const endDate = new Date(year + 1, 2, 31);
+        if (daysInMonth.length > 0) {
+            // その月のデータがある場合、weekdayCountがある日を抽出
+            const daysWithCount = daysInMonth.filter(item => item.weekdayCount);
 
-        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-            const day = d.getDay();
-            if (day === 0 || day === 6) continue;
-
-            uniqueClassDays.push({
-                date: new Date(d),
-                weekdayCount: null,
-                event: null
+            // 複数の項目（本科/専攻科）がある場合があるのでユニーク化
+            const dateToBestItem = new Map();
+            daysWithCount.forEach(item => {
+                const dateKey = item.date.toDateString();
+                const existing = dateToBestItem.get(dateKey);
+                if (!existing || (/\d/.test(item.weekdayCount) && !/\d/.test(existing.weekdayCount))) {
+                    dateToBestItem.set(dateKey, item);
+                }
             });
-        }
-    }
+            uniqueClassDays = uniqueClassDays.concat(Array.from(dateToBestItem.values()));
+        } else {
+            // その月のデータが全くない場合のみ、デフォルト（土日以外）で補完
+            const startDate = new Date(mYear, m - 1, 1);
+            const endDate = new Date(mYear, m, 0); // 月末
 
-    console.log(`${uniqueClassDays.length} 日の授業実施候補日を処理します`);
+            for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+                const day = d.getDay();
+                if (day === 0 || day === 6) continue;
+
+                uniqueClassDays.push({
+                    date: new Date(d),
+                    weekdayCount: null,
+                    event: null
+                });
+            }
+        }
+    });
+
+    console.log(`${uniqueClassDays.length} 日の授業実施日の候補が見つかりました（データ不足月は平日で補完済）`);
 
     // 各授業日に対して授業をチェック
     uniqueClassDays.forEach(dayData => {
