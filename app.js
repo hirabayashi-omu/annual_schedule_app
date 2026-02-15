@@ -1810,7 +1810,7 @@ window.updateCalendar = function updateCalendar() {
     });
 
     let currentGlobalRow = 2; // Header is row 1
-    const holidaysMap = typeof getHolidaysForYear === 'function' ? getHolidaysForYear(currentYear) : {};
+    const holidayMaps = new Map(); // 年をキーとした祝日マップのキャッシュ
 
     for (let w = 0; w < 6; w++) {
         const weekDates = allDates.slice(w * 7, (w + 1) * 7);
@@ -1872,7 +1872,11 @@ window.updateCalendar = function updateCalendar() {
             if (dStr === formatDateKey(new Date())) bg.classList.add('today');
             if (dayOverlapInfo.has(dStr)) bg.classList.add('has-overlap');
 
-            const holN = typeof getHolidayName === 'function' ? getHolidayName(date, holidaysMap) : null;
+            const dateYear = date.getFullYear();
+            if (!holidayMaps.has(dateYear)) {
+                holidayMaps.set(dateYear, typeof getHolidaysForYear === 'function' ? getHolidaysForYear(dateYear) : {});
+            }
+            const holN = typeof getHolidayName === 'function' ? getHolidayName(date, holidayMaps.get(dateYear)) : null;
 
             // 年休候補日（授業がなく、かつ祝日でもない平日）
             // 年休候補日（担当授業や重要行事がなく、かつ祝日でもない平日）
@@ -3227,50 +3231,12 @@ function exportToIcal() {
     // 1. 基本となる行事とカスタム予定を取得
     const appliedData = getAppliedScheduleData('both');
 
-    // 2. 授業予定を取得（チェックされている場合）
-    let allEvents = [...appliedData];
-    if (showClass) {
-        // カレンダー表示用と同じロジックで授業を展開
-        const currentTargetYear = parseInt(document.getElementById('globalYearSelect').value);
-        const startYear = startDate.getFullYear();
-        const endYear = endDate.getFullYear();
-
-        // 期間内の全日付を走査して授業を抽出（効率は良くないが確実）
-        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-            const dStr = formatDateKey(d);
-            const dayEvents = scheduleData.filter(item => item.date.toDateString() === d.toDateString());
-            if (typeof getDisplayableClassesForDate === 'function') {
-                getDisplayableClassesForDate(d, dayEvents).forEach(cls => {
-                    allEvents.push({
-                        id: cls.id,
-                        date: new Date(d),
-                        event: cls.name,
-                        type: 'myclass',
-                        startTime: cls.startTime instanceof Date ? cls.startTime.toTimeString().substring(0, 5) : (cls.startTime || ''),
-                        endTime: cls.endTime instanceof Date ? cls.endTime.toTimeString().substring(0, 5) : (cls.endTime || ''),
-                        location: cls.location || '',
-                        allDay: false
-                    });
-                });
-            }
-        }
-        // ループで d が書き換わるので戻すか再作成
-    }
-
-    // 3. フィルタリング
-    const filteredData = allEvents.filter(item => {
-        // 期間チェック（授業追加時にずれている可能性があるので再確認）
+    // 2. 予定（Excel行事/カスタム行事）の抽出
+    const filteredData = appliedData.filter(item => {
         const itemDate = new Date(item.date);
         if (itemDate < startDate || itemDate > endDate) return false;
 
-        if (item.type === 'custom') {
-            // カスタム予定は「申請予定」に含める
-            return showApplied;
-        }
-        if (item.type === 'myclass') {
-            return showClass;
-        }
-        // excel などの行事
+        if (item.type === 'custom') return showApplied;
         return showAnnual;
     });
 

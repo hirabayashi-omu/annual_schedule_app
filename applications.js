@@ -121,15 +121,15 @@ async function fillShiftApplication(fileName) {
         for (const dateStr of sortedDates) {
             const ov = workOverrides[dateStr];
             if (!ov.isApplied) {
-                const dateObj = new Date(dateStr);
+                const dateObj = typeof parseDateKey === 'function' ? parseDateKey(dateStr) : new Date(dateStr.replace(/-/g, '/'));
                 const beforeShift = typeof getWorkTimeForDate === 'function' ? getWorkTimeForDate(dateObj, true) : null;
 
                 targets.push({
                     date: dateObj,
                     dateStr: dateStr,
                     reiwa: getReiwaDate(dateObj),
-                    before: beforeShift ? (beforeShift.id || Object.keys(WORK_SHIFTS).find(k => WORK_SHIFTS[k].name === beforeShift.name)) : '',
-                    after: ov.shift
+                    before: beforeShift ? { id: (beforeShift.id || Object.keys(WORK_SHIFTS).find(k => WORK_SHIFTS[k].name === beforeShift.name)), start: beforeShift.start, end: beforeShift.end } : null,
+                    after: { id: ov.shift, start: ov.start, end: ov.end }
                 });
             }
         }
@@ -150,32 +150,45 @@ async function fillShiftApplication(fileName) {
         return;
     }
 
-    // 3. テンプレートの読み込み（内蔵データを使用）
-    let templateBuffer;
-    if (window.TEMPLATES_CONTENT && window.TEMPLATES_CONTENT[fileName]) {
-        templateBuffer = base64ToArrayBuffer(window.TEMPLATES_CONTENT[fileName]);
-    } else {
-        throw new Error('テンプレートデータが読み込めていません。templates_content.js を確認してください。');
-    }
-
-    // 4. 各バッチについてファイル生成
     const nowReiwa = getReiwaDate(new Date());
 
+    // 3. テンプレートの取得と処理
+    const templateBase64 = window.TEMPLATES_CONTENT[fileName];
+    if (!templateBase64) {
+        throw new Error("テンプレートデータが見つかりません: " + fileName);
+    }
+    const templateBuffer = base64ToArrayBuffer(templateBase64);
+
+    // 4. 各バッチについてファイル生成
     for (let i = 0; i < batches.length; i++) {
         const batch = batches[i];
-        console.log("Processing batch", i + 1);
-
         try {
-            const zip = new PizZip(templateBuffer);
-            const doc = new DocxTemplater(zip, { paragraphLoop: true, linebreaks: true });
+            console.log(`Processing batch ${i + 1}`, batch);
 
-            // データの準備
+            // テンプレートバッファのコピーを使用（念のため）
+            const zip = new PizZip(templateBuffer.slice(0));
+            const doc = new DocxTemplater();
+            doc.loadZip(zip);
+            doc.setOptions({
+                paragraphLoop: true,
+                linebreaks: true,
+                delimiters: { start: '{', end: '}' }
+            });
+
+            // データの準備 (タグ名の揺れに対応するためエイリアスを追加)
             const viewData = {
                 today_year: nowReiwa.year,
+                today_year_ad: new Date().getFullYear(),
                 today_month: nowReiwa.month,
                 today_day: nowReiwa.day,
-                staff_id: profile.staffId || '',
+                staff_id: profile.staffId || profile.staff_id || '',
+                staffId: profile.staffId || profile.staff_id || '',
                 user_name: profile.name || '',
+                name: profile.name || '',
+                user_dept: profile.course || profile.user_dept || '',
+                course: profile.course || profile.user_dept || '',
+                user_rank: profile.rank || profile.user_rank || '',
+                rank: profile.rank || profile.user_rank || '',
             };
 
             // 行データ (1-5)
@@ -187,19 +200,59 @@ async function fillShiftApplication(fileName) {
                     viewData[`${prefix}m`] = item.reiwa.month;
                     viewData[`${prefix}d`] = item.reiwa.day;
                     viewData[`${prefix}w`] = item.reiwa.weekday;
-                    viewData[`${prefix}before`] = formatShiftChoice(item.before);
-                    viewData[`${prefix}after`] = formatShiftChoice(item.after);
+                    viewData[`${prefix}before`] = formatShiftChoice(item.before.id);
+                    viewData[`${prefix}after`] = formatShiftChoice(item.after.id);
+
+                    // 分割データ (Before)
+                    const bParts = splitShiftInfo(item.before);
+                    viewData[`${prefix}b_p`] = bParts.pattern;
+                    viewData[`${prefix}b_sh`] = bParts.startH;
+                    viewData[`${prefix}b_sm`] = bParts.startM;
+                    viewData[`${prefix}b_eh`] = bParts.endH;
+                    viewData[`${prefix}b_em`] = bParts.endM;
+                    // パターン別〇印 (Before)
+                    ['A', 'B', 'C', 'D', 'E'].forEach(p => {
+                        viewData[`${prefix}b_${p}`] = (bParts.pattern === p) ? '〇' : '';
+                    });
+                    viewData[`${prefix}b_other`] = (item.before.id === 'Other') ? '〇' : '';
+
+                    // 分割データ (After)
+                    const aParts = splitShiftInfo(item.after);
+                    viewData[`${prefix}a_p`] = aParts.pattern;
+                    viewData[`${prefix}a_sh`] = aParts.startH;
+                    viewData[`${prefix}a_sm`] = aParts.startM;
+                    viewData[`${prefix}a_eh`] = aParts.endH;
+                    viewData[`${prefix}a_em`] = aParts.endM;
+                    // パターン別〇印 (After)
+                    ['A', 'B', 'C', 'D', 'E'].forEach(p => {
+                        viewData[`${prefix}a_${p}`] = (aParts.pattern === p) ? '〇' : '';
+                    });
+                    viewData[`${prefix}a_other`] = (item.after.id === 'Other') ? '〇' : '';
+
                 } else {
-                    viewData[`${prefix}y`] = '';
-                    viewData[`${prefix}m`] = '';
-                    viewData[`${prefix}d`] = '';
-                    viewData[`${prefix}w`] = '';
-                    viewData[`${prefix}before`] = '';
-                    viewData[`${prefix}after`] = '';
+                    const keys = [
+                        'y', 'm', 'd', 'w', 'before', 'after',
+                        'b_p', 'b_sh', 'b_sm', 'b_eh', 'b_em',
+                        'b_A', 'b_B', 'b_C', 'b_D', 'b_E',
+                        'b_other', // Added 'b_other'
+                        'a_p', 'a_sh', 'a_sm', 'a_eh', 'a_em',
+                        'a_A', 'a_B', 'a_C', 'a_D', 'a_E', 'a_other'
+                    ];
+                    keys.forEach(k => viewData[`${prefix}${k}`] = '');
                 }
             }
 
-            doc.render(viewData);
+            console.log("View Data for batch " + (i + 1) + ":", viewData);
+            doc.setData(viewData);
+            try {
+                doc.render();
+                console.log("Batch " + (i + 1) + " rendered successfully.");
+            } catch (error) {
+                console.error("Docxtemplater render error:", error);
+                alert("書類作成中にエラーが発生しました。テンプレートの形式（タグの書き方など）を確認してください。");
+                throw error;
+            }
+
             const out = doc.getZip().generate({
                 type: 'blob',
                 mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -211,6 +264,7 @@ async function fillShiftApplication(fileName) {
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            console.log("Download triggered for batch", i + 1);
 
         } catch (err) {
             console.error("Batch processing error:", err);
@@ -219,4 +273,45 @@ async function fillShiftApplication(fileName) {
     }
 
     alert('全ての申請書の作成が完了しました。');
+}
+
+/**
+ * 勤務パターンの情報を「記号」「時」「分」に分割する
+ */
+function splitShiftInfo(item) {
+    const res = { pattern: '', startH: '', startM: '', endH: '', endM: '' };
+    if (!item) return res;
+
+    const shiftId = typeof item === 'object' ? item.id : item;
+
+    // パターン記号 (A, B, C, D, E)
+    if (['A', 'B', 'C', 'D', 'E'].includes(shiftId)) {
+        res.pattern = shiftId;
+    }
+
+    // 時間の抽出
+    let startStr = '';
+    let endStr = '';
+
+    const preDef = (typeof WORK_SHIFTS !== 'undefined') ? WORK_SHIFTS[shiftId] : null;
+    if (preDef && preDef.start && preDef.end) {
+        startStr = preDef.start;
+        endStr = preDef.end;
+    } else if (typeof item === 'object' && item.start && item.end) {
+        startStr = item.start;
+        endStr = item.end;
+    }
+
+    if (startStr && startStr.includes(':')) {
+        const parts = startStr.split(':');
+        res.startH = parts[0];
+        res.startM = parts[1];
+    }
+    if (endStr && endStr.includes(':')) {
+        const parts = endStr.split(':');
+        res.endH = parts[0];
+        res.endM = parts[1];
+    }
+
+    return res;
 }

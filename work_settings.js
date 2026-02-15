@@ -112,7 +112,7 @@ function getCurrentWorkSettings() {
 /**
  * カレンダーデータから休業期間を抽出
  */
-function getVacationPeriods() {
+function getVacationPeriods(fiscalYear) {
     const periods = {
         spring_vac: { start: null, end: null },
         summer_vac: { start: null, end: null },
@@ -122,7 +122,7 @@ function getVacationPeriods() {
 
     if (typeof scheduleData === 'undefined' || !scheduleData.length) return periods;
 
-    const currentTargetYear = getCurrentFiscalYear();
+    const currentTargetYear = fiscalYear || getCurrentFiscalYear();
 
     scheduleData.forEach(item => {
         const name = item.event || "";
@@ -1193,7 +1193,8 @@ function getWorkTimeForDate(date, ignoreOverride = false) {
         return { ...res, isOverride: true, isApplied: !!ov.isApplied };
     }
 
-    const ranges = getVacationPeriods();
+    const targetYear = getFiscalYear(date);
+    const ranges = getVacationPeriods(targetYear);
     let periodId = '';
 
     // 休業期間の判定
@@ -1214,7 +1215,6 @@ function getWorkTimeForDate(date, ignoreOverride = false) {
         }
     }
 
-    const targetYear = getFiscalYear(date);
     const yearSettings = workSettings[targetYear] || getCurrentWorkSettings();
 
     const config = yearSettings[periodId] ? yearSettings[periodId][dayNum] : null;
@@ -1267,7 +1267,7 @@ window.renderApplicationStats = function () {
 
     // タイトルの更新
     const globalYearSelect = document.getElementById('globalYearSelect');
-    const fiscalYear = globalYearSelect ? globalYearSelect.value : (new Date().getFullYear());
+    const fiscalYear = parseInt(globalYearSelect ? globalYearSelect.value : (new Date().getFullYear()));
     const statsTitle = document.getElementById('statsTitle');
     if (statsTitle) statsTitle.textContent = `勤怠管理 (${fiscalYear}年/${fiscalYear}年度）`;
 
@@ -1298,8 +1298,8 @@ window.renderApplicationStats = function () {
             const ovDate = parseDateKey(ov.date);
             const ovYear = ovDate.getFullYear();
 
-            // 表示年度に関連する可能性のある範囲（currentYearの前後1年程度）に限定して収集を高速化
-            if (currentYear !== null && (ovYear < currentYear - 1 || ovYear > currentYear + 1)) return;
+            // 表示年度に関連する可能性のある範囲（fiscalYearの前後1年程度）に限定して収集を高速化
+            if (fiscalYear !== null && (ovYear < fiscalYear - 1 || ovYear > fiscalYear + 1)) return;
 
             if (ov.type === 'custom' && ov.action === 'add' && ov.data) {
                 const item = ov.data;
@@ -1359,6 +1359,7 @@ window.renderApplicationStats = function () {
 
                 statsData.push({
                     date: ov.date,
+                    endDate: ov.endDate || ov.date,
                     type,
                     type_id,
                     type_class,
@@ -1369,6 +1370,7 @@ window.renderApplicationStats = function () {
                     source: 'custom',
                     details: item // 集計用に元のデータを保持
                 });
+
             }
         });
     }
@@ -1378,7 +1380,7 @@ window.renderApplicationStats = function () {
         Object.entries(workOverrides).forEach(([dateStr, ov]) => {
             const dateObj = parseDateKey(dateStr);
             const ovYear = dateObj.getFullYear();
-            if (currentYear !== null && (ovYear < currentYear - 1 || ovYear > currentYear + 1)) return;
+            if (fiscalYear !== null && (ovYear < fiscalYear - 1 || ovYear > fiscalYear + 1)) return;
 
             let shiftName = ov.shift;
             if (shiftName === 'Other') shiftName = `その他 (${ov.start}-${ov.end})`;
@@ -1401,38 +1403,93 @@ window.renderApplicationStats = function () {
         });
     }
 
+    // 3. scheduleData (Excel imports) からの出張を補足
+    if (typeof scheduleData !== 'undefined') {
+        scheduleData.forEach(item => {
+            if (!item.event || item.event.trim() === '') return;
+            const dStr = typeof formatDateKey === 'function' ? formatDateKey(item.date) : item.date.toISOString().split('T')[0];
+
+            // 削除・移動されたExcelアイテムは除外
+            const isRemoved = typeof classOverrides !== 'undefined' && classOverrides.some(ov =>
+                String(ov.id) === String(item.id) && ov.type === 'excel' && ov.date === dStr && (ov.action === 'delete' || ov.action === 'move')
+            );
+            if (isRemoved) return;
+
+            // すでにstatsDataに存在する（カスタム追加された）アイテムと重複していないかチェック
+            if (statsData.some(d => String(d.id) === String(item.id))) return;
+
+            // 出張判定
+            // 出張判定 (isBusinessTrip未定義エラー回避のためインライン化)
+            const eventText = item.event || '';
+            if (eventText.includes('出張')) {
+                // Excel行事の場合、テキストから期間を抽出試行
+                let endDateStr = dStr;
+                const match = eventText.match(/(\d{1,2})[\/\-](\d{1,2}).*?[～~-].*?(\d{1,2})[\/\-](\d{1,2})/);
+                if (match) {
+                    const year = item.date.getFullYear();
+                    endDateStr = `${year}-${match[3].padStart(2, '0')}-${match[4].padStart(2, '0')}`;
+                }
+
+                statsData.push({
+                    date: dStr,
+                    endDate: endDateStr,
+                    type: '出張 (Excel行事)',
+                    type_id: 'trip',
+                    type_class: 'trip',
+                    content: eventText,
+                    condition: item.time || '-',
+                    id: `excel-${index}`,
+                    isApplied: true,
+                    source: 'excel',
+                    details: { isTripCard: true, event: eventText }
+                });
+            }
+
+
+        });
+    }
+
     // フィルター適用
     if (filterType !== 'all') {
         statsData = statsData.filter(d => d.type_id === filterType);
     }
 
+    // 表示期間の範囲を特定する
+    let periodStart = null;
+
+    let periodEnd = null;
+
     if (filterPeriod !== 'all') {
-        statsData = statsData.filter(d => {
-            const date = parseDateKey(d.date);
-            const y = date.getFullYear();
-            const m = date.getMonth() + 1; // 1-12
-
-            if (filterPeriod === 'calendar_year') {
-                // currentYear (年度) の開始年と同じ暦年の1月-12月
-                return y === currentYear;
-            }
-
-            // 以下の月別・学期フィルターは currentYear (年度) 内のデータに限定
-            if (getFiscalYear(date) !== currentYear) return false;
-
-            if (filterPeriod === 'first_half') return m >= 4 && m <= 9;
-            if (filterPeriod === 'second_half') return (m >= 10 && m <= 12) || (m >= 1 && m <= 3);
-            if (filterPeriod.startsWith('month-')) {
-                const targetM = parseInt(filterPeriod.split('-')[1]);
-                return m === targetM;
-            }
-            return true;
-        });
+        if (filterPeriod === 'calendar_year') {
+            periodStart = new Date(fiscalYear, 0, 1);
+            periodEnd = new Date(fiscalYear, 11, 31, 23, 59, 59);
+        } else if (filterPeriod === 'first_half') {
+            periodStart = new Date(fiscalYear, 3, 1);
+            periodEnd = new Date(fiscalYear, 8, 30, 23, 59, 59);
+        } else if (filterPeriod === 'second_half') {
+            periodStart = new Date(fiscalYear, 9, 1);
+            periodEnd = new Date(fiscalYear + 1, 2, 31, 23, 59, 59);
+        } else if (filterPeriod.startsWith('month-')) {
+            const m = parseInt(filterPeriod.split('-')[1]);
+            const y = (m <= 3) ? fiscalYear + 1 : fiscalYear;
+            periodStart = new Date(y, m - 1, 1);
+            periodEnd = new Date(y, m, 0, 23, 59, 59);
+        }
     } else {
-        // 'all' の場合 (年度内: 4月-3月)
+        // 年度内 (4月-3月)
+        periodStart = new Date(fiscalYear, 3, 1);
+        periodEnd = new Date(fiscalYear + 1, 2, 31, 23, 59, 59);
+    }
+
+    if (periodStart && periodEnd) {
         statsData = statsData.filter(d => {
-            const date = parseDateKey(d.date);
-            return getFiscalYear(date) === currentYear;
+            const itemStart = parseDateKey(d.date);
+            const itemEnd = (d.details && d.details.isTripCard && d.details.endDate)
+                ? parseDateKey(d.details.endDate)
+                : itemStart;
+
+            // 期間の重なり判定
+            return itemStart <= periodEnd && itemEnd >= periodStart;
         });
     }
 
@@ -1443,30 +1500,49 @@ window.renderApplicationStats = function () {
             if (data.isLeaveCard) {
                 const mins = (data.leaveHours || 0) * 60 + (data.leaveExtra || 0);
                 leaveTotalMinutes += mins;
-                if (data.leaveType === 'full') {
+                if (data.leaveType === 'full' || (data.leaveHours || 0) >= 8) {
                     leaveFullDays++;
                 } else if ((data.leaveHours || 0) >= 4) {
-                    // 4時間以上は 0.5日分としてカウント
+                    // 4時間以上（半日）としてカウント
                     leaveHalfDays++;
                 } else {
                     leaveHoursOnlyMins += mins;
                 }
             } else if (data.isTripCard) {
                 tripCount++;
-                const dStart = parseDateKey(item.date); // 簡易化
-                const dEnd = parseDateKey(data.endDate || item.date);
-                const days = Math.floor((dEnd - dStart) / (1000 * 60 * 60 * 24)) + 1;
-                tripDays += days;
+                const dStart = parseDateKey(item.date);
+                const dEnd = parseDateKey(item.endDate || data.endDate || item.date);
+
+                // フィルター期間との重なりを計算
+                let startForCalc = new Date(Math.max(dStart, periodStart));
+                let endForCalc = new Date(Math.min(dEnd, periodEnd));
+
+                if (startForCalc <= endForCalc) {
+                    const days = Math.floor((endForCalc - startForCalc) / (1000 * 60 * 60 * 24)) + 1;
+                    tripDays += days;
+                }
+
             } else if (data.isWfhCard) {
                 wfhCount++;
             } else if (data.isHolidayWorkCard) {
                 holidayWorkCount++;
                 holidayWorkTotalMinutes += (data.holidayWorkDetails?.workMinutes || 0);
             }
+        } else if (item.source === 'excel') {
+            if (item.type_id === 'trip') {
+                tripCount++;
+                tripDays++;
+            } else if (item.type_id === 'wfh') {
+                wfhCount++;
+            }
         } else if (item.source === 'work') {
             shiftChangeCount++;
         }
     });
+
+    // ここにあった scheduleData の重複集計ブロックは削除済み (statsData に統合)
+
+
 
     // ソート適用
     statsData.sort((a, b) => {
