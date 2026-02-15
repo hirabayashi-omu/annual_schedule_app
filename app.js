@@ -3152,10 +3152,11 @@ function exportToJson() {
     const endDate = new Date(endStr);
     endDate.setHours(23, 59, 59, 999);
 
-    const appliedData = getAppliedScheduleData('both');
+    // 1. 基本となる行事とカスタム予定を取得（授業データは別途集計するため除外）
+    const appliedData = getAppliedScheduleData('both').filter(item => !item.fromMyClass);
     let allEvents = [...appliedData];
 
-    // 授業データの展開
+    // 2. 授業データの展開（カレンダー表示と完全に一致させる）
     if (showClass && typeof getDisplayableClassesForDate === 'function') {
         for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
             const date = new Date(d);
@@ -3183,6 +3184,7 @@ function exportToJson() {
                     location: cls.location || '',
                     allDay: false,
                     isClass: true,
+                    period: periodKey,
                     target: cls.targetGrade + (cls.targetType === 'grade' ? '年全体' : cls.targetClass)
                 });
             });
@@ -3210,12 +3212,30 @@ function exportToJson() {
 
     const exportData = filteredData.map(item => {
         const dateKey = formatDateKey(item.date);
+
+        let sTime = item.startTime || '';
+        let eTime = item.endTime || '';
+
+        // 時限情報があり、時刻が空の場合は解決を試みる（主に年間行事用）
+        if (!sTime && item.period) {
+            const pNumMatch = String(item.period).match(/\d+/);
+            if (pNumMatch) {
+                const pNum = pNumMatch[0];
+                const PERIOD_TIMES_LOCAL = window.PERIOD_TIMES || PERIOD_TIMES;
+                const times = PERIOD_TIMES_LOCAL[pNum];
+                if (times) {
+                    sTime = times.start;
+                    eTime = times.end;
+                }
+            }
+        }
+
         return {
             date: dateKey,
             event: item.event,
             type: item.type,
-            startTime: item.startTime || '',
-            endTime: item.endTime || '',
+            startTime: sTime,
+            endTime: eTime,
             location: item.location || '',
             memo: item.memo || '',
             holiday: allHolidays.get(dateKey) || null,
