@@ -3301,11 +3301,20 @@ function exportToIcal() {
     // 3. 授業データの取得（カレンダー表示と完全に一致させる）
     let filteredClassEvents = [];
     if (typeof getDisplayableClassesForDate === 'function' && showClass) {
+        // インデックス化して高速化
+        const eventsByDate = new Map();
+        appliedData.forEach(item => {
+            const key = formatDateKey(item.date);
+            if (!eventsByDate.has(key)) eventsByDate.set(key, []);
+            eventsByDate.get(key).push(item);
+        });
+
         // 表示時と同じロジックで日ごとに取得
         for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
             const date = new Date(d);
-            // その日の行事（Excel由来など）を取得して制約を判定
-            const dayEvents = appliedData.filter(item => formatDateKey(item.date) === formatDateKey(date));
+            const dStr = formatDateKey(date);
+            // その日の行事取得
+            const dayEvents = eventsByDate.get(dStr) || [];
             const classesOnDay = getDisplayableClassesForDate(date, dayEvents);
 
             classesOnDay.forEach(cls => {
@@ -3354,25 +3363,47 @@ function exportToIcal() {
         return;
     }
 
-    // ICAL形式生成
-    let icalContent = [
-        'BEGIN:VCALENDAR',
-        'VERSION:2.0',
-        'PRODID:-//年間行事予定表アプリ//JP',
-        'CALSCALE:GREGORIAN',
-        'METHOD:PUBLISH',
-        'X-WR-CALNAME:学校カレンダー',
-        'X-WR-TIMEZONE:Asia/Tokyo',
-        'BEGIN:VTIMEZONE',
-        'TZID:Asia/Tokyo',
-        'BEGIN:STANDARD',
-        'DTSTART:19700101T000000',
-        'TZOFFSETFROM:+0900',
-        'TZOFFSETTO:+0900',
-        'TZNAME:JST',
-        'END:STANDARD',
-        'END:VTIMEZONE'
-    ];
+    // ICAL形式生成用の補助関数（行折り返し対応）
+    const icalLines = [];
+    const addIcalLine = (key, value) => {
+        const line = `${key}:${value}`;
+        // iCal標準: 75オクテット（マルチバイトを考慮し安全に70文字で折り返し）
+        if (line.length <= 70) {
+            icalLines.push(line);
+        } else {
+            let current = line;
+            let first = true;
+            while (current.length > 0) {
+                let segment;
+                if (first) {
+                    segment = current.substring(0, 70);
+                    current = current.substring(70);
+                    first = false;
+                } else {
+                    segment = ' ' + current.substring(0, 69);
+                    current = current.substring(69);
+                }
+                if (segment.length > 0) icalLines.push(segment);
+            }
+        }
+    };
+
+    icalLines.push('BEGIN:VCALENDAR');
+    icalLines.push('VERSION:2.0');
+    icalLines.push('PRODID:-//年間行事予定表アプリ//JP');
+    icalLines.push('CALSCALE:GREGORIAN');
+    icalLines.push('METHOD:PUBLISH');
+    icalLines.push('X-WR-CALNAME:学校カレンダー');
+    icalLines.push('X-WR-TIMEZONE:Asia/Tokyo');
+    icalLines.push('BEGIN:VTIMEZONE');
+    icalLines.push('TZID:Asia/Tokyo');
+    icalLines.push('BEGIN:STANDARD');
+    icalLines.push('DTSTART:19700101T000000');
+    icalLines.push('TZOFFSETFROM:+0900');
+    icalLines.push('TZOFFSETTO:+0900');
+    icalLines.push('TZNAME:JST');
+    icalLines.push('END:STANDARD');
+    icalLines.push('END:VTIMEZONE');
 
     filteredData.forEach(item => {
         const eventTitle = item.event || item.name || '';
@@ -3381,9 +3412,9 @@ function exportToIcal() {
         const dateStrOnly = formatDateKey(item.date).replace(/-/g, '');
         const uid = generateUID(item);
 
-        icalContent.push('BEGIN:VEVENT');
-        icalContent.push(`UID:${uid}`);
-        icalContent.push(`DTSTAMP:${formatDateForIcal(new Date(), true)}`);
+        icalLines.push('BEGIN:VEVENT');
+        addIcalLine('UID', uid);
+        addIcalLine('DTSTAMP', formatDateForIcal(new Date(), true));
 
         if (item.allDay === false && item.startTime && item.endTime) {
             const startDt = new Date(item.date);
@@ -3393,25 +3424,25 @@ function exportToIcal() {
             const [eh, em] = String(item.endTime).split(':');
             endDt.setHours(parseInt(eh) || 0, parseInt(em) || 0, 0);
 
-            // Google Calendar等での互換性のため、すべてUTC(Z付き)で出力
-            icalContent.push(`DTSTART:${formatDateForIcal(startDt, true)}`);
-            icalContent.push(`DTEND:${formatDateForIcal(endDt, true)}`);
-            icalContent.push('TRANSP:OPAQUE');
+            // 日本時間(Asia/Tokyo)で出力
+            addIcalLine('DTSTART;TZID=Asia/Tokyo', formatDateForIcal(startDt));
+            addIcalLine('DTEND;TZID=Asia/Tokyo', formatDateForIcal(endDt));
+            icalLines.push('TRANSP:OPAQUE');
         } else {
             // 終日予定
             const endDt = new Date(item.date);
             endDt.setDate(endDt.getDate() + 1);
             const nextDayStr = formatDateKey(endDt).replace(/-/g, '');
 
-            icalContent.push(`DTSTART;VALUE=DATE:${dateStrOnly}`);
-            icalContent.push(`DTEND;VALUE=DATE:${nextDayStr}`);
-            icalContent.push('TRANSP:TRANSPARENT');
+            addIcalLine('DTSTART;VALUE=DATE', dateStrOnly);
+            addIcalLine('DTEND;VALUE=DATE', nextDayStr);
+            icalLines.push('TRANSP:OPAQUE'); // 終日でも予定ありとして扱う
         }
 
-        icalContent.push(`SUMMARY:${escapeIcalText(eventTitle)}`);
+        addIcalLine('SUMMARY', escapeIcalText(eventTitle));
 
         if (item.location) {
-            icalContent.push(`LOCATION:${escapeIcalText(item.location)}`);
+            addIcalLine('LOCATION', escapeIcalText(item.location));
         }
 
         let desc = (item.weekdayCount ? `${item.weekdayCount} - ` : '') + eventTitle;
@@ -3439,15 +3470,15 @@ function exportToIcal() {
         }
 
         if (item.memo) desc += `\n\n${item.memo}`;
-        icalContent.push(`DESCRIPTION:${escapeIcalText(desc)}`);
+        addIcalLine('DESCRIPTION', escapeIcalText(desc));
 
         let category = '行事';
         if (item.type === 'teacher') category = '本科';
         else if (item.type === 'student') category = '専攻科';
 
-        icalContent.push(`CATEGORIES:${category}`);
-        icalContent.push('STATUS:CONFIRMED');
-        icalContent.push('END:VEVENT');
+        addIcalLine('CATEGORIES', category);
+        icalLines.push('STATUS:CONFIRMED');
+        icalLines.push('END:VEVENT');
     });
 
     // 4. 授業データを追加
@@ -3472,28 +3503,28 @@ function exportToIcal() {
         // Summary: 授業名(学年クラス/コース) ★
         const summary = `${cls.name}(${targetLabel})${assignedMark}`;
 
-        icalContent.push('BEGIN:VEVENT');
-        icalContent.push(`UID:${uid}`);
-        icalContent.push(`DTSTAMP:${formatDateForIcal(new Date(), true)}`);
+        icalLines.push('BEGIN:VEVENT');
+        addIcalLine('UID', uid);
+        addIcalLine('DTSTAMP', formatDateForIcal(new Date(), true));
 
         if (!cls.allDay && cls.startTime && cls.endTime) {
-            // UTC(Z付き)で出力
-            icalContent.push(`DTSTART:${formatDateForIcal(cls.startTime, true)}`);
-            icalContent.push(`DTEND:${formatDateForIcal(cls.endTime, true)}`);
-            icalContent.push('TRANSP:OPAQUE');
+            // 日本時間(Asia/Tokyo)で出力
+            addIcalLine('DTSTART;TZID=Asia/Tokyo', formatDateForIcal(cls.startTime));
+            addIcalLine('DTEND;TZID=Asia/Tokyo', formatDateForIcal(cls.endTime));
+            icalLines.push('TRANSP:OPAQUE');
         } else {
             const nextDay = new Date(cls.date);
             nextDay.setDate(nextDay.getDate() + 1);
             const nextDayStr = formatDateKey(nextDay).replace(/-/g, '');
-            icalContent.push(`DTSTART;VALUE=DATE:${dateStrOnly}`);
-            icalContent.push(`DTEND;VALUE=DATE:${nextDayStr}`);
-            icalContent.push('TRANSP:OPAQUE'); // 授業は終日でも予定ありとして扱う
+            addIcalLine('DTSTART;VALUE=DATE', dateStrOnly);
+            addIcalLine('DTEND;VALUE=DATE', nextDayStr);
+            icalLines.push('TRANSP:OPAQUE'); // 授業は終日でも予定ありとして扱う
         }
 
-        icalContent.push(`SUMMARY:${escapeIcalText(summary)}`);
+        addIcalLine('SUMMARY', escapeIcalText(summary));
 
         if (cls.location) {
-            icalContent.push(`LOCATION:${escapeIcalText(cls.location)}`);
+            addIcalLine('LOCATION', escapeIcalText(cls.location));
         }
 
         // Description: 教員リスト、学年、メモなどを統合
@@ -3506,17 +3537,17 @@ function exportToIcal() {
         if (cls.period) descParts.push(`時限: ${cls.period}限`);
         if (cls.memo) descParts.push(`\nメモ: ${cls.memo}`);
 
-        icalContent.push(`DESCRIPTION:${escapeIcalText(descParts.join('\n'))}`);
+        addIcalLine('DESCRIPTION', escapeIcalText(descParts.join('\n')));
 
-        icalContent.push('CATEGORIES:授業');
-        icalContent.push('STATUS:CONFIRMED');
-        icalContent.push('END:VEVENT');
+        addIcalLine('CATEGORIES', '授業');
+        icalLines.push('STATUS:CONFIRMED');
+        icalLines.push('END:VEVENT');
     });
 
-    icalContent.push('END:VCALENDAR');
+    icalLines.push('END:VCALENDAR');
 
     // ファイルダウンロード
-    const blob = new Blob([icalContent.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
+    const blob = new Blob([icalLines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
     downloadFile(blob, `schedule_${startStr}_to_${endStr}.ics`);
 }
 
@@ -3675,9 +3706,9 @@ function formatDateForIcal(date, isUtc = false) {
 }
 
 function generateUID(item) {
-    const dateStr = formatDateKey(item.date);
-    const eventHash = simpleHash(item.event || item.name || 'noevent');
-    return `${dateStr}-${eventHash}@schedule-app.local`;
+    const dateStr = formatDateKey(item.date).replace(/-/g, '');
+    const uniquePart = item.id || simpleHash(item.event || item.name || 'noevent');
+    return `${dateStr}-${uniquePart}@schedule-app.local`;
 }
 
 function simpleHash(str) {
