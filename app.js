@@ -2057,7 +2057,10 @@ window.updateCalendar = function updateCalendar() {
             el.dataset.date = seg.segStart;
             el.dataset.period = seg.period || (item.period !== undefined ? item.period : '');
             el.title = label + (td ? ` (${td})` : '');
-            el.addEventListener('dblclick', (e) => { e.stopPropagation(); editCalendarEvent(seg.type, seg.id, seg.segStart); });
+            el.addEventListener('dblclick', (e) => {
+                e.stopPropagation();
+                editCalendarEvent(seg.type, seg.id, seg.segStart, el.dataset.period);
+            });
             el.addEventListener('contextmenu', (e) => showEventContextMenu(e, seg.type, seg.id, seg.segStart));
             el.addEventListener('dragstart', handleEventDragStart);
             el.addEventListener('dragend', handleEventDragEnd);
