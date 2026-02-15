@@ -745,24 +745,22 @@ function loadScheduleData() {
 }
 
 function rebuildScheduleDataFromCache() {
-    scheduleData = [];
+    let combined = [];
     Object.keys(scheduleCache).forEach(year => {
         if (scheduleCache[year] && scheduleCache[year].data) {
-            // 元のデータに年度情報を付与しつつ結合
-            const yearData = scheduleCache[year].data.map(item => ({
-                ...item,
-                fiscalYear: parseInt(year)
-            }));
-            scheduleData = scheduleData.concat(yearData);
+            combined = combined.concat(scheduleCache[year].data);
         }
     });
 
-    // 日付順にソートし、IDを一意に再割り当て（セッション内での安定性のため）
-    scheduleData.sort((a, b) => a.date - b.date);
-    scheduleData.forEach((item, index) => {
-        item.id = `excel_${index}`;
-    });
+    scheduleData = combined;
 
+    // 授業データを統合（my_classes.js の関数）
+    if (typeof updateScheduleDataWithClasses === 'function') {
+        updateScheduleDataWithClasses(currentYear);
+    }
+
+    updateAvailableYearsAndMonths();
+    updateStats();
     saveScheduleToStorage();
 }
 
@@ -3325,7 +3323,7 @@ function exportToIcal() {
 
         icalContent.push('BEGIN:VEVENT');
         icalContent.push(`UID:${uid}`);
-        icalContent.push(`DTSTAMP:${formatDateForIcal(new Date())}`);
+        icalContent.push(`DTSTAMP:${formatDateForIcal(new Date(), true)}`);
 
         if (item.allDay === false && item.startTime && item.endTime) {
             const startDt = new Date(item.date);
@@ -3415,7 +3413,7 @@ function exportToIcal() {
 
         icalContent.push('BEGIN:VEVENT');
         icalContent.push(`UID:${uid}`);
-        icalContent.push(`DTSTAMP:${formatDateForIcal(new Date())}`);
+        icalContent.push(`DTSTAMP:${formatDateForIcal(new Date(), true)}`);
 
         if (!cls.allDay && cls.startTime && cls.endTime) {
             icalContent.push(`DTSTART;TZID=Asia/Tokyo:${formatDateForIcal(cls.startTime)}`);
@@ -3597,10 +3595,14 @@ function exportToCsv() {
 // =============================
 // ユーティリティ関数
 // =============================
-// 以前は'Z'を付けていましたが、JST(日本標準時)としてOutlook等で正しく認識させるため、
-// タイムゾーン指定なしのローカル形式で返します。呼び出し側で TZID を指定します。
-function formatDateForIcal(date) {
+function formatDateForIcal(date, isUtc = false) {
     if (!date || !(date instanceof Date)) return '';
+
+    if (isUtc) {
+        // DTSTAMP等はUTC(Z付き)が必須
+        return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+    }
+
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
@@ -3718,8 +3720,8 @@ function deleteCachedYear(year) {
     updateCalendar();
 
     // 授業イベント再生成（表示中の年度を削除した場合のため）
-    if (typeof generateClassEvents === 'function') {
-        generateClassEvents(currentYear);
+    if (typeof updateScheduleDataWithClasses === 'function') {
+        updateScheduleDataWithClasses(currentYear);
     }
 
     alert(`${year}年度のデータを削除しました。`);

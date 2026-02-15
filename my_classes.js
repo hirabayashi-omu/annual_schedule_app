@@ -1058,7 +1058,7 @@ function generateClassEvents(year, options = {}) {
 
     console.log(`generateClassEvents: sourceData.length=${sourceData.length}, myClasses.length=${myClasses.length}, classOverrides.length=${classOverrides.length}`);
 
-    // 各月のデータ存在確認を行い、データがない月はデフォルト（平日）で補完するロジック
+    // 各月のデータ存在確認を行い、データがない（または授業日指定がない）月はデフォルト（平日）で補完するロジック
     const monthsInFiscalYear = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3];
     let uniqueClassDays = [];
 
@@ -1069,11 +1069,11 @@ function generateClassEvents(year, options = {}) {
             return d.getFullYear() === mYear && (d.getMonth() + 1) === m;
         });
 
-        if (daysInMonth.length > 0) {
-            // その月のデータがある場合、weekdayCountがある日を抽出
-            const daysWithCount = daysInMonth.filter(item => item.weekdayCount);
+        // その月のデータがあり、かつ少なくとも1日は「曜日カウント」が設定されているか確認
+        const daysWithCount = daysInMonth.filter(item => item.weekdayCount);
 
-            // 複数の項目（本科/専攻科）がある場合があるのでユニーク化
+        if (daysWithCount.length > 0) {
+            // 授業日指定がある月は、その指定に従う
             const dateToBestItem = new Map();
             daysWithCount.forEach(item => {
                 const dateKey = item.date.toDateString();
@@ -1084,7 +1084,8 @@ function generateClassEvents(year, options = {}) {
             });
             uniqueClassDays = uniqueClassDays.concat(Array.from(dateToBestItem.values()));
         } else {
-            // その月のデータが全くない場合のみ、デフォルト（土日以外）で補完
+            // その月のデータが全くない、あるいは授業日指定（曜日カウント）が一行もない場合は
+            // デフォルト（土日以外を授業日候補とする）で補完
             const startDate = new Date(mYear, m - 1, 1);
             const endDate = new Date(mYear, m, 0); // 月末
 
@@ -1395,6 +1396,44 @@ function generateClassEvents(year, options = {}) {
     console.log(`${events.length} 件の授業イベントを生成しました`);
     return events;
 }
+
+/**
+ * scheduleData に自分の授業イベントを統合して更新する
+ */
+function updateScheduleDataWithClasses() {
+    if (typeof generateClassEvents !== 'function') return;
+
+    try {
+        if (window.scheduleData) {
+            // 既存の授業イベント（fromMyClassフラグ付き）を除去
+            let otherEvents = window.scheduleData.filter(item => !item.fromMyClass);
+
+            // scheduleData に含まれる全年度を特定
+            const years = new Set();
+            otherEvents.forEach(item => {
+                const fy = getFiscalYear(item.date);
+                if (fy) years.add(fy);
+            });
+
+            // 年度指定が全くない場合（初期状態など）は現在の年度を対象にする
+            if (years.size === 0) {
+                const cy = typeof currentYear !== 'undefined' ? currentYear : new Date().getFullYear();
+                years.add(cy);
+            }
+
+            let allMyClassEvents = [];
+            years.forEach(y => {
+                allMyClassEvents = allMyClassEvents.concat(generateClassEvents(y));
+            });
+
+            window.scheduleData = otherEvents.concat(allMyClassEvents.map(ev => ({ ...ev, fromMyClass: true })));
+            console.log(`scheduleDataを更新しました: 総数 ${window.scheduleData.length} (うち授業 ${allMyClassEvents.length})`);
+        }
+    } catch (e) {
+        console.error('updateScheduleDataWithClasses failed:', e);
+    }
+}
+window.updateScheduleDataWithClasses = updateScheduleDataWithClasses;
 
 
 // グローバルスコープに登録
