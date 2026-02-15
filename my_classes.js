@@ -1049,49 +1049,51 @@ function generateClassEvents(year, options = {}) {
 
     // scheduleDataにアクセス（app.jsから）
     // カレンダー表示と一致させるため、オーバーライド適用済みのデータを取得
+    // ※授業データ自体が混ざると再帰的になるため、授業データ（fromMyClass）は除外して解析する
     let sourceData = [];
     if (typeof window.getAppliedScheduleData === 'function') {
-        sourceData = window.getAppliedScheduleData('both');
+        sourceData = window.getAppliedScheduleData('both').filter(item => !item.fromMyClass);
     } else if (typeof scheduleData !== 'undefined' && scheduleData) {
-        sourceData = scheduleData;
+        sourceData = scheduleData.filter(item => !item.fromMyClass);
     }
 
     console.log(`generateClassEvents: sourceData.length=${sourceData.length}, myClasses.length=${myClasses.length}, classOverrides.length=${classOverrides.length}`);
 
-    // 各月のデータ存在確認を行い、データがない（または授業日指定がない）月はデフォルト（平日）で補完するロジック
+    // 各月のデータ存在確認
     const monthsInFiscalYear = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3];
     let uniqueClassDays = [];
 
     monthsInFiscalYear.forEach(m => {
         const mYear = (m <= 3) ? year + 1 : year;
-        const daysInMonth = sourceData.filter(item => {
+
+        // その月のソースデータを取得
+        const monthData = sourceData.filter(item => {
             const d = item.date instanceof Date ? item.date : new Date(item.date);
             return d.getFullYear() === mYear && (d.getMonth() + 1) === m;
         });
 
-        // その月のデータがあり、かつ少なくとも1日は「曜日カウント」が設定されているか確認
-        const daysWithCount = daysInMonth.filter(item => item.weekdayCount);
+        // その月に1日でも「曜日カウント（授業日指定）」があるか
+        const daysWithCountInMonth = monthData.filter(item => item.weekdayCount && String(item.weekdayCount).trim() !== "");
 
-        if (daysWithCount.length > 0) {
-            // 授業日指定がある月は、その指定に従う
+        if (daysWithCountInMonth.length > 0) {
+            // 指定がある月は、その指定に従う（Excelの計画を優先）
             const dateToBestItem = new Map();
-            daysWithCount.forEach(item => {
+            daysWithCountInMonth.forEach(item => {
                 const dateKey = item.date.toDateString();
                 const existing = dateToBestItem.get(dateKey);
+                // 数字を含む指定（例: 月1）を優先
                 if (!existing || (/\d/.test(item.weekdayCount) && !/\d/.test(existing.weekdayCount))) {
                     dateToBestItem.set(dateKey, item);
                 }
             });
             uniqueClassDays = uniqueClassDays.concat(Array.from(dateToBestItem.values()));
         } else {
-            // その月のデータが全くない、あるいは授業日指定（曜日カウント）が一行もない場合は
-            // デフォルト（土日以外を授業日候補とする）で補完
+            // 指定が全くない月は、土日以外の平日をすべて授業候補日とする
             const startDate = new Date(mYear, m - 1, 1);
-            const endDate = new Date(mYear, m, 0); // 月末
+            const endDate = new Date(mYear, m, 0);
 
             for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-                const day = d.getDay();
-                if (day === 0 || day === 6) continue;
+                if (d.getDay() === 0 || d.getDay() === 6) continue;
 
                 uniqueClassDays.push({
                     date: new Date(d),
@@ -1102,7 +1104,7 @@ function generateClassEvents(year, options = {}) {
         }
     });
 
-    console.log(`${uniqueClassDays.length} 日の授業実施日の候補が見つかりました（データ不足月は平日で補完済）`);
+    console.log(`generateClassEvents(${year}): ${uniqueClassDays.length}日の候補日を抽出。`);
 
     // 各授業日に対して授業をチェック
     uniqueClassDays.forEach(dayData => {

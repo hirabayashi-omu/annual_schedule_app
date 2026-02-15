@@ -3333,8 +3333,9 @@ function exportToIcal() {
             const [eh, em] = item.endTime.split(':');
             endDt.setHours(parseInt(eh), parseInt(em), 0);
 
-            icalContent.push(`DTSTART;TZID=Asia/Tokyo:${formatDateForIcal(startDt)}`);
-            icalContent.push(`DTEND;TZID=Asia/Tokyo:${formatDateForIcal(endDt)}`);
+            // Google Calendar等での互換性のため、すべてUTC(Z付き)で出力
+            icalContent.push(`DTSTART:${formatDateForIcal(startDt, true)}`);
+            icalContent.push(`DTEND:${formatDateForIcal(endDt, true)}`);
             icalContent.push('TRANSP:OPAQUE');
         } else {
             // 終日予定
@@ -3416,8 +3417,9 @@ function exportToIcal() {
         icalContent.push(`DTSTAMP:${formatDateForIcal(new Date(), true)}`);
 
         if (!cls.allDay && cls.startTime && cls.endTime) {
-            icalContent.push(`DTSTART;TZID=Asia/Tokyo:${formatDateForIcal(cls.startTime)}`);
-            icalContent.push(`DTEND;TZID=Asia/Tokyo:${formatDateForIcal(cls.endTime)}`);
+            // UTC(Z付き)で出力
+            icalContent.push(`DTSTART:${formatDateForIcal(cls.startTime, true)}`);
+            icalContent.push(`DTEND:${formatDateForIcal(cls.endTime, true)}`);
             icalContent.push('TRANSP:OPAQUE');
         } else {
             const nextDay = new Date(cls.date);
@@ -3425,7 +3427,7 @@ function exportToIcal() {
             const nextDayStr = formatDateKey(nextDay).replace(/-/g, '');
             icalContent.push(`DTSTART;VALUE=DATE:${dateStrOnly}`);
             icalContent.push(`DTEND;VALUE=DATE:${nextDayStr}`);
-            icalContent.push('TRANSP:TRANSPARENT');
+            icalContent.push('TRANSP:OPAQUE'); // 授業は終日でも予定ありとして扱う
         }
 
         icalContent.push(`SUMMARY:${escapeIcalText(summary)}`);
