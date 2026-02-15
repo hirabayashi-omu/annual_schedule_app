@@ -121,6 +121,29 @@ function containsPinnedKeyword(text) {
 window.containsPinnedKeyword = containsPinnedKeyword;
 
 /**
+ * イベントに参加しているかどうか（＝ピン留めで表示するかどうか）を判定
+ */
+function isEventParticipating(ov, dateStr, exclusions) {
+    if (!ov) return false;
+    const item = ov.data || {};
+    const label = item.event || item.name || (ov.original ? (ov.original.event || ov.original.name) : '');
+
+    if (ov.type === 'myclass') {
+        const dateExclusions = (exclusions && exclusions[ov.id]) || [];
+        return !dateExclusions.includes(dateStr);
+    }
+
+    // カスタム予定や申請済み（年休等）はデフォルトで参加（ピン留め）
+    if (ov.type === 'custom' || item.isApplied) {
+        return item.isParticipating !== undefined ? item.isParticipating : true;
+    }
+
+    // Excel行事はキーワードに含まれる場合のみデフォルトで参加（ピン留め）
+    return item.isParticipating !== undefined ? item.isParticipating : containsPinnedKeyword(label);
+}
+window.isEventParticipating = isEventParticipating;
+
+/**
  * イベントテキストが祝日名のみかどうかをチェック
  */
 function isHolidayOnlyEvent(eventText) {
@@ -1730,7 +1753,7 @@ window.updateCalendar = function updateCalendar() {
         const relevant = allDisplayEvents.filter(ov => {
             if (!(dStr >= ov.startDate && dStr <= ov.endDate)) return false;
 
-            const isPart = ov.data ? ov.data.isParticipating !== false : true;
+            const isPart = isEventParticipating(ov, dStr, assignmentExclusions);
             if (!isPart) return false;
 
             const item = ov.data || {};
@@ -1765,22 +1788,23 @@ window.updateCalendar = function updateCalendar() {
 
                 const isTrip1 = !!ov1.data?.isTripCard || name1.includes('出張');
                 const isTrip2 = !!ov2.data?.isTripCard || name2.includes('出張');
-                const isWfh1 = !!ov1.data?.isWfhCard || name1.includes('在宅勤務');
-                const isWfh2 = !!ov2.data?.isWfhCard || name2.includes('在宅勤務');
+                const isWfh1 = !!ov1.data?.isWfhCard || name1.includes('在宅');
+                const isWfh2 = !!ov2.data?.isWfhCard || name2.includes('在宅');
                 const isTimed1 = (p1 === 2);
                 const isTimed2 = (p2 === 2);
                 const isPinned1 = typeof containsPinnedKeyword === 'function' && containsPinnedKeyword(name1);
                 const isPinned2 = typeof containsPinnedKeyword === 'function' && containsPinnedKeyword(name2);
 
-                // 重複判定を行うかどうかの絞り込み:
-                // 1. 両方が時間指定(P2)である場合
-                // 2. どちらか一方が「出張」または「在宅勤務」である場合 (学校不在扱いのため、相手が📌行事なら警告対象)
-                const isSpecial1 = isTrip1 || isWfh1;
-                const isSpecial2 = isTrip2 || isWfh2;
-                let needsCheck = (isTimed1 && isTimed2) || isSpecial1 || isSpecial2;
-                if (!needsCheck) continue;
+                // 重複判定を行う:
+                // relevant リストに入っている時点で「時間指定」「出張/在宅」「📌」のいずれか
+                // 1784行目以降の例外ケースに該当しなければ時間帯の重なりをチェックする
+                let needsCheck = true;
+                if (!needsCheck) continue; // (実際には常に true ですが、構造を維持)
 
                 // 警告(⚠️)を出さない例外ケース (終日予定同士の重なり):
+                const isSpecial1 = isTrip1 || isWfh1;
+                const isSpecial2 = isTrip2 || isWfh2;
+
                 if (p1 < 2 && p2 < 2) {
                     // 両方が通常の行事（出張・在宅でない）なら除外
                     if (!isSpecial1 && !isSpecial2) continue;
@@ -1884,16 +1908,7 @@ window.updateCalendar = function updateCalendar() {
             const hasImportantEvents = allDisplayEvents.some(ov => {
                 if (!(dStr >= ov.startDate && dStr <= ov.endDate)) return false;
                 const label = ov.data?.event || ov.data?.name || '';
-                let isPart = true;
-                if (ov.type === 'myclass') {
-                    const exclusions = assignmentExclusions[ov.id] || [];
-                    isPart = !exclusions.includes(dStr);
-                } else if (ov.type === 'custom' || (ov.data && ov.data.isApplied)) {
-                    isPart = ov.data.isParticipating !== undefined ? ov.data.isParticipating : true;
-                } else {
-                    isPart = ov.data?.isParticipating !== undefined ? ov.data.isParticipating : containsPinnedKeyword(label);
-                }
-                return isPart;
+                return isEventParticipating(ov, dStr, assignmentExclusions);
             });
             if (isBusDay && !hasImportantEvents) bg.classList.add('vacation-candidate');
             bg.style.gridColumn = i + 1;
@@ -1989,18 +2004,7 @@ window.updateCalendar = function updateCalendar() {
             let label = item.event || item.name || '';
             let td = '';
 
-            // 参加状況の判定: 授業はデフォルト参加、その他はキーワードまたは明示的なフラグによる
-            let isPart = true;
-            if (seg.type === 'myclass') {
-                const exclusions = assignmentExclusions[seg.id] || [];
-                isPart = !exclusions.includes(seg.segStart);
-            } else if (seg.type === 'custom' || item.isApplied) {
-                // カスタム予定や申請済み（年休等）はデフォルトで参加（ピン留め）
-                isPart = item.isParticipating !== undefined ? item.isParticipating : true;
-            } else {
-                // Excel行事はキーワードに含まれる場合のみデフォルトで参加（ピン留め）
-                isPart = item.isParticipating !== undefined ? item.isParticipating : containsPinnedKeyword(label);
-            }
+            const isPart = isEventParticipating(seg, seg.segStart, assignmentExclusions);
 
             if (item.isTripCard) {
                 label = `出張: ${item.tripDetails?.destination || item.location || ''}`;

@@ -23,6 +23,19 @@ function getReiwaDate(date) {
 }
 
 /**
+ * コースIDを正式名称に変換
+ */
+function getFullCourseName(id) {
+    const map = {
+        'M': 'エネルギー機械コース　M',
+        'D': 'プロダクトデザインコース　D',
+        'E': 'エレクトロニクスコース　E',
+        'I': '知能情報コース I'
+    };
+    return map[id] || id || '';
+}
+
+/**
  * 勤務パターンの〇記号付き文字列を生成
  */
 function formatShiftChoice(selectedShift) {
@@ -64,30 +77,34 @@ window.generateApplicationFile = async function (type) {
     const fileName = templates[type];
     if (!fileName) return;
 
-    if (type === 'shift') {
-        try {
+    try {
+        if (type === 'shift') {
             await fillShiftApplication(fileName);
-        } catch (err) {
-            console.error(err);
-            alert("エラーが発生しました:\n" + err.message);
+        } else if (type === 'wfh_pre') {
+            await fillWfhPreApplication(fileName);
+        } else if (type === 'wfh_post') {
+            await fillWfhPostApplication(fileName);
+        } else if (type === 'trip') {
+            await fillTripApplication(fileName);
+        } else {
+            // 他のタイプ（現在は雛形そのままのダウンロード）
+            if (window.TEMPLATES_CONTENT && window.TEMPLATES_CONTENT[fileName]) {
+                const buffer = base64ToArrayBuffer(window.TEMPLATES_CONTENT[fileName]);
+                const blob = new Blob([buffer], { type: 'application/octet-stream' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = fileName;
+                link.click();
+            } else {
+                const link = document.createElement('a');
+                link.href = encodeURI('template/' + fileName);
+                link.download = fileName;
+                link.click();
+            }
         }
-        return;
-    }
-
-    // 他のタイプ（現在は雛形そのままのダウンロード）も内蔵データから取得
-    if (window.TEMPLATES_CONTENT && window.TEMPLATES_CONTENT[fileName]) {
-        const buffer = base64ToArrayBuffer(window.TEMPLATES_CONTENT[fileName]);
-        const blob = new Blob([buffer], { type: 'application/octet-stream' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = fileName;
-        link.click();
-    } else {
-        // 万が一データがない場合は直接パスへ(従来の挙動)
-        const link = document.createElement('a');
-        link.href = encodeURI('template/' + fileName);
-        link.download = fileName;
-        link.click();
+    } catch (err) {
+        console.error(err);
+        alert("書類作成中にエラーが発生しました:\n" + err.message);
     }
 };
 
@@ -185,8 +202,8 @@ async function fillShiftApplication(fileName) {
                 staffId: profile.staffId || profile.staff_id || '',
                 user_name: profile.name || '',
                 name: profile.name || '',
-                user_dept: profile.course || profile.user_dept || '',
-                course: profile.course || profile.user_dept || '',
+                user_dept: getFullCourseName(profile.course) || profile.user_dept || '',
+                course: getFullCourseName(profile.course) || profile.user_dept || '',
                 user_rank: profile.rank || profile.user_rank || '',
                 rank: profile.rank || profile.user_rank || '',
             };
@@ -203,26 +220,28 @@ async function fillShiftApplication(fileName) {
                     viewData[`${prefix}before`] = formatShiftChoice(item.before.id);
                     viewData[`${prefix}after`] = formatShiftChoice(item.after.id);
 
-                    // 分割データ (Before)
+                    // 分割データ (Before) - テンプレートから除去されたが、ロジックも整理
                     const bParts = splitShiftInfo(item.before);
+                    const isBeforeAtoE = ['A', 'B', 'C', 'D', 'E'].includes(item.before?.id);
                     viewData[`${prefix}b_p`] = bParts.pattern;
-                    viewData[`${prefix}b_sh`] = bParts.startH;
-                    viewData[`${prefix}b_sm`] = bParts.startM;
-                    viewData[`${prefix}b_eh`] = bParts.endH;
-                    viewData[`${prefix}b_em`] = bParts.endM;
+                    viewData[`${prefix}b_sh`] = isBeforeAtoE ? '' : bParts.startH;
+                    viewData[`${prefix}b_sm`] = isBeforeAtoE ? '' : bParts.startM;
+                    viewData[`${prefix}b_eh`] = isBeforeAtoE ? '' : bParts.endH;
+                    viewData[`${prefix}b_em`] = isBeforeAtoE ? '' : bParts.endM;
                     // パターン別〇印 (Before)
                     ['A', 'B', 'C', 'D', 'E'].forEach(p => {
                         viewData[`${prefix}b_${p}`] = (bParts.pattern === p) ? '〇' : '';
                     });
-                    viewData[`${prefix}b_other`] = (item.before.id === 'Other') ? '〇' : '';
+                    viewData[`${prefix}b_other`] = (item.before?.id === 'Other') ? '〇' : '';
 
-                    // 分割データ (After)
+                    // 分割データ (After) - A-Eの場合は時間を記入せず、その他の場合のみ記入する
                     const aParts = splitShiftInfo(item.after);
+                    const isAfterAtoE = ['A', 'B', 'C', 'D', 'E'].includes(item.after.id);
                     viewData[`${prefix}a_p`] = aParts.pattern;
-                    viewData[`${prefix}a_sh`] = aParts.startH;
-                    viewData[`${prefix}a_sm`] = aParts.startM;
-                    viewData[`${prefix}a_eh`] = aParts.endH;
-                    viewData[`${prefix}a_em`] = aParts.endM;
+                    viewData[`${prefix}a_sh`] = isAfterAtoE ? '' : aParts.startH;
+                    viewData[`${prefix}a_sm`] = isAfterAtoE ? '' : aParts.startM;
+                    viewData[`${prefix}a_eh`] = isAfterAtoE ? '' : aParts.endH;
+                    viewData[`${prefix}a_em`] = isAfterAtoE ? '' : aParts.endM;
                     // パターン別〇印 (After)
                     ['A', 'B', 'C', 'D', 'E'].forEach(p => {
                         viewData[`${prefix}a_${p}`] = (aParts.pattern === p) ? '〇' : '';
@@ -248,8 +267,17 @@ async function fillShiftApplication(fileName) {
                 doc.render();
                 console.log("Batch " + (i + 1) + " rendered successfully.");
             } catch (error) {
+                //XTTemplateError の詳細を出力
                 console.error("Docxtemplater render error:", error);
-                alert("書類作成中にエラーが発生しました。テンプレートの形式（タグの書き方など）を確認してください。");
+                if (error.properties && error.properties.errors instanceof Array) {
+                    const errorMessages = error.properties.errors.map(function (error) {
+                        return error.properties.explanation;
+                    }).join("\n");
+                    console.error("Template Error Details:\n", errorMessages);
+                    alert("テンプレートのタグにエラーがあります:\n" + errorMessages);
+                } else {
+                    alert("書類作成中にエラーが発生しました。テンプレートの形式（タグの書き方など）を確認してください。");
+                }
                 throw error;
             }
 
@@ -314,4 +342,178 @@ function splitShiftInfo(item) {
     }
 
     return res;
+}
+
+/**
+ * 在宅勤務（事前）申請書の作成 (ExcelJS)
+ */
+async function fillWfhPreApplication(fileName) {
+    const profile = window.activeUserProfile || {};
+    if (!profile.name) {
+        alert('「あなたについて」タブでプロフィール情報を入力してください。');
+        return;
+    }
+
+    const wfhEvents = classOverrides.filter(ov => ov.data && ov.data.isWfhCard && !ov.data.isApplied);
+    if (wfhEvents.length === 0) {
+        alert('申請が必要な未申請の在宅勤務データが見つかりません。');
+        return;
+    }
+
+    const groups = {};
+    wfhEvents.forEach(ov => {
+        const date = new Date(ov.date.replace(/-/g, '/'));
+        const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
+        if (!groups[monthKey]) groups[monthKey] = [];
+        groups[monthKey].push(ov);
+    });
+
+    const templateBase64 = window.TEMPLATES_CONTENT[fileName];
+    if (!templateBase64) throw new Error("テンプレートが見つかりません: " + fileName);
+    const templateBuffer = base64ToArrayBuffer(templateBase64);
+
+    for (const monthKey in groups) {
+        const events = groups[monthKey].sort((a, b) => a.date.localeCompare(b.date));
+        const firstDate = new Date(events[0].date.replace(/-/g, '/'));
+        const reiwa = getReiwaDate(firstDate);
+
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(templateBuffer);
+        const targetSheet = workbook.worksheets.find(s => s.name.includes("新様式")) || workbook.worksheets[0];
+
+        // 書き込み
+        targetSheet.getCell('H1').value = reiwa.year;
+        targetSheet.getCell('J1').value = reiwa.month;
+        targetSheet.getCell('K4').value = getFullCourseName(profile.course);
+        targetSheet.getCell('K5').value = profile.staffId || '';
+        targetSheet.getCell('K6').value = profile.name || '';
+
+        events.forEach((ov, idx) => {
+            const row = 9 + idx;
+            const d = new Date(ov.date.replace(/-/g, '/'));
+            const timeStr = (ov.data.startTime && ov.data.endTime)
+                ? `${ov.data.startTime}～${ov.data.endTime}`
+                : '08:45～17:15';
+
+            targetSheet.getCell(`C${row}`).value = `${d.getDate()}日`;
+            targetSheet.getCell(`D${row}`).value = timeStr;
+            targetSheet.getCell(`G${row}`).value = ov.data.location || '自宅';
+        });
+
+        const outBuffer = await workbook.xlsx.writeBuffer();
+        saveBlob(outBuffer, `在宅勤務事前申請_${reiwa.month}月_${profile.name}.xlsx`);
+    }
+}
+
+/**
+ * 在宅勤務（事後）申請書の作成 (ExcelJS)
+ */
+async function fillWfhPostApplication(fileName) {
+    const profile = window.activeUserProfile || {};
+    const wfhEvents = classOverrides.filter(ov => ov.data && ov.data.isWfhCard && !ov.data.isApplied);
+    if (wfhEvents.length === 0) {
+        alert('申請が必要な未申請の在宅勤務データが見つかりません。');
+        return;
+    }
+
+    const templateBase64 = window.TEMPLATES_CONTENT[fileName];
+    if (!templateBase64) throw new Error("テンプレートが見つかりません: " + fileName);
+    const templateBuffer = base64ToArrayBuffer(templateBase64);
+
+    for (const ov of wfhEvents) {
+        const date = new Date(ov.date.replace(/-/g, '/'));
+        const dateStr = `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+        const startTime = ov.data.startTime || '08:45';
+        const endTime = ov.data.endTime || '17:15';
+
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(templateBuffer);
+
+        workbook.worksheets.forEach(sheet => {
+            if (!sheet.name.includes("実施申請書") && !sheet.name.includes("実施報告書")) return;
+
+            sheet.getCell('D5').value = `${dateStr} ${startTime}`;
+            sheet.getCell('L5').value = `${dateStr} ${endTime}`;
+            sheet.getCell('G6').value = getFullCourseName(profile.course);
+            sheet.getCell('N6').value = profile.name || '';
+
+            const [sH, sM] = (startTime || "08:45").split(':').map(Number);
+            const [eH, eM] = (endTime || "17:15").split(':').map(Number);
+            if ((eH * 60 + eM) - (sH * 60 + sM) >= 240) {
+                sheet.getCell('B11').value = '12';
+                sheet.getCell('D11').value = '20';
+                sheet.getCell('F11').value = '13';
+                sheet.getCell('H11').value = '05';
+                sheet.getCell('I11').value = '昼食';
+            }
+        });
+
+        const outBuffer = await workbook.xlsx.writeBuffer();
+        saveBlob(outBuffer, `在宅勤務実施報告_${date.getMonth() + 1}${date.getDate()}_${profile.name}.xlsx`);
+    }
+}
+
+/**
+ * 出張申請書の作成 (ExcelJS)
+ */
+async function fillTripApplication(fileName) {
+    const profile = window.activeUserProfile || {};
+    const tripEvents = classOverrides.filter(ov => ov.data && ov.data.isTripCard && !ov.data.isApplied);
+    if (tripEvents.length === 0) {
+        alert('申請が必要な未申請の出張データが見つかりません。');
+        return;
+    }
+
+    const templateBase64 = window.TEMPLATES_CONTENT[fileName];
+    if (!templateBase64) throw new Error("テンプレートが見つかりません: " + fileName);
+    const templateBuffer = base64ToArrayBuffer(templateBase64);
+
+    for (const ov of tripEvents) {
+        const details = ov.data.tripDetails || {};
+        const startDate = new Date(ov.startDate.replace(/-/g, '/'));
+        const endDate = new Date(ov.endDate.replace(/-/g, '/'));
+        const today = getReiwaDate(new Date());
+
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(templateBuffer);
+        const targetSheet = workbook.worksheets.find(s => s.name.includes("旅行命令")) || workbook.worksheets[0];
+
+        targetSheet.getCell('N9').value = profile.rank || '';
+        targetSheet.getCell('AN8').value = profile.name || '';
+        targetSheet.getCell('BE6').value = `${today.month}月${today.day}日`;
+
+        targetSheet.getCell('G13').value = `${startDate.getFullYear()}/${startDate.getMonth() + 1}/${startDate.getDate()}`;
+        targetSheet.getCell('R13').value = `${endDate.getFullYear()}/${endDate.getMonth() + 1}/${endDate.getDate()}`;
+
+        targetSheet.getCell('G15').value = details.depPoint === 'school' ? '工業高等専門学校' : '自宅';
+        targetSheet.getCell('G17').value = details.arrPoint === 'school' ? '工業高等専門学校' : '自宅';
+
+        if (details.depPoint === 'school') {
+            targetSheet.getCell('V15').value = '京阪本線';
+            targetSheet.getCell('V16').value = '寝屋川市駅';
+        }
+        if (details.arrPoint === 'school') {
+            targetSheet.getCell('V17').value = '京阪本線';
+            targetSheet.getCell('V18').value = '寝屋川市駅';
+        }
+
+        targetSheet.getCell('B22').value = `${startDate.getFullYear()}/${startDate.getMonth() + 1}/${startDate.getDate()}`;
+        targetSheet.getCell('G22').value = details.destination || ov.data.location || '';
+
+        const outBuffer = await workbook.xlsx.writeBuffer();
+        saveBlob(outBuffer, `出張上申書_${startDate.getMonth() + 1}${startDate.getDate()}_${profile.name}.xlsx`);
+    }
+}
+
+/**
+ * Blobとして保存してダウンロード
+ */
+function saveBlob(buffer, fileName) {
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }
