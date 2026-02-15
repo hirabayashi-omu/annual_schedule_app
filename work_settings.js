@@ -249,6 +249,12 @@ function renderWorkPeriodConfig() {
     const vacationDates = getVacationPeriods();
     const currentSettings = getCurrentWorkSettings();
 
+    // タイトルの更新
+    const globalYearSelect = document.getElementById('globalYearSelect');
+    const fiscalYear = globalYearSelect ? globalYearSelect.value : (new Date().getFullYear());
+    const workTitle = document.getElementById('workSettingTitle');
+    if (workTitle) workTitle.textContent = `勤務パターンの設定（${fiscalYear}年度）`;
+
     WORK_PERIODS.forEach(period => {
         const periodCard = document.createElement('div');
         periodCard.className = 'work-period-card';
@@ -359,6 +365,9 @@ window.updateWorkSettingInMemory = function (periodId, dayNum, shift) {
 
     // カレンダー表示に即座に同期（年休カードなどの計算に反映）
     if (typeof updateCalendar === 'function') updateCalendar();
+
+    // localStorageに保存
+    if (typeof saveAllToLocal === 'function') saveAllToLocal();
 };
 
 /**
@@ -374,6 +383,9 @@ window.updateWorkTimeInMemory = function (periodId, dayNum, field, value) {
 
     // カレンダー表示に即座に同期
     if (typeof updateCalendar === 'function') updateCalendar();
+
+    // localStorageに保存
+    if (typeof saveAllToLocal === 'function') saveAllToLocal();
 };
 
 /**
@@ -1252,8 +1264,14 @@ window.sortApplicationStats = function (key) {
 window.renderApplicationStats = function () {
     const body = document.getElementById('applicationStatsBody');
     if (!body) return;
-    body.innerHTML = '';
 
+    // タイトルの更新
+    const globalYearSelect = document.getElementById('globalYearSelect');
+    const fiscalYear = globalYearSelect ? globalYearSelect.value : (new Date().getFullYear());
+    const statsTitle = document.getElementById('statsTitle');
+    if (statsTitle) statsTitle.textContent = `勤怠管理 (${fiscalYear}年/${fiscalYear}年度）`;
+
+    body.innerHTML = '';
     const filterPeriod = document.getElementById('statsFilterPeriod')?.value || 'all';
     const filterType = document.getElementById('statsFilterType')?.value || 'all';
 

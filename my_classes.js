@@ -410,8 +410,10 @@ function updateClassYearOptions() {
     const yearSelect = document.getElementById('classYear');
     if (!yearSelect) return;
 
-    // 現在の表示年度を基準にする
-    const baseYear = typeof currentYear !== 'undefined' ? currentYear : new Date().getFullYear();
+    // 現在のトップメニューの年度を基準にする
+    const globalYearSelect = document.getElementById('globalYearSelect');
+    const baseYear = globalYearSelect ? parseInt(globalYearSelect.value) : (new Date().getFullYear());
+
     // アプリ全体の利用可能年度
     const appAvailableYears = typeof availableYears !== 'undefined' ? availableYears : [];
 
@@ -421,8 +423,11 @@ function updateClassYearOptions() {
     // ユニークにしてソート
     const uniqueYears = [...new Set(years)].sort((a, b) => a - b);
 
-    // 既に選択されている値があればそれを維持
-    const selected = yearSelect.value || baseYear;
+    // デフォルトでトップメニューの年度を選択。既に有効な値が選択されている場合は維持。
+    let selected = yearSelect.value;
+    if (!selected || !uniqueYears.includes(parseInt(selected))) {
+        selected = baseYear;
+    }
 
     yearSelect.innerHTML = uniqueYears.map(y =>
         `<option value="${y}" ${y == selected ? 'selected' : ''}>${y}年度</option>`

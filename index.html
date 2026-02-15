@@ -506,7 +506,7 @@
     <section id="workSection" class="card hidden">
         <div class="card-header">
             <div class="card-icon">&#x231B;</div>
-            <h2>勤務パターンの設定</h2>
+            <h2 id="workSettingTitle">勤務パターンの設定</h2>
         </div>
 
         <div class="work-settings-container" style="padding: 15px;">
@@ -608,6 +608,37 @@
                         <li><strong>自動保存:</strong> 入力内容はブラウザに即時保存されます。端末を替える際は「ファイル操作」からバックアップを取得してください。</li>
                     </ul>
                 </div>
+                <div class="help-item">
+                    <h3>⚠️ 予定の重複警告</h3>
+                    <p>カレンダーに表示される警告マークの判定ルールです。アイコンにマウスを合わせると重複の詳細が表示されます。</p>
+                    <table
+                        style="width:100%; font-size:0.85rem; border-collapse:collapse; margin-top:10px; border:1px solid var(--neutral-200); border-radius:4px;">
+                        <tr style="background:var(--neutral-50); border-bottom:1px solid var(--neutral-200);">
+                            <th style="padding:8px; text-align:left;">組み合わせ</th>
+                            <th style="padding:8px; text-align:left;">⚠️が表示される条件</th>
+                        </tr>
+                        <tr style="border-bottom:1px solid var(--neutral-100);">
+                            <td style="padding:8px;">時間指定 vs 時間指定</td>
+                            <td style="padding:8px;">物理的に時間帯が重なっている場合</td>
+                        </tr>
+                        <tr style="border-bottom:1px solid var(--neutral-100);">
+                            <td style="padding:8px;">出張 vs 📌付き行事/授業</td>
+                            <td style="padding:8px;">日付が重なっている場合（終日でも警告）</td>
+                        </tr>
+                        <tr style="border-bottom:1px solid var(--neutral-100);">
+                            <td style="padding:8px;">在宅勤務 vs 📌付き行事/授業</td>
+                            <td style="padding:8px;">日付が重なっている場合（終日でも警告）</td>
+                        </tr>
+                        <tr style="border-bottom:1px solid var(--neutral-100);">
+                            <td style="padding:8px;">終日📌行事 vs 時間指定授業</td>
+                            <td style="padding:8px;">出張・在宅でない限り、警告は出ません</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:8px;">終日行事 vs 終日行事</td>
+                            <td style="padding:8px;">通常の行事同士であれば、警告は出ません</td>
+                        </tr>
+                    </table>
+                </div>
             </div>
         </div>
     </section>
@@ -616,7 +647,7 @@
     <section id="statsView" class="card hidden">
         <div class="card-header">
             <div class="card-icon">📊</div>
-            <h2>勤怠管理・統計</h2>
+            <h2 id="statsTitle">勤怠管理・統計</h2>
         </div>
         <div class="card-body" style="padding: 20px;">
             <div class="stats-summary"
@@ -1017,7 +1048,8 @@
                                 <span style="font-size: 0.85rem; font-weight: 600; width: 40px;">開始:</span>
                                 <input type="date" id="quickEditStartDate" class="form-input" style="padding: 5px;">
                                 <div id="quickEditStartTimeWrapper">
-                                    <input type="time" id="quickEditStartTime" class="form-input" style="padding: 5px;">
+                                    <input type="time" id="quickEditStartTime" class="form-input" style="padding: 5px;"
+                                        oninput="syncQuickTime(this, 'start')">
                                 </div>
                             </div>
                             <div
@@ -1025,7 +1057,8 @@
                                 <span style="font-size: 0.85rem; font-weight: 600; width: 40px;">終了:</span>
                                 <input type="date" id="quickEditEndDate" class="form-input" style="padding: 5px;">
                                 <div id="quickEditEndTimeWrapper">
-                                    <input type="time" id="quickEditEndTime" class="form-input" style="padding: 5px;">
+                                    <input type="time" id="quickEditEndTime" class="form-input" style="padding: 5px;"
+                                        oninput="syncQuickTime(this, 'end')">
                                 </div>
                             </div>
                         </div>

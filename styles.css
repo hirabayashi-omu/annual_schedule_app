@@ -849,6 +849,7 @@ body {
     color: var(--error-red);
     cursor: help;
     animation: overlap-pulse 2s infinite;
+    pointer-events: auto;
 }
 
 @keyframes overlap-pulse {
