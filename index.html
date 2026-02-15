@@ -12,6 +12,10 @@
 
     <!-- SheetJS for Excel Reading -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pizzip/3.1.4/pizzip.min.js"
+        onerror="this.onerror=null;this.src='https://unpkg.com/pizzip@3.1.4/dist/pizzip.min.js';"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/docxtemplater/3.37.12/docxtemplater.js"
+        onerror="this.onerror=null;this.src='https://unpkg.com/docxtemplater@3.37.12/build/docxtemplater.js';"></script>
     <script src="work_settings.js"></script>
 </head>
 
@@ -71,6 +75,10 @@
                 <button data-view="statsView" class="drawer-item">
                     <span class="nav-icon">📊</span>
                     <span class="nav-label">勤怠管理</span>
+                </button>
+                <button data-view="profileSection" class="drawer-item">
+                    <span class="nav-icon">👤</span>
+                    <span class="nav-label">あなたについて</span>
                 </button>
                 <button data-view="helpSection" class="drawer-item">
                     <span class="nav-icon">❓</span>
@@ -562,6 +570,78 @@
         </div>
     </section>
 
+    <!-- あなたについて（基本情報） -->
+    <section id="profileSection" class="card hidden">
+        <div class="card-header">
+            <div class="card-icon">👤</div>
+            <h2>あなたについて（基本情報）</h2>
+        </div>
+        <div class="card-body">
+            <p style="margin-bottom: 20px; color: var(--neutral-600);">申請書作成や勤務管理で使用するあなたの基本情報を登録します。</p>
+
+            <div class="form-grid-profile"
+                style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 25px;">
+                <div class="profile-item" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div>
+                        <h3 style="font-size: 1rem; margin-bottom: 10px; color: var(--neutral-700);">★ 所属コース</h3>
+                        <select id="userCourse" class="form-select" style="width: 100%;">
+                            <option value="">選択してください</option>
+                            <option value="M">エネルギー機械（M）</option>
+                            <option value="D">プロダクトデザイン（D）</option>
+                            <option value="E">エレクトロニクス（E）</option>
+                            <option value="I">知能情報（I）</option>
+                        </select>
+                    </div>
+                    <div>
+                        <h3 style="font-size: 1rem; margin-bottom: 10px; color: var(--neutral-700);">★ 職階</h3>
+                        <select id="userRank" class="form-select" style="width: 100%;">
+                            <option value="">選択してください</option>
+                            <option value="教授">教授</option>
+                            <option value="准教授">准教授</option>
+                            <option value="講師">講師</option>
+                            <option value="助教">助教</option>
+                            <option value="非常勤">非常勤</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="profile-item">
+                    <h3 style="font-size: 1rem; margin-bottom: 10px; color: var(--neutral-700);">★ 職員番号（半角数字）</h3>
+                    <input type="text" id="userStaffId" class="form-input" placeholder="例: 123456" style="width: 100%;">
+                </div>
+
+                <div class="profile-item">
+                    <h3 style="font-size: 1rem; margin-bottom: 10px; color: var(--neutral-700);">★ 氏名</h3>
+                    <input type="text" id="userName" class="form-input" placeholder="例: 岡山 太郎" style="width: 100%;">
+                </div>
+
+                <div class="profile-item" style="grid-column: 1 / -1;">
+                    <h3 style="font-size: 1rem; margin-bottom: 10px; color: var(--neutral-700);">★ 通常担当科目</h3>
+                    <p style="font-size: 0.85rem; color: var(--neutral-500); margin-bottom: 8px;">
+                        担当している授業を検索して追加してください（複数可）</p>
+                    <div style="display: flex; gap: 10px; align-items: center; position: relative;">
+                        <input type="text" id="profileSubjectInput" class="form-input" placeholder="科目名を入力して検索..."
+                            style="flex: 1;">
+                        <button id="addProfileSubjectBtn" class="btn btn-primary" style="white-space: nowrap;">➕
+                            追加</button>
+                        <div id="profileSubjectSuggestions" class="course-suggestions hidden"
+                            style="top: 100%; left: 0; width: 100%;"></div>
+                    </div>
+                    <div id="profileSubjectsDisplay"
+                        style="margin-top: 15px; display: flex; flex-wrap: wrap; gap: 10px; padding: 10px; background: var(--neutral-50); border-radius: var(--radius-md); border: 1px dashed var(--neutral-300); min-height: 50px;">
+                        <!-- JSでバッジを表示 -->
+                    </div>
+                </div>
+            </div>
+
+            <div
+                style="margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--neutral-200); text-align: right;">
+                <button id="saveProfileBtn" class="btn btn-primary"
+                    style="padding: 10px 30px; font-weight: 700; box-shadow: var(--shadow-md);">上記の内容で保存する</button>
+            </div>
+        </div>
+    </section>
+
     <!-- ヘルプセクション -->
     <section id="helpSection" class="card hidden">
         <div class="card-header">
@@ -744,6 +824,38 @@
                         <!-- JSで生成 -->
                     </tbody>
                 </table>
+            </div>
+
+            <div class="stats-application-actions"
+                style="margin-top: 30px; padding: 20px; background: rgba(99, 102, 241, 0.05); border-radius: var(--radius-lg); border: 1px solid rgba(99, 102, 241, 0.1);">
+                <h3
+                    style="font-size: 1.1rem; margin-bottom: 20px; color: var(--neutral-700); display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 1.4rem;">📝</span> 変更申請・書類作成
+                </h3>
+                <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                    <button class="btn btn-primary" onclick="generateApplicationFile('shift')"
+                        style="background: var(--neutral-700); border-color: var(--neutral-700);">
+                        <span>🔄 勤務パターン変更</span>
+                    </button>
+                    <button class="btn btn-primary" onclick="generateApplicationFile('wfh_pre')"
+                        style="background: var(--success-green); border-color: var(--success-green);">
+                        <span>🏠 在宅勤務 (事前)</span>
+                    </button>
+                    <button class="btn btn-primary" onclick="generateApplicationFile('wfh_post')"
+                        style="background: #059669; border-color: #059669;">
+                        <span>🏠 在宅勤務 (事後)</span>
+                    </button>
+                    <button class="btn btn-primary" onclick="generateApplicationFile('holiday_work')"
+                        style="background: var(--warning-orange); border-color: var(--warning-orange);">
+                        <span>📅 休日出勤</span>
+                    </button>
+                    <button class="btn btn-primary" onclick="generateApplicationFile('trip')"
+                        style="background: var(--primary-blue); border-color: var(--primary-blue);">
+                        <span>✈️ 出張</span>
+                    </button>
+                </div>
+                <p style="margin-top: 15px; font-size: 0.85rem; color: var(--neutral-500);">※
+                    「あなたについて」で設定した基本情報が自動的に記入されます。</p>
             </div>
         </div>
     </section>
@@ -1500,6 +1612,9 @@
     <!-- メインスクリプト -->
     <script src="app.js"></script>
     <script src="my_classes.js"></script>
+    <script src="profile.js"></script>
+    <script src="templates_content.js"></script>
+    <script src="applications.js"></script>
 </body>
 
 </html>

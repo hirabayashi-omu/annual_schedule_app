@@ -892,6 +892,7 @@ function initNavigation() {
         'settingsSection': document.getElementById('settingsSection'),
         'workSection': document.getElementById('workSection'),
         'statsView': document.getElementById('statsView'),
+        'profileSection': document.getElementById('profileSection'),
         'helpSection': document.getElementById('helpSection')
     };
 
