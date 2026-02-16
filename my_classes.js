@@ -988,23 +988,27 @@ function getEffectivePeriods(periodStr, isMorningOnly, isAfternoonOnly) {
 
 
 // 特定の日の全授業を取得（期間用）
-function getClassesForDay(date, overrideWeekday = null) {
+function getClassesForDay(date, overrideWeekday = null, semesterOverride = null) {
     const actualWeekday = date.getDay();
     const weekday = overrideWeekday !== null ? overrideWeekday : actualWeekday;
     const month = date.getMonth() + 1;
 
     // 前期 or 後期判定
     let semester;
-    if (month >= 4 && month <= 9) {
-        semester = 'first';
+    if (semesterOverride) {
+        semester = semesterOverride;
     } else {
-        semester = 'second';
+        if (month >= 4 && month <= 9) {
+            semester = 'first';
+        } else {
+            semester = 'second';
+        }
     }
 
     return myClasses.filter(cls => {
-        // 年度チェック
+        // 年度チェック (文字列・数値どらでも比較できるよう変換)
         const fiscalYear = getFiscalYear(date);
-        if (cls.classYear && cls.classYear !== fiscalYear) return false;
+        if (cls.classYear && String(cls.classYear) !== String(fiscalYear)) return false;
 
         // 学期ごとの設定チェック
         if (semester === 'first' && !cls.firstSemester) return false;
@@ -1059,6 +1063,98 @@ function generateClassEvents(year, options = {}) {
 
     console.log(`generateClassEvents: sourceData.length=${sourceData.length}, myClasses.length=${myClasses.length}, classOverrides.length=${classOverrides.length}`);
 
+    // 前期授業開始・後期授業開始の特定
+    let firstSemesterStart = null;
+    let secondSemesterStart = null;
+
+    // バッチによる推測（マーカーがない場合の救済）
+    let firstSemStartByBatch = null;
+    let secondSemStartByBatch = null;
+
+    sourceData.forEach(d => {
+        const eventText = (d.event || "");
+        const nameText = (d.name || "");
+        const wcText = (d.weekdayCount || "");
+        const text = (eventText + nameText + wcText).trim();
+        if (!text) return;
+
+        const date = d.date instanceof Date ? new Date(d.date) : new Date(d.date);
+        date.setHours(0, 0, 0, 0);
+
+        // 年度チェックを厳縮に
+        if (getFiscalYear(date) !== Number(year)) return;
+
+        // マーカー検索: 「後期」や「第2学期」が含まれ、かつ「開始」または「始め」が含まれる場合
+        const isSecondSem = text.includes("後期") || text.includes("第2学期") || text.includes("第二学期");
+        const isFirstSem = text.includes("前期") || text.includes("第1学期") || text.includes("第一学期");
+        const isStart = text.includes("授業開始") || text.includes("開始") || text.includes("始業") || text.includes("はじめ");
+
+        if (isSecondSem && isStart) {
+            if (!secondSemesterStart || date < secondSemesterStart) {
+                secondSemesterStart = date;
+                console.log(`[Semester] 後期開始マーカー検出: ${formatDateKey(date)} - "${text}"`);
+            }
+        } else if (isFirstSem && isStart) {
+            if (!firstSemesterStart || date < firstSemesterStart) {
+                firstSemesterStart = date;
+                console.log(`[Semester] 前期開始マーカー検出: ${formatDateKey(date)} - "${text}"`);
+            }
+        }
+
+        // バッチによる推測 (8/20〜10/15位の期間でバッチが「1」なら後期開始とみなす)
+        const wc = wcText.trim();
+        const isReset = /^[月火水木金土日]?[1１]$/.test(wc) || wc === "1" || wc === "１";
+        if (isReset) {
+            const m = date.getMonth() + 1;
+            if (m === 8 || m === 9 || m === 10) {
+                if (!secondSemStartByBatch || date < secondSemStartByBatch) {
+                    secondSemStartByBatch = date;
+                    console.log(`[Semester] バッチ[1]による後期開始推測: ${formatDateKey(date)} - "${wc}"`);
+                }
+            } else if (m === 4 || m === 5 || m === 6) {
+                if (!firstSemStartByBatch || date < firstSemStartByBatch) {
+                    firstSemStartByBatch = date;
+                    console.log(`[Semester] バッチ[1]による前期開始推測: ${formatDateKey(date)} - "${wc}"`);
+                }
+            }
+        }
+    });
+
+    // 境界判定：マーカー（授業開始）とバッチリセット（1）のいずれか早い方を採用する
+    let finalFirstStart = firstSemesterStart;
+    if (firstSemStartByBatch && (!finalFirstStart || firstSemStartByBatch < finalFirstStart)) {
+        finalFirstStart = firstSemStartByBatch;
+    }
+    let finalSecondStart = secondSemesterStart;
+    if (secondSemStartByBatch && (!finalSecondStart || secondSemStartByBatch < finalSecondStart)) {
+        finalSecondStart = secondSemesterStart;
+    }
+
+    const getSemesterLabel = (d) => {
+        if (!d) return 'first';
+        const target = new Date(d);
+        target.setHours(0, 0, 0, 0);
+
+        // 後期開始日（マーカーまたはバッチリセット初日）以降
+        if (finalSecondStart && target >= finalSecondStart) return 'second';
+        // 前期開始日以降
+        if (finalFirstStart && target >= finalFirstStart) return 'first';
+
+        // 境界が見つからない場合の推測
+        const m = target.getMonth() + 1;
+        // 9月〜10月でバッチが1,2なら後期とみなす（安全策）
+        if (m === 9 || m === 10) {
+            const tStr = formatDateKey(target);
+            const items = sourceData.filter(it => formatDateKey(it.date) === tStr);
+            const dayWc = items.find(it => it.weekdayCount)?.weekdayCount || "";
+            if (/^[月火水木金土日]?[1１2２]$/.test(dayWc.trim())) return 'second';
+        }
+
+        return 'first';
+    };
+
+    console.log(`generateClassEvents: 学期境界: 前期=${finalFirstStart ? formatDateKey(finalFirstStart) : '未検出'}, 後期=${finalSecondStart ? formatDateKey(finalSecondStart) : '未検出'}`);
+
     // 各月のデータ存在確認
     const monthsInFiscalYear = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3];
     let uniqueClassDays = [];
@@ -1072,35 +1168,34 @@ function generateClassEvents(year, options = {}) {
             return d.getFullYear() === mYear && (d.getMonth() + 1) === m;
         });
 
-        // その月に1日でも「曜日カウント（授業日指定）」があるか
-        const daysWithCountInMonth = monthData.filter(item => item.weekdayCount && String(item.weekdayCount).trim() !== "");
+        // その月に1日でも「曜日カウント（授業日指定）」、「〇曜授業」、または「授業開始」があるか
+        const daysWithCountInMonth = monthData.filter(item => {
+            const wc = (item.weekdayCount || "").trim();
+            const et = (item.event || item.name || "");
+            const isBatchWc = wc && (/[月火水木金土日]/.test(wc) || /\d/.test(wc));
+            const isUnrelated = et.includes("準備") || et.includes("片付け") || et.includes("会議") || et.includes("設営") || et.includes("案内");
+            const isClassEvent = (et.includes("曜授業") || et.includes("授業開始")) && !isUnrelated;
+            return isBatchWc || isClassEvent;
+        });
 
         if (daysWithCountInMonth.length > 0) {
-            // 指定がある月は、その指定に従う（Excelの計画を優先）
+            // 指定がある日はその指定に従う（月1、火1など）
             const dateToBestItem = new Map();
-            daysWithCountInMonth.forEach(item => {
-                const dateKey = item.date.toDateString();
-                const existing = dateToBestItem.get(dateKey);
-                // 数字を含む指定（例: 月1）を優先
-                if (!existing || (/\d/.test(item.weekdayCount) && !/\d/.test(existing.weekdayCount))) {
+            monthData.forEach(item => {
+                const dateKey = formatDateKey(item.date);
+                const wc = (item.weekdayCount || "").trim();
+                const et = (item.event || item.name || "");
+                const isUnrelated = et.includes("準備") || et.includes("片付け") || et.includes("会議") || et.includes("設営") || et.includes("案内");
+
+                const isBatchWc = wc && (/[月火水木金土日]/.test(wc) || /\d/.test(wc));
+                const isClassEvent = (et.includes("曜授業") || et.includes("授業開始")) && !isUnrelated;
+
+                // 曜日カウント（バッチ）または「授業開始」があるものを最優先
+                if (isBatchWc || isClassEvent) {
                     dateToBestItem.set(dateKey, item);
                 }
             });
             uniqueClassDays = uniqueClassDays.concat(Array.from(dateToBestItem.values()));
-        } else {
-            // 指定が全くない月は、土日以外の平日をすべて授業候補日とする
-            const startDate = new Date(mYear, m - 1, 1);
-            const endDate = new Date(mYear, m, 0);
-
-            for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-                if (d.getDay() === 0 || d.getDay() === 6) continue;
-
-                uniqueClassDays.push({
-                    date: new Date(d),
-                    weekdayCount: null,
-                    event: null
-                });
-            }
         }
     });
 
@@ -1115,28 +1210,81 @@ function generateClassEvents(year, options = {}) {
         const dateStrKey = formatDateKey(date);
 
         // 指定された年度の授業日のみ
-        if (fiscalYear !== year) return;
+        if (getFiscalYear(date) !== Number(year)) return;
 
-        // 中間試験チェック（中間試験が含まれる日は授業を行わない）
-        // sourceDataからその日の全イベントを確認
+        // その日の全イベントを取得 (共通で使用)
         const allItemsForDay = sourceData.filter(d => formatDateKey(d.date) === dateStrKey);
-        const isMidterm = allItemsForDay.some(d =>
-            (d.event && d.event.includes('中間試験')) ||
-            (d.name && d.name.includes('中間試験'))
-        );
-        if (isMidterm) {
-            console.log(`generateClassEvents: ${dateStrKey} は中間試験のためスキップします`);
+
+        // 定期試験チェック（ただし「返却」のみの日は授業ありとする）
+        const isExamDay = allItemsForDay.some(d => {
+            const text = (d.event || d.name || "");
+            const examKeywords = ['中間試験', '定期試験', '期末試験', '学年末試験'];
+            return examKeywords.some(k => text.includes(k)) && !text.includes('返却');
+        });
+        if (isExamDay) {
+            console.log(`generateClassEvents: ${dateStrKey} は試験期間中のためスキップします (返却日を除く)`);
             return;
         }
 
+        // 曜日カウント（バッチ）を取得
+        let countStr = (dayData.weekdayCount || "").trim();
 
-        // 前期 or 後期判定
-        const semester = (month >= 4 && month <= 9) ? 'first' : 'second';
+        // 授業開始イベントがあるかチェック
+        const textForClassDayCheck = (dayData.event || "") + (dayData.weekdayCount || "");
+        const isClassesStartDay = textForClassDayCheck.includes("授業開始");
+
+        // バッチがない場合でも、イベント名に「〇曜授業」や「授業開始」とあればそれをバッチ候補として採用する（救済処置）
+        if (!countStr) {
+            allItemsForDay.forEach(d => {
+                const text = d.event || d.name || "";
+                const isUnrelated = text.includes("準備") || text.includes("片付け") || text.includes("会議") || text.includes("設営") || text.includes("案内");
+                if (isUnrelated) return;
+
+                const match = text.match(/[月火水木金土日]曜授業/);
+                if (match) {
+                    countStr = match[0];
+                } else if (text.includes("授業開始")) {
+                    // 授業開始日の場合は、可能であればその日のイベント全体からバッチを探す
+                    const anyWc = allItemsForDay.find(it => it.weekdayCount && it.weekdayCount.trim())?.weekdayCount;
+                    if (anyWc) countStr = anyWc;
+                }
+            });
+        }
+
+        // ユーザー要望：曜日カウントのバッチがない日は授業を配置しない（バッチ優先）
+        // ただし、「授業開始」イベントがある日は、バッチ自体が空欄でもその曜日の授業として通す
+        if (!isClassesStartDay && (!countStr || (!/[月火水木金土日]/.test(countStr) && !/\d/.test(countStr)))) {
+            return;
+        }
+
+        // 祝日チェック
+        if (typeof window.getHolidaysForYear === 'function' && typeof window.getHolidayName === 'function') {
+            const holidaysMap = window.getHolidaysForYear(date.getFullYear());
+            const holidayName = window.getHolidayName(date, holidaysMap);
+            if (holidayName) {
+                // 祝日であっても、バッチ（または上記救済）により countStr が存在する場合は
+                // 「授業を行う旨の指定がある」とみなして通過させる
+                // ただし、念のためイベントテキストのチェックも保持
+                const text = (dayData.event || "") + (dayData.weekdayCount || "");
+                const hasClassOverride = text.includes("授業") || text.includes("補講") || text.includes("曜授業") || countStr.length > 0;
+
+                if (!hasClassOverride) {
+                    return;
+                }
+            }
+        }
+
+        // 前期 or 後期判定（カレンダーの境界設定を最優先とする）
+        let semester = getSemesterLabel(date);
+
+        // この日の有効な曜日（カウント文字列から導出）
+        const batchWeekday = getWeekdayFromCount(countStr);
+        const effectiveWeekday = batchWeekday !== null ? batchWeekday : date.getDay();
 
         // この日に該当する授業を検索
         myClasses.forEach(cls => {
-            // 年度チェック
-            if (cls.classYear && cls.classYear !== fiscalYear) return;
+            // 年度チェック (文字列・数値どらでも比較できるよう変換)
+            if (cls.classYear && String(cls.classYear) !== String(fiscalYear)) return;
 
             // 学期チェック
             if (semester === 'first' && !cls.firstSemester) return;
@@ -1146,153 +1294,138 @@ function generateClassEvents(year, options = {}) {
 
             if (!schedule) return;
 
-            // 曜日カウント（バッチ）から有効な曜日を取得
-            const countStr = dayData.weekdayCount || "";
-            const batchWeekday = getWeekdayFromCount(countStr);
-            const effectiveWeekday = batchWeekday !== null ? batchWeekday : date.getDay();
+            // 曜日が一致しない場合スキップ
+            if (String(schedule.weekday) !== String(effectiveWeekday)) return;
 
-            // 曜日が一致する場合のみ追加
-            if (String(schedule.weekday) === String(effectiveWeekday)) {
+            // オーバライドチェック：削除されているか、移動済みなのかを確認
+            const isDeleted = classOverrides.some(ov =>
+                String(ov.id) === String(cls.id) &&
+                ov.type === 'myclass' &&
+                ov.date === dateStrKey &&
+                ov.action === 'delete' &&
+                String(ov.period) === String(schedule.period)
+            );
 
-                // オーバライドチェック：削除されているか、移動済みなのかを確認
-                const isDeleted = classOverrides.some(ov =>
-                    String(ov.id) === String(cls.id) &&
-                    ov.type === 'myclass' &&
-                    ov.date === dateStrKey &&
-                    ov.action === 'delete' &&
-                    String(ov.period) === String(schedule.period)
-                );
+            const isMoved = classOverrides.some(ov =>
+                String(ov.id) === String(cls.id) &&
+                ov.type === 'myclass' &&
+                ov.date === dateStrKey &&
+                ov.action === 'move' &&
+                String(ov.period) === String(schedule.period)
+            );
 
-                const isMoved = classOverrides.some(ov =>
-                    String(ov.id) === String(cls.id) &&
-                    ov.type === 'myclass' &&
-                    ov.date === dateStrKey &&
-                    ov.action === 'move' &&
-                    String(ov.period) === String(schedule.period)
-                );
+            if (isDeleted || isMoved) return;
 
-                if (isDeleted || isMoved) return;
-
-                // 担当除外チェック
-                if (!includeExclusions) {
-                    const excludedDates = assignmentExclusions[cls.id] || [];
-                    if (excludedDates.includes(dateStrKey)) return;
-                }
-
-                // 午前・午後のみ制限をより正確にチェック
-                const allItems = sourceData.filter(d => formatDateKey(d.date) === dateStrKey);
-
-                let sessionInfo = {
-                    hasMorningIndicator: false,
-                    hasAfternoonIndicator: false,
-                    hasPriorityMorning: false,
-                    hasPriorityAfternoon: false
-                };
-
-                allItems.forEach(d => {
-                    const eventText = (d.event || "");
-                    const combined = eventText + (d.weekdayCount || "");
-                    const isMorningMatch = combined.includes("午前") || combined.includes("午後打ち切り");
-                    const isAfternoonMatch = combined.includes("午後") || combined.includes("午前打ち切り");
-
-                    if (!isMorningMatch && !isAfternoonMatch) return;
-
-                    // 授業に関係あるか (項目自体に「曜日・数字・曜授業」などの指定があるか)
-                    // C列由来のweekdayCountが全項目にコピーされているため、eventテキスト自体を重視する
-                    const isRelated = d.isSpecificWeekday || eventText.includes("曜授業") || /\d/.test(eventText);
-
-                    // 無関係なキーワード (これらが含まれる場合は、授業の制限としては採用しない)
-                    const isUnrelatedKeyword = eventText.includes("準備") || eventText.includes("後片付け") || eventText.includes("片付け") || eventText.includes("清掃") || eventText.includes("会議");
-
-                    if (isRelated) {
-                        if (isMorningMatch) sessionInfo.hasPriorityMorning = true;
-                        if (isAfternoonMatch) sessionInfo.hasPriorityAfternoon = true;
-                    } else if (!isUnrelatedKeyword) {
-                        if (isMorningMatch) sessionInfo.hasMorningIndicator = true;
-                        if (isAfternoonMatch) sessionInfo.hasAfternoonIndicator = true;
-                    }
-                });
-
-                let isMorningOnly = false;
-                let isAfternoonOnly = false;
-
-                if (sessionInfo.hasPriorityMorning || sessionInfo.hasPriorityAfternoon) {
-                    // 授業への直接指示がある場合はそれを優先（競合時は無効化）
-                    isMorningOnly = sessionInfo.hasPriorityMorning && !sessionInfo.hasPriorityAfternoon;
-                    isAfternoonOnly = sessionInfo.hasPriorityAfternoon && !sessionInfo.hasPriorityMorning;
-                } else {
-                    // 直接指示がない場合は一般指示（かつ無関係でないもの）を採用
-                    isMorningOnly = sessionInfo.hasMorningIndicator && !sessionInfo.hasAfternoonIndicator;
-                    isAfternoonOnly = sessionInfo.hasAfternoonIndicator && !sessionInfo.hasMorningIndicator;
-                }
-
-                const effectiveResult = getEffectivePeriods(schedule.period, isMorningOnly, isAfternoonOnly);
-                if (!effectiveResult) return;
-
-                const displayPeriod = effectiveResult.label;
-                const activePeriods = effectiveResult.periods;
-
-                // 時限の解析
-                const PERIOD_TIMES_LOCAL = window.PERIOD_TIMES || (typeof PERIOD_TIMES !== 'undefined' ? PERIOD_TIMES : {});
-                let times = PERIOD_TIMES_LOCAL[displayPeriod];
-
-                if (!times) {
-                    const firstTimes = PERIOD_TIMES_LOCAL[activePeriods[0]];
-                    const lastTimes = PERIOD_TIMES_LOCAL[activePeriods[activePeriods.length - 1]];
-                    if (firstTimes && lastTimes) {
-                        times = { start: firstTimes.start, end: lastTimes.end };
-                    }
-                }
-
-                if (!times) {
-                    console.warn(`時限 "${displayPeriod}" の時間設定が見つかりません`);
-                    return;
-                }
-
-                const startTime = createDateTime(date, times.start);
-                const endTime = createDateTime(date, times.end);
-
-
-
-                // 補講日チェック
-                const allItemsForDay = sourceData.filter(d => formatDateKey(d.date) === dateStrKey);
-                const isDayMakeup = allItemsForDay.some(d =>
-                    (d.event && d.event.includes('補講日')) ||
-                    (d.weekdayCount && d.weekdayCount.includes('補講日'))
-                );
-                let finalWeekdayCount = countStr;
-                if (isDayMakeup && !finalWeekdayCount.includes('補講日')) {
-                    finalWeekdayCount = finalWeekdayCount ? `${finalWeekdayCount} (補講日)` : '補講日';
-                }
-
-                events.push({
-                    id: cls.id,
-                    type: 'myclass',
-                    date: new Date(date),
-                    startTime: startTime,
-                    endTime: endTime,
-                    name: cls.name,
-                    location: cls.location || '',
-                    targetType: cls.targetType,
-                    targetGrade: cls.targetGrade,
-                    targetClass: cls.targetClass,
-                    period: displayPeriod,
-
-
-                    semester: (month >= 4 && month <= 9) ? '前期' : '後期',
-                    weekdayCount: finalWeekdayCount,
-                    allDay: false,
-                    memo: cls.memo || '',
-                    teachers: cls.teachers || [],
-                    departmentType: cls.departmentType
-                });
-
+            // 担当除外チェック
+            if (!includeExclusions) {
+                const excludedDates = assignmentExclusions[cls.id] || [];
+                if (excludedDates.includes(dateStrKey)) return;
             }
+            // この日の全てのイベント（Excel＋カスタム）を取得
+            const allItemsForDay = sourceData.filter(d => formatDateKey(d.date) === dateStrKey);
+
+            // 午前・午後の打ち切り判定
+            let sessionInfo = {
+                hasMorningIndicator: false,
+                hasAfternoonIndicator: false,
+                hasPriorityMorning: false,
+                hasPriorityAfternoon: false
+            };
+
+            allItemsForDay.forEach(d => {
+                const eventText = (d.event || "");
+                const combined = eventText + (d.weekdayCount || "");
+
+                // より正確な判定（「午後打ち切り」に「午後」が含まれることによる誤判定を防ぐ）
+                const isMorningMatch = (combined.includes("午前") && !combined.includes("午前打ち切り")) || combined.includes("午後打ち切り") || combined.includes("●");
+                const isAfternoonMatch = (combined.includes("午後") && !combined.includes("午後打ち切り")) || combined.includes("午前打ち切り");
+
+                if (!isMorningMatch && !isAfternoonMatch) return;
+
+                // 授業に関係あるか (項目自体に「曜日・数字・曜授業」などの指定があるか)
+                const isRelated = d.isSpecificWeekday ||
+                    eventText.includes("曜授業") || /\d/.test(eventText) ||
+                    (d.weekdayCount && (d.weekdayCount.includes("曜授業") || /\d/.test(d.weekdayCount)));
+
+                // 「準備」「片付け」「会議」などの授業そのものではないキーワードをチェック
+                const isUnrelatedKeyword = eventText.includes("準備") || eventText.includes("片付け") || eventText.includes("会議") || eventText.includes("設営") || eventText.includes("案内");
+
+                if (isRelated) {
+                    // 授業そのものに午前/午後がついている場合（例：【午前】火曜授業）
+                    if (isMorningMatch) sessionInfo.hasPriorityMorning = true;
+                    if (isAfternoonMatch) sessionInfo.hasPriorityAfternoon = true;
+                } else if (!isUnrelatedKeyword) {
+                    // 授業とは別の「行事」として午前/午後の指定がある場合（例：午後打ち切り、など）
+                    if (isMorningMatch) sessionInfo.hasMorningIndicator = true;
+                    if (isAfternoonMatch) sessionInfo.hasAfternoonIndicator = true;
+                }
+            });
+
+            let isMorningOnly = false;
+            let isAfternoonOnly = false;
+
+            // 優先順位：授業そのものに指定があれば、そちらを優先する
+            if (sessionInfo.hasPriorityMorning || sessionInfo.hasPriorityAfternoon) {
+                isMorningOnly = sessionInfo.hasPriorityMorning && !sessionInfo.hasPriorityAfternoon;
+                isAfternoonOnly = sessionInfo.hasPriorityAfternoon && !sessionInfo.hasPriorityMorning;
+            } else {
+                isMorningOnly = sessionInfo.hasMorningIndicator && !sessionInfo.hasAfternoonIndicator;
+                isAfternoonOnly = sessionInfo.hasAfternoonIndicator && !sessionInfo.hasMorningIndicator;
+            }
+
+            const effectiveResult = getEffectivePeriods(schedule.period, isMorningOnly, isAfternoonOnly);
+            if (!effectiveResult) return;
+
+            const displayPeriod = effectiveResult.label;
+            const activePeriods = effectiveResult.periods;
+
+            // 時間の取得 (PERIOD_TIMESマスタから)
+            const PERIOD_TIMES_LOCAL = window.PERIOD_TIMES || (typeof PERIOD_TIMES !== 'undefined' ? PERIOD_TIMES : {});
+            let times = PERIOD_TIMES_LOCAL[displayPeriod];
+
+            // 範囲指定（1-2限など）でマスタに直接ラベルがない場合は、最初と最後の時限を合成する
+            if (!times && activePeriods && activePeriods.length > 0) {
+                const firstTimes = PERIOD_TIMES_LOCAL[activePeriods[0]];
+                const lastTimes = PERIOD_TIMES_LOCAL[activePeriods[activePeriods.length - 1]];
+                if (firstTimes && lastTimes) {
+                    times = { start: firstTimes.start, end: lastTimes.end };
+                }
+            }
+
+            const startTimeStr = times ? times.start : (cls.startTime || "09:00");
+            const endTimeStr = times ? times.end : (cls.endTime || "16:25");
+
+            // 補講日チェック
+            const isDayMakeup = allItemsForDay.some(d =>
+                (d.event && d.event.includes('補講日')) ||
+                (d.weekdayCount && d.weekdayCount.includes('補講日'))
+            );
+            let finalWeekdayCount = countStr;
+            if (isDayMakeup && !finalWeekdayCount.includes('補講日')) {
+                finalWeekdayCount = finalWeekdayCount ? `${finalWeekdayCount} (補講日)` : '補講日';
+            }
+
+            events.push({
+                ...cls,
+                id: cls.id,
+                type: 'myclass',
+                date: new Date(date),
+                startTime: startTimeStr,
+                endTime: endTimeStr,
+                period: displayPeriod,
+                displayPeriod: displayPeriod,
+                isTruncated: effectiveResult.isTruncated,
+                originalPeriod: schedule.period,
+                semester: getSemesterLabel(date) === 'first' ? '前期' : '後期',
+                weekdayCount: finalWeekdayCount,
+                allDay: false,
+                isStandard: true
+            });
         });
     });
 
     // 移動先
-    classOverrides.forEach(ov => {
+    window.classOverrides.forEach(ov => {
         if (ov.type === 'myclass' && ov.action === 'move' && ov.data) {
             const date = parseDateKey(ov.date);
             const fiscalYear = getFiscalYear(date);
@@ -1301,30 +1434,23 @@ function generateClassEvents(year, options = {}) {
             const cls = ov.data;
             const dateStr = ov.date;
 
-            // 担当除外チェック
             if (!includeExclusions) {
                 const excludedDates = assignmentExclusions[cls.id] || [];
                 if (excludedDates.includes(dateStr)) return;
             }
 
-            // 移動先での制約チェック
             const allItemsForTarget = sourceData.filter(d => formatDateKey(d.date) === dateStr);
-
-            // 移動先の曜日カウント情報を抽出
             const weekdayCountItem = allItemsForTarget.find(d => d.weekdayCount);
             const countStr = weekdayCountItem ? weekdayCountItem.weekdayCount : "";
 
-            const morningMarkers = ["午前", "午後打ち切り", "●"];
-            const afternoonMarkers = ["午後", "午前打ち切り"];
-
-            const hasMorningMarkerTarget = allItemsForTarget.some(d =>
-                (d.event && morningMarkers.some(m => d.event.includes(m))) ||
-                (d.weekdayCount && morningMarkers.some(m => d.weekdayCount.includes(m)))
-            );
-            const hasAfternoonMarkerTarget = allItemsForTarget.some(d =>
-                (d.event && afternoonMarkers.some(m => d.event.includes(m))) ||
-                (d.weekdayCount && afternoonMarkers.some(m => d.weekdayCount.includes(m)))
-            );
+            const hasMorningMarkerTarget = allItemsForTarget.some(d => {
+                const text = (d.event || "") + (d.name || "") + (d.weekdayCount || "");
+                return (text.includes("午前") && !text.includes("午前打ち切り")) || text.includes("午後打ち切り") || text.includes("●");
+            });
+            const hasAfternoonMarkerTarget = allItemsForTarget.some(d => {
+                const text = (d.event || "") + (d.name || "") + (d.weekdayCount || "");
+                return (text.includes("午後") && !text.includes("午後打ち切り")) || text.includes("午前打ち切り");
+            });
 
             const isMorningOnly = hasMorningMarkerTarget && !hasAfternoonMarkerTarget;
             const isAfternoonOnly = hasAfternoonMarkerTarget && !hasMorningMarkerTarget;
@@ -1334,12 +1460,10 @@ function generateClassEvents(year, options = {}) {
 
             const displayPeriod = effectiveResult.label;
             const activePeriods = effectiveResult.periods;
-
-            // 移動先での解析
             const PERIOD_TIMES_LOCAL = window.PERIOD_TIMES || (typeof PERIOD_TIMES !== 'undefined' ? PERIOD_TIMES : {});
             let times = PERIOD_TIMES_LOCAL[displayPeriod];
 
-            if (!times) {
+            if (!times && activePeriods && activePeriods.length > 0) {
                 const firstTimes = PERIOD_TIMES_LOCAL[activePeriods[0]];
                 const lastTimes = PERIOD_TIMES_LOCAL[activePeriods[activePeriods.length - 1]];
                 if (firstTimes && lastTimes) {
@@ -1347,15 +1471,9 @@ function generateClassEvents(year, options = {}) {
                 }
             }
 
-            if (!times) times = { start: '09:00', end: '10:35' }; // デフォルト
+            const startTimeStr = times ? times.start : (cls.startTime || '09:00');
+            const endTimeStr = times ? times.end : (cls.endTime || '10:35');
 
-            const startTime = createDateTime(date, times.start);
-            const endTime = createDateTime(date, times.end);
-
-
-
-            // 移動先での補講日チェック
-            // allItemsForTargetは既に定義済み
             const isTargetMakeup = allItemsForTarget.some(d =>
                 (d.event && d.event.includes('補講日')) ||
                 (d.weekdayCount && d.weekdayCount.includes('補講日'))
@@ -1370,40 +1488,36 @@ function generateClassEvents(year, options = {}) {
             }
 
             events.push({
+                ...cls,
                 id: cls.id || ov.id,
                 type: 'myclass',
                 date: new Date(date),
-                startTime: startTime,
-                endTime: endTime,
-                name: cls.name,
-                location: cls.location || '',
-                targetType: cls.targetType,
-                targetGrade: cls.targetGrade,
-                targetClass: cls.targetClass,
+                startTime: startTimeStr,
+                endTime: endTimeStr,
                 period: displayPeriod,
-
-
-                semester: (date.getMonth() + 1 >= 4 && date.getMonth() + 1 <= 9) ? '前期' : '後期',
+                displayPeriod: displayPeriod,
+                isTruncated: effectiveResult.isTruncated,
+                originalPeriod: ov.period || cls.originalPeriod,
+                semester: getSemesterLabel(date) === 'first' ? '前期' : '後期',
                 weekdayCount: finalTargetCount,
                 allDay: !!cls.allDay,
-                memo: cls.memo || '',
                 isMoved: true,
-                teachers: cls.teachers || [],
-                departmentType: cls.departmentType
+                isStandard: true
             });
-
         }
     });
 
-    console.log(`${events.length} 件の授業イベントを生成しました`);
     return events;
 }
 
 /**
  * scheduleData に自分の授業イベントを統合して更新する
  */
-function updateScheduleDataWithClasses() {
+function updateScheduleDataWithClasses(targetYear = null) {
     if (typeof generateClassEvents !== 'function') return;
+
+    // キャッシュをクリア（月ごとのバッチ判定などをリセット）
+    window._monthHasCountCache = new Map();
 
     try {
         if (window.scheduleData) {
@@ -1412,14 +1526,30 @@ function updateScheduleDataWithClasses() {
 
             // scheduleData に含まれる全年度を特定
             const years = new Set();
+
+            // 引数で指定があれば追加
+            if (targetYear !== null && !isNaN(targetYear)) {
+                years.add(Number(targetYear));
+            }
+
             otherEvents.forEach(item => {
-                const fy = getFiscalYear(item.date);
+                const d = item.date instanceof Date ? item.date : new Date(item.date);
+                const fy = getFiscalYear(d);
                 if (fy) years.add(fy);
             });
 
+            // 現在表示中の年月から年度を特定（1-3月なら前年が年度）
+            if (typeof currentYear !== 'undefined' && currentYear && typeof currentMonth !== 'undefined') {
+                const cy = parseInt(currentYear);
+                const cm = parseInt(currentMonth);
+                const viewDate = new Date(cy, cm - 1, 1);
+                const fy = getFiscalYear(viewDate);
+                if (fy && !isNaN(fy)) years.add(fy);
+            }
+
             // 年度指定が全くない場合（初期状態など）は現在の年度を対象にする
             if (years.size === 0) {
-                const cy = typeof currentYear !== 'undefined' ? currentYear : new Date().getFullYear();
+                const cy = getFiscalYear(new Date());
                 years.add(cy);
             }
 
@@ -1428,8 +1558,11 @@ function updateScheduleDataWithClasses() {
                 allMyClassEvents = allMyClassEvents.concat(generateClassEvents(y));
             });
 
+            // 月ごとの計画キャッシュをクリア
+            if (window._monthHasCountCache) window._monthHasCountCache.clear();
+
             window.scheduleData = otherEvents.concat(allMyClassEvents.map(ev => ({ ...ev, fromMyClass: true })));
-            console.log(`scheduleDataを更新しました: 総数 ${window.scheduleData.length} (うち授業 ${allMyClassEvents.length})`);
+            console.log(`scheduleDataを更新しました: 対象年度 [${Array.from(years).join(', ')}] 総数 ${window.scheduleData.length} (うち授業 ${allMyClassEvents.length})`);
         }
     } catch (e) {
         console.error('updateScheduleDataWithClasses failed:', e);
@@ -1446,153 +1579,38 @@ window.generateClassEvents = generateClassEvents;
 // カレンダーへの統合用関数
 // =============================
 
-// カレンダーのセル作成時に授業を追加
 /**
- * 特定の日に表示すべき全授業を取得（標準＋追加分）
+ * 特定の日付に対して表示可能なマイクラス（授業）のリストを整理して取得する
  */
-window.getDisplayableClassesForDate = function (date, dayEvents) {
-    let showStandardClasses = true;
-    let isMorningOnly = false;
-    let isAfternoonOnly = false;
-    let finalCountStr = "";
-
-    // その月のデータ状況をキャッシュして、月全体の指定がない場合に備える
-    if (!window._monthHasCountCache) window._monthHasCountCache = new Map();
-    const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
-
-    if (!window._monthHasCountCache.has(monthKey)) {
-        // scheduleData から本来のソースデータを参照
-        const source = (window.scheduleData || []).filter(item => !item.fromMyClass);
-        const hasAnyInMonth = source.some(item => {
-            const d = item.date instanceof Date ? item.date : new Date(item.date);
-            return d.getFullYear() === date.getFullYear() && (d.getMonth() + 1) === (date.getMonth() + 1) && item.weekdayCount && String(item.weekdayCount).trim() !== "";
-        });
-        window._monthHasCountCache.set(monthKey, hasAnyInMonth);
-    }
-    const monthHasAnyCount = window._monthHasCountCache.get(monthKey);
-
-    if (dayEvents && dayEvents.length > 0) {
-        // 中間試験チェック
-        const isMidterm = dayEvents.some(item =>
-            (item.event && item.event.includes('中間試験')) ||
-            (item.name && item.name.includes('中間試験'))
-        );
-        if (isMidterm) showStandardClasses = false;
-
-        dayEvents.forEach(item => {
-            if (item.weekdayCount) {
-                if (!finalCountStr || (/\d/.test(item.weekdayCount) && !/\d/.test(finalCountStr))) {
-                    finalCountStr = item.weekdayCount;
-                }
-            }
-        });
-
-        if (!finalCountStr) {
-            if (monthHasAnyCount) {
-                showStandardClasses = false;
-            } else {
-                if (date.getDay() === 0 || date.getDay() === 6) showStandardClasses = false;
-            }
-        } else {
-            let sessionInfo = { hasMorningIndicator: false, hasAfternoonIndicator: false, hasPriorityMorning: false, hasPriorityAfternoon: false };
-            dayEvents.forEach(d => {
-                const eventText = (d.event || "");
-                const combined = eventText + (d.weekdayCount || "");
-                const isMorningMatch = combined.includes("午前") || combined.includes("午後打ち切り");
-                const isAfternoonMatch = combined.includes("午後") || combined.includes("午前打ち切り");
-                if (!isMorningMatch && !isAfternoonMatch) return;
-
-                const isRelated = d.isSpecificWeekday || eventText.includes("曜授業") || /\d/.test(eventText);
-                const isUnrelatedKeyword = eventText.includes("準備") || eventText.includes("片付け") || eventText.includes("会議");
-
-                if (isRelated) {
-                    if (isMorningMatch) sessionInfo.hasPriorityMorning = true;
-                    if (isAfternoonMatch) sessionInfo.hasPriorityAfternoon = true;
-                } else if (!isUnrelatedKeyword) {
-                    if (isMorningMatch) sessionInfo.hasMorningIndicator = true;
-                    if (isAfternoonMatch) sessionInfo.hasAfternoonIndicator = true;
-                }
-            });
-
-            if (sessionInfo.hasPriorityMorning || sessionInfo.hasPriorityAfternoon) {
-                isMorningOnly = sessionInfo.hasPriorityMorning && !sessionInfo.hasPriorityAfternoon;
-                isAfternoonOnly = sessionInfo.hasPriorityAfternoon && !sessionInfo.hasPriorityMorning;
-            } else {
-                isMorningOnly = sessionInfo.hasMorningIndicator && !sessionInfo.hasAfternoonIndicator;
-                isAfternoonOnly = sessionInfo.hasAfternoonIndicator && !sessionInfo.hasMorningIndicator;
-            }
-        }
-    } else {
-        if (monthHasAnyCount || date.getDay() === 0 || date.getDay() === 6) {
-            showStandardClasses = false;
-        }
-    }
-
-    const displayClasses = [];
+window.getDisplayableClassesForDate = function (date, dayEvents = null) {
     const dateStr = formatDateKey(date);
 
-    // 1. 標準授業の収集
-    if (showStandardClasses) {
-        const batchWeekday = getWeekdayFromCount(finalCountStr);
-        const effectiveWeekday = batchWeekday !== null ? batchWeekday : date.getDay();
-        const classes = getClassesForDay(date, effectiveWeekday);
-
-        classes.forEach(cls => {
-            const semester = (date.getMonth() + 1) >= 4 && (date.getMonth() + 1) <= 9 ? 'first' : 'second';
-            if (semester === 'first' && !cls.firstSemester) return;
-            if (semester === 'second' && !cls.secondSemester) return;
-            const schedule = semester === 'first' ? cls.firstSemester : cls.secondSemester;
-
-            const effectiveResult = getEffectivePeriods(schedule.period, isMorningOnly, isAfternoonOnly);
-            if (!effectiveResult) return;
-
-            // 削除・移動オーバーライドチェック
-            const isExcluded = classOverrides.some(ov =>
-                String(ov.id) === String(cls.id) && ov.type === 'myclass' &&
-                ov.date === dateStr && ov.action === 'delete' && String(ov.period) === String(schedule.period)
-            );
-            const isMoved = classOverrides.some(ov =>
-                String(ov.id) === String(cls.id) && ov.type === 'myclass' &&
-                ov.date === dateStr && ov.action === 'move' && String(ov.period) === String(schedule.period)
-            );
-            if (isExcluded || isMoved) return;
-
-            displayClasses.push({
-                ...cls,
-                displayPeriod: effectiveResult.label,
-                isTruncated: effectiveResult.isTruncated,
-                originalPeriod: schedule.period,
-                isStandard: true
-            });
-        });
-    }
-
-    // 2. 移動・追加された授業の収集
-    const addedOverrides = classOverrides.filter(ov =>
-        ov.date === dateStr && ov.action === 'move' && ov.type === 'myclass' && ov.data &&
-        !classOverrides.some(dov =>
-            dov.date === dateStr && String(dov.id) === String(ov.id) &&
-            dov.type === 'myclass' && dov.action === 'delete' && String(dov.period) === String(ov.period)
-        )
+    // scheduleData からその日の「自分の授業」を抽出する（既に generateClassEvents で計算済み）
+    const classes = (window.scheduleData || []).filter(item =>
+        item.fromMyClass && formatDateKey(item.date) === dateStr
     );
 
-    addedOverrides.forEach(ov => {
-        displayClasses.push({
-            ...ov.data,
-            id: ov.id,
-            displayPeriod: ov.period, // 移動後の指定時限
-            originalPeriod: ov.period,
-            isStandard: false
-        });
-    });
+    if (classes.length > 0) {
+        return classes.map(cls => ({
+            ...cls,
+            // app.js 等の古い表示ロジックとの互換性のため、必要なフィールドを整理
+            period: cls.period || cls.displayPeriod,
+            displayPeriod: cls.displayPeriod,
+            startTime: cls.startTime,
+            endTime: cls.endTime,
+            isStandard: true
+        }));
+    }
 
-    return displayClasses;
-};
+    // 万が一、scheduleData に入っていない場合（初期化タイミングなど）のフォールバック
+    // ただし、基本的には上記のキャッシュで完結させるのがユーザーの要望
+    return [];
+}
 
 /**
  * カレンダーのセルに授業を表示
  */
-function addMyClassesToDayCell(dayCell, date, dayEvents, laneMap = new Map()) {
+window.addMyClassesToDayCell = function (dayCell, date, dayEvents, laneMap = new Map()) {
     const displayClasses = getDisplayableClassesForDate(date, dayEvents);
     const dateStr = formatDateKey(date);
     const eventsContainer = dayCell.querySelector('.day-events');
@@ -1600,13 +1618,13 @@ function addMyClassesToDayCell(dayCell, date, dayEvents, laneMap = new Map()) {
 
     displayClasses.forEach(cls => {
         const periodKey = cls.displayPeriod || cls.originalPeriod;
-        const PERIOD_TIMES_LOCAL = window.PERIOD_TIMES || PERIOD_TIMES;
+        const PERIOD_TIMES_LOCAL = window.PERIOD_TIMES || (typeof PERIOD_TIMES !== 'undefined' ? PERIOD_TIMES : {});
         let times = PERIOD_TIMES_LOCAL[periodKey];
 
         if (!times && typeof periodKey === 'string' && periodKey.includes('-')) {
-            const parts = periodKey.split('-');
-            const first = PERIOD_TIMES_LOCAL[parts[0]];
-            const last = PERIOD_TIMES_LOCAL[parts[parts.length - 1]];
+            const parts = periodKey.replace(/\(.*\)/, '').split('-');
+            const first = PERIOD_TIMES_LOCAL[parts[0].trim()];
+            const last = PERIOD_TIMES_LOCAL[parts[parts.length - 1].trim()];
             if (first && last) times = { start: first.start, end: last.end };
         }
         if (!times) times = { start: '--:--', end: '--:--' };
@@ -1653,43 +1671,16 @@ function addMyClassesToDayCell(dayCell, date, dayEvents, laneMap = new Map()) {
     });
 }
 
+// 初期化を起動（app.jsから呼ばれるが、単体でも動作するように残す）
+document.addEventListener('DOMContentLoaded', () => {
+    if (typeof initializeMyClasses === 'function') initializeMyClasses();
+});
 
-// デフォルトに復元
-function restoreClassDefault(id) {
-    if (!confirm('この授業の変更をすべて元に戻しますか？')) return;
-    classOverrides = classOverrides.filter(ov => ov.id != id || ov.type !== 'myclass');
-    saveMyClasses();
-    renderMyClassesList();
-    if (typeof updateCalendar === 'function') updateCalendar();
-}
-window.restoreClassDefault = restoreClassDefault;
-
-// 初期化を起動（app.jsから呼ばれるが、単体でも動作するように一応残す。二重実行はガードで防ぐ）
-document.addEventListener('DOMContentLoaded', initializeMyClasses);
-
-// すでに読み込まれている場合も対応
-if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    setTimeout(initializeMyClasses, 1);
-}
-
-// =============================
-// 授業日程表・モーダル機能
-// =============================
-
-// 日程表を表示
-function showClassSchedule(classId = null, options = {}) {
+// 日程表を表示 (既存機能を維持)
+window.showClassSchedule = function (classId = null, options = {}) {
     console.log('日程表表示処理を開始します...');
-
-    // 個別授業の場合は、デフォルトで他のイベントを非表示
     const isIndividualClass = !!classId;
-    options = {
-        showAnnual: !isIndividualClass,
-        showMyClass: true,
-        showCustom: !isIndividualClass,
-        ...options
-    };
-
-    // 現在のクラスIDを保存
+    options = { showAnnual: !isIndividualClass, showMyClass: true, showCustom: !isIndividualClass, ...options };
     currentScheduleClassId = classId;
 
     const modal = document.getElementById('classScheduleModal');
@@ -1700,7 +1691,6 @@ function showClassSchedule(classId = null, options = {}) {
         console.error('モーダルまたはテーブルボディが見つかりません');
         return;
     }
-
     // フィルタ状態の取得 (引数がない場合はDOMから、ある場合は引数を優先)
     const showAnnual = options.showAnnual;
     const showMyClass = options.showMyClass;

@@ -16,6 +16,8 @@ var myClasses = [];         // 登録済み授業データ
 var classOverrides = [];    // カレンダー操作の記録
 var currentCalendarView = 'month'; // 'year', 'month', 'week', 'list'
 var yearlyViewMode = 'weekday';   // 'weekday' (曜日カウント) または 'work' (勤務パターン)
+var mobileAction = null;          // モバイル用コピー・移動アクション ('copy', 'move', null)
+var mobileSourceData = null;      // モバイルアクションの対象データ
 
 // 学校年度関連定数
 const FISCAL_YEAR_START_MONTH = 4;  // 4月開始
@@ -1068,6 +1070,11 @@ if (globalYearSelect) {
         if (startInput) startInput.value = `${fiscalYear}-04-01`;
         if (endInput) endInput.value = `${fiscalYear + 1}-03-31`;
 
+        // 授業データの再生成を予約
+        if (typeof updateScheduleDataWithClasses === 'function') {
+            updateScheduleDataWithClasses(fiscalYear);
+        }
+
         updateCalendar();
         if (typeof renderMyClassesList === 'function') renderMyClassesList();
         if (typeof renderTimetable === 'function') renderTimetable();
@@ -1694,6 +1701,15 @@ function updateStats() {
 function updateCalendar() {
     const isYearly = (currentCalendarView === 'year');
 
+    // 表示中の年度（4月基準の年度）を特定
+    const viewingDate = new Date(currentYear, currentMonth - 1, 1);
+    const fiscalYear = getFiscalYear(viewingDate);
+
+    // カレンダー操作時に授業データを最新の状態にする（年度跨ぎ対応）
+    if (typeof updateScheduleDataWithClasses === 'function') {
+        updateScheduleDataWithClasses(fiscalYear);
+    }
+
     // 年間表示の場合は月操作UI（◀今日▶）と表示設定UI（表示月/曜日カウント）を隠す
     const monthNav = document.getElementById('monthNavControls');
     const viewControls = document.getElementById('calendarViewControls');
@@ -1724,13 +1740,16 @@ function renderYearlyView() {
     const calendarGrid = document.getElementById('calendarGrid');
     const calendarTitle = document.getElementById('calendarTitle');
 
+    // 表示中の年度を特定
+    const fiscalYear = getFiscalYear(new Date(currentYear, currentMonth - 1, 1));
+
     // タイトルと切替ラジオボタン
     calendarTitle.style.display = 'flex';
     calendarTitle.style.alignItems = 'center';
     calendarTitle.style.justifyContent = 'center';
     calendarTitle.style.gap = '20px';
     calendarTitle.innerHTML = `
-        <span style="font-size: 1.1rem; font-weight: 800; color: var(--neutral-800);">${currentYear}年度 年間表示</span>
+        <span style="font-size: 1.1rem; font-weight: 800; color: var(--neutral-800);">${fiscalYear}年度 年間表示</span>
         <div class="yearly-view-toggle" style="display: flex; gap: 4px; background: var(--neutral-200); padding: 3px; border-radius: 20px; font-size: 0.8rem; font-weight: 700;">
             <label style="cursor: pointer; padding: 4px 12px; border-radius: 17px; display: flex; align-items: center; transition: all 0.2s; ${yearlyViewMode === 'weekday' ? 'background: #fff; color: var(--primary-600); box-shadow: 0 2px 4px rgba(0,0,0,0.1);' : 'color: var(--neutral-600);'}">
                 <input type="radio" name="yearlyMode" value="weekday" ${yearlyViewMode === 'weekday' ? 'checked' : ''} style="display: none;"> 曜日
@@ -1755,7 +1774,7 @@ function renderYearlyView() {
     // 4月から翌年3月までを描画
     for (let m = 0; m < 12; m++) {
         const monthNum = (FISCAL_YEAR_START_MONTH + m - 1) % 12 + 1;
-        const yearNum = (FISCAL_YEAR_START_MONTH + m > 12) ? currentYear + 1 : currentYear;
+        const yearNum = (monthNum < FISCAL_YEAR_START_MONTH) ? fiscalYear + 1 : fiscalYear;
         const monthContainer = document.createElement('div');
         monthContainer.className = 'mini-month';
 
@@ -1795,8 +1814,8 @@ function renderYearlyView() {
             if (weekday === 0) el.classList.add('sunday');
 
 
-            // 全ての表示候補イベントを取得
-            const dayEvents = scheduleData.filter(item => formatDateKey(item.date) === dStr);
+            // 全ての表示候補イベントを取得 (マイクラス由来を除外したソースデータ)
+            const dayEvents = scheduleData.filter(item => formatDateKey(item.date) === dStr && !item.fromMyClass);
             const dayOverrides = classOverrides.filter(ov => (ov.startDate === dStr || ov.date === dStr || (dStr >= ov.startDate && dStr <= ov.endDate)));
 
             // 参加しているイベントのみを抽出
@@ -1958,7 +1977,7 @@ function renderYearlyView() {
                 { active: hasLeave, typeClass: 'process-card leave-card', label: '年休' },
                 { active: hasTrip, typeClass: 'process-card trip-card', label: '出張' },
                 { active: hasWfh, typeClass: 'process-card wfh-card', label: '在宅' },
-                { active: hasHolidayWork, typeClass: 'process-card holiday-work-card', label: '休日' },
+                { active: hasHolidayWork, typeClass: 'process-card holiday-work-card', label: 'Holiday' },
                 { active: hasClass, typeClass: 'myclass', label: '授業' },
                 { active: hasOther, typeClass: 'custom', label: '行事' }
             ];
@@ -1973,10 +1992,10 @@ function renderYearlyView() {
                     card.style.setProperty('padding', '0', 'important');
                     card.style.setProperty('height', '8px', 'important');
                     card.style.setProperty('min-height', '8px', 'important');
-                    card.style.setProperty('width', '100%', 'important');
+                    card.style.setProperty('width', '96%', 'important');
                     card.style.setProperty('text-align', 'center', 'important');
                     card.style.setProperty('line-height', '8px', 'important');
-                    card.style.setProperty('margin', '0', 'important');
+                    card.style.setProperty('margin', '0 auto', 'important');
                     card.style.setProperty('border-left-width', '2px', 'important');
                     card.style.setProperty('border-radius', '1px', 'important');
                     card.style.setProperty('box-shadow', 'none', 'important');
@@ -2206,10 +2225,18 @@ function renderMonthlyView() {
     // 4. マイクラス（授業）
     if (typeof getDisplayableClassesForDate === 'function') {
         allDates.forEach(d => {
-            const dStr = formatDateKey(d);
-            const dayEvents = scheduleData.filter(item => item.date.toDateString() === d.toDateString());
+            const currentDStr = formatDateKey(d);
+            const dayEvents = scheduleData.filter(item => item.date.toDateString() === d.toDateString() && !item.fromMyClass);
             getDisplayableClassesForDate(d, dayEvents).forEach(cls => {
-                allDisplayEvents.push({ id: String(cls.id), startDate: dStr, endDate: dStr, type: 'myclass', data: cls, period: cls.originalPeriod, original: cls });
+                allDisplayEvents.push({
+                    id: String(cls.id),
+                    startDate: currentDStr,
+                    endDate: currentDStr,
+                    type: 'myclass',
+                    data: cls,
+                    period: cls.displayPeriod,
+                    original: cls
+                });
             });
         });
     }
@@ -2236,7 +2263,7 @@ function renderMonthlyView() {
             const isWfh = !!item.isWfhCard || (typeof eventName === 'string' && eventName.includes('在宅'));
             const isPinned = typeof containsPinnedKeyword === 'function' && containsPinnedKeyword(eventName);
 
-            return isTimed || isTrip || isWfh || isPinned;
+            return true;
         });
 
         const localConflicts = [];
@@ -2616,9 +2643,12 @@ function getSortPriority(ov) {
 function getEffectiveTime(ov, dateStr) {
     const item = ov.data || {};
 
+    // 既に開始時刻がプロパティとして存在する場合はそれを優先（マイクラス等）
+    if (item.startTime) return item.startTime;
+
     // 授業の場合：時限マスタから取得
     if (ov.type === 'myclass') {
-        const p = ov.period || item.originalPeriod;
+        const p = ov.period || item.displayPeriod || item.originalPeriod;
         if (PERIOD_TIMES[p]) return PERIOD_TIMES[p].start;
         if (typeof p === 'string' && p.includes('-')) {
             const first = p.split('-')[0];
@@ -2632,11 +2662,9 @@ function getEffectiveTime(ov, dateStr) {
         const d = parseDateKey(dateStr);
         const work = typeof getWorkTimeForDate === 'function' ? getWorkTimeForDate(d, true) : { start: '08:30', end: '17:00' };
         if (!work) return '08:30';
-        if (item.leaveType === 'early' || item.leaveType === 'full') return work.start;
-        if (item.leaveType === 'late') {
-            const mins = (item.leaveHours || 0) * 60 + (item.leaveExtra || 0);
-            return typeof addMinutes === 'function' ? addMinutes(work.end, -mins) : work.start;
-        }
+        if (item.leaveType === 'morning') return work.start;
+        if (item.leaveType === 'afternoon') return '13:00'; // 一般的な午後開始
+        return work.start;
     }
 
     // 出張の場合：初日のみ開始時刻を適用、それ以外は終日扱い(00:00)
@@ -2649,20 +2677,24 @@ function getEffectiveTime(ov, dateStr) {
 }
 
 /**
- * イベントの終了時刻を取得
+ * イベントの有効な終了時刻を取得
  */
 function getEndTime(ov, dateStr) {
     const item = ov.data || {};
 
-    // 授業の場合
+    // 既に終了時刻がプロパティとして存在する場合はそれを優先（マイクラス等）
+    if (item.endTime) return item.endTime;
+
+    // 授業の場合：時限マスタから取得
     if (ov.type === 'myclass') {
-        const p = ov.period || item.originalPeriod;
+        const p = ov.period || item.displayPeriod || item.originalPeriod;
         if (PERIOD_TIMES[p]) return PERIOD_TIMES[p].end;
         if (typeof p === 'string' && p.includes('-')) {
-            const last = p.split('-').pop();
+            const parts = p.split('-');
+            const last = parts[parts.length - 1];
             if (PERIOD_TIMES[last]) return PERIOD_TIMES[last].end;
         }
-        return '10:35';
+        return '16:25';
     }
 
     // 年休の場合
@@ -2670,6 +2702,8 @@ function getEndTime(ov, dateStr) {
         const d = parseDateKey(dateStr);
         const work = typeof getWorkTimeForDate === 'function' ? getWorkTimeForDate(d, true) : { start: '08:30', end: '17:00' };
         if (!work) return '17:00';
+        if (item.leaveType === 'morning') return '13:00'; // 一般的な午前終了
+        if (item.leaveType === 'afternoon') return work.end;
         if (item.leaveType === 'late' || item.leaveType === 'full') return work.end;
         if (item.leaveType === 'early') {
             const mins = (item.leaveHours || 0) * 60 + (item.leaveExtra || 0);
