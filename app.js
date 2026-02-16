@@ -330,9 +330,12 @@ function getJapaneseHolidays(year) {
  * 日付をキー形式（YYYY-MM-DD）にフォーマット
  */
 function formatDateKey(date) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
+    if (!date) return "";
+    const d = (date instanceof Date) ? date : new Date(date);
+    if (isNaN(d.getTime())) return "";
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
 }
 window.formatDateKey = formatDateKey;
@@ -383,9 +386,12 @@ window.getHolidaysForYear = getHolidaysForYear;
  * イベント名が祝日名に関連する冗長なものか判定
  */
 function isRedundantHoliday(eventText, date) {
-    if (!eventText) return false;
-    const holidaysMap = getHolidaysForYear(date.getFullYear());
-    const hName = getHolidayName(date, holidaysMap);
+    if (!eventText || !date) return false;
+    const d = (date instanceof Date) ? date : new Date(date);
+    if (isNaN(d.getTime())) return false;
+
+    const holidaysMap = getHolidaysForYear(d.getFullYear());
+    const hName = getHolidayName(d, holidaysMap);
     if (!hName) return false;
 
     const ev = eventText.trim();
@@ -1087,6 +1093,13 @@ if (globalYearSelect) {
 
 document.getElementById('monthSelect').addEventListener('change', (e) => {
     currentMonth = parseInt(e.target.value);
+    // 年度選択（Academic Year）との整合性を確保
+    // 1-3月が選ばれた場合は、選択されている年度（4月開始）の翌年を表示年とする
+    const ys = document.getElementById('globalYearSelect');
+    if (ys && ys.value) {
+        const fiscalYear = parseInt(ys.value);
+        currentYear = (currentMonth <= 3) ? fiscalYear + 1 : fiscalYear;
+    }
     updateCalendar();
 });
 
@@ -1777,6 +1790,12 @@ function renderYearlyView() {
         const yearNum = (monthNum < FISCAL_YEAR_START_MONTH) ? fiscalYear + 1 : fiscalYear;
         const monthContainer = document.createElement('div');
         monthContainer.className = 'mini-month';
+        monthContainer.style.cursor = 'pointer';
+        monthContainer.onclick = () => {
+            currentMonth = monthNum;
+            currentYear = yearNum;
+            changeCalendarView('month');
+        };
 
         const title = document.createElement('div');
         title.className = 'mini-month-title';
@@ -2219,7 +2238,7 @@ function renderMonthlyView() {
     // 3. 移動済みExcel
     classOverrides.filter(ov => ov.type === 'excel' && ov.action === 'move' && ov.data).forEach(ov => {
         if (ov.date < formatDateKey(allDates[0]) || ov.date > formatDateKey(allDates[41])) return;
-        allDisplayEvents.push({ id: String(ov.id), startDate: ov.date, endDate: ov.date, type: 'excel-moved', data: ov.data, original: ov });
+        allDisplayEvents.push({ id: String(ov.id), startDate: ov.date, endDate: ov.date, type: 'excel', data: ov.data, original: ov });
     });
 
     // 4. マイクラス（授業）
@@ -2831,7 +2850,7 @@ function moveCalendarEvent(eventData, targetDate, isCopy = false) {
             const baseCls = myClasses.find(c => String(c.id) === String(id));
             if (baseCls) movingData = JSON.parse(JSON.stringify(baseCls));
         } else if (type === 'excel') {
-            const item = scheduleData.find(i => String(i.id) === String(id));
+            const item = scheduleData.find(i => String(i.id) === String(id) && formatDateKey(i.date) === sourceDate);
             if (item) {
                 movingData = {
                     event: item.event,
@@ -3158,8 +3177,7 @@ function editCalendarEvent(type, id, date, period) {
         let currentMemo = '';
         let isAllDay = true; // 行事はデフォルト「終日=True」
         let isParticipating = false;
-
-        const item = scheduleData.find(i => String(i.id) === String(id));
+        const item = scheduleData.find(i => String(i.id) === String(id) && formatDateKey(i.date) === date);
         const override = classOverrides.find(ov => String(ov.id) === String(id) && ov.date === date && ov.type === 'excel' && ov.action === 'move');
 
         if (override && override.data) {
@@ -3383,176 +3401,188 @@ window.updateQuickTimeFromPeriod = updateQuickTimeFromPeriod;
  */
 function handleQuickEditSubmit(e) {
     e.preventDefault();
+    console.log('handleQuickEditSubmit: 保存処理を開始します');
 
-    const type = document.getElementById('quickEditType').value;
-    const id = document.getElementById('quickEditId').value;
-    const date = document.getElementById('quickEditDate').value;
-    const sourcePeriod = document.getElementById('quickEditSourcePeriod').value;
-    const isAllDay = document.getElementById('quickEditAllDay').checked;
+    try {
+        const type = document.getElementById('quickEditType').value;
+        const id = document.getElementById('quickEditId').value;
+        const date = document.getElementById('quickEditDate').value;
+        const sourcePeriod = document.getElementById('quickEditSourcePeriod').value;
+        const isAllDay = document.getElementById('quickEditAllDay').checked;
 
-    // 単一日モードと範囲モードのどちらからも値を読み取る
-    const startTimeRaw = document.getElementById('quickEditStartTime').value || document.getElementById('quickEditStartTime_Single').value;
-    const endTimeRaw = document.getElementById('quickEditEndTime').value || document.getElementById('quickEditEndTime_Single').value;
+        // 単一日モードと範囲モードのどちらからも値を読み取る
+        const startTimeFromId = document.getElementById('quickEditStartTime');
+        const endTimeFromId = document.getElementById('quickEditEndTime');
+        const startTimeFromSingleId = document.getElementById('quickEditStartTime_Single');
+        const endTimeFromSingleId = document.getElementById('quickEditEndTime_Single');
 
-    const startTime = (isAllDay) ? '' : startTimeRaw;
-    const endTime = (isAllDay) ? '' : endTimeRaw;
-    const location = document.getElementById('quickEditLocation').value.trim();
-    const memo = document.getElementById('quickEditMemo').value.trim();
+        const startTimeRaw = (startTimeFromId ? startTimeFromId.value : '') || (startTimeFromSingleId ? startTimeFromSingleId.value : '');
+        const endTimeRaw = (endTimeFromId ? endTimeFromId.value : '') || (endTimeFromSingleId ? endTimeFromSingleId.value : '');
 
-    const isParticipating = document.getElementById('quickEditParticipate').checked;
+        const startTime = (isAllDay) ? '' : startTimeRaw;
+        const endTime = (isAllDay) ? '' : endTimeRaw;
+        const location = document.getElementById('quickEditLocation').value.trim();
+        const memo = document.getElementById('quickEditMemo').value.trim();
 
-    if (type === 'myclass') {
-        const cls = myClasses.find(c => String(c.id) === String(id));
-        const newPeriod = document.getElementById('quickEditPeriod').value; // 元のコードに合わせて文字列またはパース後の型を確認
+        const participateCheck = document.getElementById('quickEditParticipate');
+        const isParticipating = participateCheck ? participateCheck.checked : true;
+        const newName = document.getElementById('quickEditName').value;
 
-        // 授業の参加切り替え：assignmentExclusionsで管理（コンテキストメニューと同期）
-        let assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
-        const dateKey = date;
-        if (!assignmentExclusions[id]) {
-            assignmentExclusions[id] = [];
-        }
-
-        if (isParticipating) {
-            // 参加する場合：除外リストから削除
-            assignmentExclusions[id] = assignmentExclusions[id].filter(d => d !== dateKey);
-        } else {
-            // 非参加にする場合：除外リストに追加
-            if (!assignmentExclusions[id].includes(dateKey)) {
-                assignmentExclusions[id].push(dateKey);
+        if (type === 'myclass') {
+            const cls = myClasses.find(c => String(c.id) === String(id));
+            if (!cls) {
+                console.warn(`授業データが見つかりません: ID=${id}`);
+                alert('対象の授業データが見つかりません。');
+                return;
             }
-        }
-        localStorage.setItem('assignmentExclusions', JSON.stringify(assignmentExclusions));
+            const newPeriodEl = document.getElementById('quickEditPeriod');
+            const newPeriod = newPeriodEl ? newPeriodEl.value : sourcePeriod;
 
+            // 授業の参加切り替え：assignmentExclusionsで管理
+            let assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
+            const dateKey = date;
+            if (!assignmentExclusions[id]) {
+                assignmentExclusions[id] = [];
+            }
 
-        // 既存オーバライドのクリア
-        classOverrides = classOverrides.filter(ov =>
-            !(String(ov.id) === String(id) && ov.date === date && ov.type === 'myclass')
-        );
+            if (isParticipating) {
+                assignmentExclusions[id] = assignmentExclusions[id].filter(d => d !== dateKey);
+            } else {
+                if (!assignmentExclusions[id].includes(dateKey)) {
+                    assignmentExclusions[id].push(dateKey);
+                }
+            }
+            localStorage.setItem('assignmentExclusions', JSON.stringify(assignmentExclusions));
 
-        // 1. 移動元を消去 (時限が変わる場合のみ、または常に消去を明示)
-        if (newPeriod !== sourcePeriod) {
+            // 既存オーバライドのクリア
+            classOverrides = classOverrides.filter(ov =>
+                !(String(ov.id) === String(id) && ov.date === date && ov.type === 'myclass')
+            );
+
+            // 1. 移動元を消去 (時限が変わる場合のみ)
+            if (newPeriod !== sourcePeriod) {
+                classOverrides.push({
+                    type: 'myclass',
+                    id: id,
+                    date: date,
+                    action: 'move',
+                    period: sourcePeriod
+                });
+            }
+
+            // 2. 新しいデータ
+            const updatedCls = JSON.parse(JSON.stringify(cls));
+            updatedCls.name = newName;
+            updatedCls.location = location;
+            updatedCls.allDay = isAllDay;
+            updatedCls.startTime = startTime;
+            updatedCls.endTime = endTime;
+            updatedCls.memo = memo;
+            updatedCls.isParticipating = isParticipating;
+
             classOverrides.push({
                 type: 'myclass',
                 id: id,
                 date: date,
                 action: 'move',
-                period: sourcePeriod
+                period: newPeriod,
+                data: updatedCls
             });
-        }
 
-        // 2. 新しいデータ
-        const updatedCls = JSON.parse(JSON.stringify(cls));
-        updatedCls.name = newName;
-        updatedCls.location = location;
-        updatedCls.allDay = isAllDay;
-        updatedCls.startTime = startTime;
-        updatedCls.endTime = endTime;
-        updatedCls.memo = memo;
-        updatedCls.isParticipating = isParticipating;
+        } else if (type === 'excel') {
+            classOverrides = classOverrides.filter(ov =>
+                !(String(ov.id) === String(id) && ov.date === date && ov.type === 'excel')
+            );
 
-        classOverrides.push({
-            type: 'myclass',
-            id: id,
-            date: date,
-            action: 'move',
-            period: newPeriod,
-            data: updatedCls
-        });
+            classOverrides.push({
+                type: 'excel',
+                id: id,
+                date: date,
+                action: 'move',
+                data: {
+                    event: newName,
+                    type: 'teacher',
+                    allDay: isAllDay,
+                    startTime: startTime,
+                    endTime: endTime,
+                    location: location,
+                    memo: memo,
+                    isParticipating: isParticipating
+                }
+            });
+        } else if (type === 'custom') {
+            const startDateEl = document.getElementById('quickEditStartDate');
+            const endDateEl = document.getElementById('quickEditEndDate');
+            const startDateVal = (startDateEl ? startDateEl.value : '') || date;
+            const endDateVal = (endDateEl ? endDateEl.value : '') || startDateVal;
+            const appliedEl = document.getElementById('quickEditApplied');
+            const isApplied = appliedEl ? appliedEl.checked : false;
 
-    } else if (type === 'excel') {
-        // 既存オーバライドのクリア
-        classOverrides = classOverrides.filter(ov =>
-            !(String(ov.id) === String(id) && ov.date === date && ov.type === 'excel')
-        );
+            const existingOverride = classOverrides.find(ov => String(ov.id) === String(id) && ov.type === 'custom');
+            const existingData = existingOverride ? existingOverride.data : {};
 
-        classOverrides.push({
-            type: 'excel',
-            id: id,
-            date: date,
-            action: 'move',
-            data: {
+            const updatedData = {
+                ...existingData,
                 event: newName,
-                type: 'teacher',
                 allDay: isAllDay,
                 startTime: startTime,
                 endTime: endTime,
                 location: location,
                 memo: memo,
-                isParticipating: isParticipating
+                isParticipating: isParticipating,
+                isApplied: isApplied
+            };
+
+            // 出張詳細への反映
+            if (updatedData.isTripCard && updatedData.tripDetails) {
+                updatedData.tripDetails.depTime = startTime;
+                updatedData.tripDetails.arrTime = endTime;
+                updatedData.tripDetails.destination = location;
             }
-        });
-    } else if (type === 'custom') {
-        const startDateVal = document.getElementById('quickEditStartDate').value || date;
-        const endDateVal = document.getElementById('quickEditEndDate').value || startDateVal;
-        const isApplied = document.getElementById('quickEditApplied').checked;
 
-        // 既存同一IDの抽出（データ継承のため）
-        const existingOverride = classOverrides.find(ov => String(ov.id) === String(id) && ov.type === 'custom');
-        const existingData = existingOverride ? existingOverride.data : {};
+            // 休日出勤詳細への反映
+            if (updatedData.isHolidayWorkCard && updatedData.holidayWorkDetails && startTime && endTime) {
+                updatedData.holidayWorkDetails.startTime = startTime;
+                updatedData.holidayWorkDetails.endTime = endTime;
+                updatedData.holidayWorkDetails.content = newName.replace('休日出勤: ', '');
 
-        let data = {
-            ...existingData,
-            event: newName,
-            location: location,
-            memo: memo,
-            allDay: isAllDay,
-            isApplied: isApplied
-        };
+                const [sH, sM] = startTime.split(':').map(Number);
+                const [eH, eM] = endTime.split(':').map(Number);
+                if (!isNaN(sH) && !isNaN(eH)) {
+                    const diffMinutes = (eH * 60 + (eM || 0)) - (sH * 60 + (sM || 0));
+                    let breakMinutes = 0;
+                    if (diffMinutes >= 4 * 60) breakMinutes = 45;
+                    updatedData.holidayWorkDetails.breakMinutes = breakMinutes;
+                    updatedData.holidayWorkDetails.workMinutes = diffMinutes - breakMinutes;
+                }
+            }
 
-        // 既存同一IDのクリア
-        classOverrides = classOverrides.filter(ov =>
-            !(String(ov.id) === String(id) && ov.type === 'custom')
-        );
+            // 既存同一IDのクリア
+            classOverrides = classOverrides.filter(ov =>
+                !(String(ov.id) === String(id) && ov.type === 'custom')
+            );
 
-        const updatedData = {
-            ...existingData,
-            event: newName,
-            allDay: isAllDay,
-            startTime: startTime,
-            endTime: endTime,
-            location: location,
-            memo: memo,
-            isParticipating: isParticipating
-        };
-
-        // 出張詳細への反映（もしあれば）
-        if (updatedData.isTripCard && updatedData.tripDetails) {
-            updatedData.tripDetails.depTime = startTime;
-            updatedData.tripDetails.arrTime = endTime;
-            updatedData.tripDetails.destination = location;
+            classOverrides.push({
+                type: 'custom',
+                id: id,
+                date: startDateVal,
+                startDate: startDateVal,
+                endDate: endDateVal,
+                action: 'add',
+                data: updatedData
+            });
         }
 
-        // 休日出勤詳細への反映（もしあれば）
-        if (updatedData.isHolidayWorkCard && updatedData.holidayWorkDetails) {
-            updatedData.holidayWorkDetails.startTime = startTime;
-            updatedData.holidayWorkDetails.endTime = endTime;
-            updatedData.holidayWorkDetails.content = newName.replace('休日出勤: ', '');
-
-            // 時間再演算
-            let breakMinutes = 0;
-            const [sH, sM] = startTime.split(':').map(Number);
-            const [eH, eM] = endTime.split(':').map(Number);
-            const diffMinutes = (eH * 60 + eM) - (sH * 60 + sM);
-            if (diffMinutes >= 4 * 60) breakMinutes = 45;
-
-            updatedData.holidayWorkDetails.breakMinutes = breakMinutes;
-            updatedData.holidayWorkDetails.workMinutes = diffMinutes - breakMinutes;
-        }
-
-        classOverrides.push({
-            type: 'custom',
-            id: id,
-            date: startDateVal,
-            startDate: startDateVal,
-            endDate: endDateVal,
-            action: 'add',
-            data: updatedData
-        });
+        saveAllToLocal();
+        updateCalendar();
+        closeQuickEditModal();
+        console.log('handleQuickEditSubmit: 保存完了');
+    } catch (err) {
+        console.error('handleQuickEditSubmitでエラーが発生しました:', err);
+        alert('保存中にエラーが発生しました: ' + err.message);
+        // エラーが発生しても最低限モーダルは閉じる、あるいは状態を戻す等の考慮が必要だが
+        // ここではエラー内容の通知に留める
     }
-
-    saveAllToLocal();
-    updateCalendar();
-    closeQuickEditModal();
 }
 window.handleQuickEditSubmit = handleQuickEditSubmit;
 
@@ -4402,7 +4432,7 @@ window.showEventContextMenu = function (e, type, id, date, period = null) {
         isParticipating = !classExclusions.includes(date);
     } else {
         const ov = classOverrides.find(ov => String(ov.id) === String(id) && (ov.type === type || (type.startsWith('excel') && ov.type === 'excel')));
-        const item = scheduleData.find(i => String(i.id) === String(id));
+        const item = scheduleData.find(i => String(i.id) === String(id) && formatDateKey(i.date) === date);
         const name = item ? (item.event || item.name || "") : (ov && ov.data ? ov.data.event : "");
         const isApplied = (ov && ov.data && ov.data.isApplied) || (item && item.isApplied);
 
@@ -4483,7 +4513,7 @@ function handleContextAction(action) {
                 );
 
                 let baseData = null;
-                const item = scheduleData.find(i => String(i.id) === String(id));
+                const item = scheduleData.find(i => String(i.id) === String(id) && formatDateKey(i.date) === date);
                 if (item) {
                     baseData = {
                         event: item.event,

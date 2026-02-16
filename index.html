@@ -1408,7 +1408,11 @@
                     <label style="cursor: pointer; display: flex; align-items: center; gap: 5px;">
                         <input type="checkbox" id="filterMyClasses" checked> 授業
                     </label>
+                    <label style="cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                        <input type="checkbox" id="filterCustomEvents" checked> カスタム予定
+                    </label>
                     <label style="cursor: pointer; display: flex; align-items: center; gap: 5px; margin-right: 15px;">
+                        <input type="checkbox" id="filterExamPeriods" checked> 定期試験期間を表示する
                     </label>
                 </div>
                 <div id="classScheduleContent">
@@ -1428,9 +1432,6 @@
                 </button>
                 <button id="printScheduleBtn" class="btn btn-primary">
                     <span>&#x1F5A8;️ 印刷する</span>
-                </button>
-                <button class="btn btn-outline-primary" onclick="exportToCsv()" title="現在の表示内容をCSV形式で保存します">
-                    <span>&#x1F4C4; CSV出力</span>
                 </button>
                 <button class="btn btn-secondary" onclick="closeClassScheduleModal()">閉じる</button>
             </div>
