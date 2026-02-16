@@ -446,6 +446,12 @@ window.showDayInteractionMenu = function (e, dateStr) {
     const existing = document.getElementById('day-interaction-menu');
     if (existing) existing.remove();
 
+    // 座標取得 (マウス/タッチ両対応)
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+    if (navigator.vibrate) navigator.vibrate(20);
+
     const d = parseDateKey(dateStr);
     const weekday = d.getDay();
     const isHolidayDay = typeof getHolidayName === 'function' && getHolidayName(d, getHolidaysForYear(d.getFullYear())) !== null;
@@ -456,8 +462,8 @@ window.showDayInteractionMenu = function (e, dateStr) {
     menu.className = 'context-menu'; // CSSで定義されたスタイルを利用
     menu.style.cssText = `
         position: fixed;
-        top: ${e.clientY}px;
-        left: ${e.clientX}px;
+        top: ${clientY}px;
+        left: ${clientX}px;
         background: white;
         border-radius: 8px;
         box-shadow: 0 4px 15px rgba(0,0,0,0.2);
@@ -1088,12 +1094,19 @@ window.showWorkShiftMenu = function (event, dateStr) {
     const existing = document.getElementById('work-shift-menu');
     if (existing) existing.remove();
 
+    // 座標取得 (マウス/タッチ両対応)
+    const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+    const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+
+    if (navigator.vibrate) navigator.vibrate(20);
+
     const menu = document.createElement('div');
     menu.id = 'work-shift-menu';
+    menu.className = 'context-menu'; // 共通のスタイルを適用
     menu.style.cssText = `
         position: fixed;
-        top: ${event.clientY}px;
-        left: ${event.clientX}px;
+        top: ${clientY}px;
+        left: ${clientX}px;
         background: white;
         border-radius: 8px;
         box-shadow: 0 4px 15px rgba(0,0,0,0.15);
@@ -1101,6 +1114,7 @@ window.showWorkShiftMenu = function (event, dateStr) {
         z-index: 5000;
         min-width: 140px;
         border: 1px solid var(--neutral-200);
+        display: block;
     `;
 
     const title = document.createElement('div');

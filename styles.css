@@ -124,11 +124,15 @@ body {
     position: sticky;
     top: 0;
     z-index: 1000;
-    background: linear-gradient(135deg, var(--primary-blue) 0%, var(--secondary-purple) 100%);
+    background: hsla(210, 100%, 56%, 0.85);
+    /* 半透明のプライマリーブルー */
+    background: linear-gradient(135deg, hsla(210, 100%, 56%, 0.9), hsla(270, 70%, 60%, 0.9));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     color: white;
-    padding: 10px 20px;
-    box-shadow: var(--shadow-lg);
-    margin-bottom: var(--spacing-md);
+    padding: 12px 24px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .header-content {
@@ -146,12 +150,21 @@ body {
 }
 
 .header-left h1 {
-    font-size: 1.25rem;
+    font-size: 1.3rem;
+    font-weight: 700;
     margin: 0;
+    letter-spacing: -0.02em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 .header-left h1 span {
-    display: inline-block;
+    background: linear-gradient(to bottom, #fff, #e2e8f0);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
 }
 
 .menu-btn {
@@ -202,15 +215,250 @@ body {
 .header-right {
     display: flex;
     align-items: center;
+    gap: 15px;
+}
+
+.view-switcher {
+    display: flex;
+    background: rgba(255, 255, 255, 0.12);
+    padding: 3px;
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.view-btn {
+    background: transparent;
+    border: none;
+    color: white;
+    padding: 4px 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    transition: all 0.2s ease;
+}
+
+.view-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.view-btn.active {
+    background: white;
+    color: var(--primary-blue);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .year-selector {
     display: flex;
     align-items: center;
     gap: 8px;
-    background: rgba(255, 255, 255, 0.15);
-    padding: 4px 12px;
+    background: rgba(255, 255, 255, 0.12);
+    padding: 6px 16px;
     border-radius: var(--radius-full);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: all 0.3s ease;
+}
+
+/* 年間表示用のレイアウト */
+.calendar-grid.view-year {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    background: transparent;
+    border: none;
+    padding: 10px;
+}
+
+.mini-month {
+    background: white;
+    border-radius: var(--radius-md);
+    padding: 10px;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--neutral-200);
+}
+
+.mini-month-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--neutral-700);
+    margin-bottom: 8px;
+    text-align: center;
+    border-bottom: 1px solid var(--neutral-100);
+    padding-bottom: 4px;
+}
+
+.mini-month-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+}
+
+.mini-day {
+    aspect-ratio: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: 10px;
+    /* 数字の下から開始するように調整 */
+    font-size: 0.7rem;
+    color: var(--neutral-700);
+    border-radius: 4px;
+    position: relative;
+    cursor: default;
+    transition: all 0.2s;
+    overflow: hidden;
+}
+
+.mini-day-num {
+    font-size: 0.6rem;
+    font-weight: 700;
+    line-height: 1;
+    opacity: 0.6;
+}
+
+.mini-day.saturday {
+    background-color: #f0f7ff;
+    /* 控えめな青 */
+}
+
+.mini-day.sunday,
+.mini-day.holiday {
+    background-color: #fff5f5;
+    /* 控えめな赤 */
+}
+
+.mini-day.saturday .mini-day-num {
+    color: var(--primary-600);
+}
+
+.mini-day.sunday .mini-day-num {
+    color: var(--error-600);
+}
+
+.mini-day:hover {
+    background-color: var(--neutral-50);
+    z-index: 10;
+}
+
+/* 曜日数・勤務バッジのコンテナ */
+.mini-day-badges {
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    right: 1px;
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none;
+}
+
+.mini-badge {
+    font-size: 5px;
+    font-weight: 800;
+    line-height: 1;
+    padding: 1px 2px;
+    border-radius: 2px;
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.mini-badge.work-pattern {
+    background: var(--neutral-700);
+    color: white;
+}
+
+.mini-badge.weekday-count {
+    background: var(--secondary-purple);
+    color: white;
+}
+
+/* ミニカード（イベントバー）のコンテナ */
+.mini-card-container {
+    width: 100%;
+    margin-top: auto;
+    padding: 1px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.mini-event-bar {
+    height: 3px;
+    width: 100%;
+    border-radius: 1px;
+}
+
+.mini-day.today {
+    box-shadow: inset 0 0 0 1.5px var(--primary-blue);
+    font-weight: 800;
+}
+
+/* 参加・申請アイコン */
+.mini-status-icons {
+    position: absolute;
+    top: 50%;
+    right: 1px;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    font-size: 6px;
+    line-height: 1;
+}
+
+.mini-day.has-event {
+    background: var(--primary-blue-light);
+    color: var(--primary-blue);
+    font-weight: 700;
+}
+
+.mini-day.today {
+    box-shadow: inset 0 0 0 1.5px var(--primary-blue);
+    font-weight: 800;
+}
+
+/* ウィークリー表示用のレイアウト */
+.calendar-grid.view-week {
+    grid-template-rows: auto 1fr;
+}
+
+/* リスト表示用のレイアウト */
+.calendar-grid.view-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background: var(--neutral-200);
+    border: 1px solid var(--neutral-200);
+}
+
+.list-event-row {
+    background: white;
+    padding: 12px 20px;
+    display: grid;
+    grid-template-columns: 120px 80px 1fr;
+    align-items: center;
+    gap: 15px;
+    border-bottom: 1px solid var(--neutral-100);
+}
+
+.list-date {
+    font-weight: 700;
+    color: var(--neutral-700);
+}
+
+.list-time {
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: var(--neutral-500);
+}
+
+.list-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.year-selector:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.4);
 }
 
 .year-selector label {
@@ -654,6 +902,62 @@ body {
     border-radius: var(--radius-md);
     overflow: hidden;
     position: relative;
+}
+
+.calendar-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 15px;
+    padding: 10px 15px;
+    background: rgba(255, 255, 255, 0.4);
+    backdrop-filter: blur(4px);
+    border-radius: var(--radius-md);
+    margin-bottom: 15px;
+    border: 1px solid var(--neutral-200);
+}
+
+.legend-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.legend-group-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--neutral-500);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-right: 4px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    color: var(--neutral-600);
+    white-space: nowrap;
+}
+
+.legend-divider {
+    width: 1px;
+    height: 16px;
+    background: var(--neutral-200);
+}
+
+.legend-bg-box {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    border: 1px solid var(--neutral-200);
+}
+
+.legend-icon {
+    font-size: 1rem;
+    width: 20px;
+    text-align: center;
 }
 
 .calendar-day-header {
@@ -2230,14 +2534,21 @@ body {
 }
 
 .context-menu-list li {
-    padding: 10px 16px;
+    padding: 12px 20px;
     cursor: pointer;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
     color: var(--neutral-700);
     transition: background 0.2s;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
+}
+
+@media (max-width: 768px) {
+    .context-menu-list li {
+        padding: 16px 24px;
+        font-size: 1rem;
+    }
 }
 
 .context-menu-list li:hover {
@@ -2265,21 +2576,43 @@ body {
     right: 2px;
     top: 50%;
     transform: translateY(-50%);
-    background: none;
+    background: rgba(255, 255, 255, 0.8);
     border: none;
     color: var(--error-red);
     cursor: pointer;
-    font-size: 16px;
+    font-size: 18px;
     line-height: 1;
     display: none;
-    padding: 2px;
-    border-radius: var(--radius-sm);
-    opacity: 0.6;
-    transition: all var(--transition-fast);
+    padding: 4px;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    z-index: 20;
 }
 
 .event-item:hover .event-delete-btn {
-    display: block;
+    display: flex;
+}
+
+@media (max-width: 768px) {
+    .event-delete-btn {
+        display: flex !important;
+        width: 28px;
+        height: 28px;
+        font-size: 20px;
+        right: 0px;
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid var(--neutral-200);
+    }
+
+    .event-item {
+        padding-right: 28px !important;
+        /* ボタンに重ならないように */
+    }
 }
 
 .event-delete-btn:hover {
@@ -2494,6 +2827,52 @@ body {
     border-left-color: hsl(145, 65%, 50%);
     background: linear-gradient(135deg, rgba(76, 175, 80, 0.08) 0%, rgba(76, 175, 80, 0.03) 100%);
     color: hsl(145, 65%, 35%);
+}
+
+.mobile-action-banner {
+    position: fixed;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5000;
+    background: var(--neutral-800);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 30px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    font-size: 0.9rem;
+    animation: fadeInDown 0.3s ease-out;
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+}
+
+.mobile-action-pending .calendar-day-bg {
+    box-shadow: inset 0 0 0 2px var(--primary-blue);
+    cursor: copy;
+}
+
+.mobile-action-pending .calendar-day-bg:hover {
+    background: var(--primary-blue-light) !important;
+}
+
+/* タイムテーブルのカードもタッチしやすく */
+@media (max-width: 768px) {
+    .timetable-class-card {
+        padding: 14px 16px;
+    }
 }
 
 .timetable-class-name {

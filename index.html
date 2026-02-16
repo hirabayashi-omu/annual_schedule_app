@@ -28,6 +28,12 @@
                 <h1>📅 <span>年間行事予定表アプリ</span></h1>
             </div>
             <div class="header-right">
+                <div class="view-switcher">
+                    <button id="viewYearBtn" class="view-btn">年</button>
+                    <button id="viewMonthBtn" class="view-btn active">月</button>
+                    <button id="viewWeekBtn" class="view-btn">週</button>
+                    <button id="viewListBtn" class="view-btn">リスト</button>
+                </div>
                 <div class="year-selector">
                     <label for="globalYearSelect">年度:</label>
                     <select id="globalYearSelect" class="year-select">
@@ -37,6 +43,12 @@
             </div>
         </div>
     </header>
+
+    <!-- モバイル操作用通知 -->
+    <div id="mobileActionContainer" class="mobile-action-banner hidden">
+        <span id="mobileActionMessage"></span>
+        <button class="btn btn-secondary btn-sm" onclick="cancelMobileAction()">キャンセル</button>
+    </div>
 
     <div class="app-container">
 
@@ -51,13 +63,17 @@
                     <span class="nav-icon">📅</span>
                     <span class="nav-label">カレンダー</span>
                 </button>
-                <button data-view="importContainer" class="drawer-item">
-                    <span class="nav-icon">📁</span>
-                    <span class="nav-label">ファイル操作</span>
+                <button data-view="statsView" class="drawer-item">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-label">勤怠管理</span>
                 </button>
                 <button data-view="exportSection" class="drawer-item">
                     <span class="nav-icon">📤</span>
                     <span class="nav-label">エクスポート</span>
+                </button>
+                <button data-view="importContainer" class="drawer-item">
+                    <span class="nav-icon">⚙️</span>
+                    <span class="nav-label">データ管理</span>
                 </button>
                 <button data-view="myClassesSection" class="drawer-item">
                     <span class="nav-icon">📖</span>
@@ -70,10 +86,6 @@
                 <button data-view="workSection" class="drawer-item">
                     <span class="nav-icon">⌛</span>
                     <span class="nav-label">勤務設定</span>
-                </button>
-                <button data-view="statsView" class="drawer-item">
-                    <span class="nav-icon">📊</span>
-                    <span class="nav-label">勤怠管理</span>
                 </button>
                 <button data-view="profileSection" class="drawer-item">
                     <span class="nav-icon">👤</span>
@@ -97,7 +109,7 @@
             <section id="calendarSection" class="card">
                 <div class="calendar-header"
                     style="display: flex; gap: 15px; align-items: center; justify-content: space-between; flex-wrap: wrap;">
-                    <div style="display: flex; align-items: center; gap: 8px;">
+                    <div id="monthNavControls" style="display: flex; align-items: center; gap: 8px;">
                         <button class="btn btn-secondary btn-sm" id="prevMonthBtn" title="前の月に移動します">◀</button>
                         <button class="btn btn-primary btn-today btn-sm" id="todayBtn" title="今日の月へ移動し、ハイライト表示します"
                             style="font-weight: 700;">今日</button>
@@ -107,16 +119,17 @@
                     <h3 class="calendar-title" id="calendarTitle"
                         style="margin: 0; flex: 1; text-align: center; min-width: 150px;">2026年 4月</h3>
 
-                    <div
+                    <div id="calendarViewControls"
                         style="display: flex; align-items: center; gap: 12px; background: var(--neutral-50); padding: 5px 12px; border-radius: var(--radius-md); border: 1px solid var(--neutral-200);">
-                        <div style="display: flex; align-items: center; gap: 6px;">
+                        <div id="monthSelectContainer" style="display: flex; align-items: center; gap: 6px;">
                             <label for="monthSelect"
                                 style="font-size: 0.8rem; font-weight: 700; color: var(--neutral-600); white-space: nowrap;">表示月:</label>
                             <select id="monthSelect" class="control-select"
                                 style="padding: 3px 6px; font-size: 0.85rem; width: auto; height: auto; border-color: var(--neutral-300);"></select>
                         </div>
-                        <div style="height: 15px; width: 1px; background: var(--neutral-300);"></div>
-                        <div style="display: flex; align-items: center; gap: 6px;">
+                        <div id="controlDivider" style="height: 15px; width: 1px; background: var(--neutral-300);">
+                        </div>
+                        <div id="targetSelectContainer" style="display: flex; align-items: center; gap: 6px;">
                             <label for="targetSelect"
                                 style="font-size: 0.8rem; font-weight: 700; color: var(--neutral-600); white-space: nowrap;">曜日カウント:</label>
                             <select id="targetSelect" class="control-select"
@@ -125,6 +138,80 @@
                                 <option value="teacher">バッチなし</option>
                             </select>
                         </div>
+                    </div>
+                </div>
+
+                <!-- 凡例 (整理・ラベル付き) -->
+                <div class="calendar-legend">
+                    <!-- 背景セクション -->
+                    <div class="legend-group">
+                        <span class="legend-group-label">背景:</span>
+                        <div class="legend-item">
+                            <span class="legend-bg-box"
+                                style="background-color: hsl(145, 65%, 96%); background-image: radial-gradient(#10b981 0.5px, transparent 0.5px); background-size: 4px 4px;"></span>
+                            <span>予定なし</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-bg-box"
+                                style="background-color: #fff; background-image: radial-gradient(var(--neutral-200) 1px, transparent 1px); background-size: 4px 4px;"></span>
+                            <span>予定あり</span>
+                        </div>
+                    </div>
+
+                    <div class="legend-divider"></div>
+
+                    <!-- カードセクション -->
+                    <div class="legend-group">
+                        <span class="legend-group-label">カード:</span>
+                        <div class="legend-item"><span class="event-item myclass"
+                                style="width: 40px; height: 18px; line-height: 18px; padding: 0 4px; margin: 0; display: inline-block; pointer-events: none; transform: scale(0.9); font-size: 10px;">授業名</span><span>授業</span>
+                        </div>
+                        <div class="legend-item"><span class="event-item process-card leave-card"
+                                style="width: 40px; height: 18px; min-height: 18px; padding: 0 4px; border-left-width: 4px !important; margin: 0; display: inline-flex; align-items: center; justify-content: center; pointer-events: none; transform: scale(0.9); font-size: 10px;">年休</span><span>年休</span>
+                        </div>
+                        <div class="legend-item"><span class="event-item process-card trip-card"
+                                style="width: 40px; height: 18px; min-height: 18px; padding: 0 4px; border-left-width: 4px !important; margin: 0; display: inline-flex; align-items: center; justify-content: center; pointer-events: none; transform: scale(0.9); font-size: 10px;">出張</span><span>出張</span>
+                        </div>
+                        <div class="legend-item"><span class="event-item process-card wfh-card"
+                                style="width: 40px; height: 18px; min-height: 18px; padding: 0 4px; border-left-width: 4px !important; margin: 0; display: inline-flex; align-items: center; justify-content: center; pointer-events: none; transform: scale(0.9); font-size: 10px;">在宅</span><span>在宅</span>
+                        </div>
+                        <div class="legend-item"><span class="event-item process-card holiday-work-card"
+                                style="width: 40px; height: 18px; min-height: 18px; padding: 0 4px; border-left-width: 4px !important; margin: 0; display: inline-flex; align-items: center; justify-content: center; pointer-events: none; transform: scale(0.9); font-size: 10px;">休日</span><span>休日出勤</span>
+                        </div>
+                        <div class="legend-item"><span class="event-item custom"
+                                style="width: 40px; height: 18px; min-height: 18px; padding: 0 4px; border-left-width: 4px !important; margin: 0; display: inline-flex; align-items: center; justify-content: center; pointer-events: none; transform: scale(0.9); font-size: 10px; border-radius: 4px;">行事</span><span>その他</span>
+                        </div>
+                        <div class="legend-item"><span class="event-item custom"
+                                style="width: 40px; height: 18px; min-height: 18px; padding: 0 4px; border-left-width: 4px !important; margin: 0; display: inline-flex; align-items: center; justify-content: center; pointer-events: none; transform: scale(0.9); font-size: 10px; border-radius: 4px; opacity: 0.4; filter: grayscale(1);">予定</span><span>非参加</span>
+                        </div>
+                    </div>
+
+                    <div class="legend-divider"></div>
+
+                    <!-- バッジセクション -->
+                    <div class="legend-group">
+                        <span class="legend-group-label">バッジ:</span>
+                        <div class="legend-item"><span class="day-work-badge"
+                                style="transform: scale(0.8); margin: 0 -4px; pointer-events: none;">B</span><span>通常</span>
+                        </div>
+                        <div class="legend-item"><span class="day-work-badge is-override"
+                                style="transform: scale(0.8); margin: 0 -4px; pointer-events: none;">A</span><span>変更</span>
+                        </div>
+                        <div class="legend-item"><span class="day-weekday-count"
+                                style="transform: scale(0.8); margin: 0 -4px;">火2</span><span>曜日数</span></div>
+                        <div class="legend-item"><span class="day-makeup-count"
+                                style="transform: scale(0.8); margin: 0 -4px;">補講</span><span>補講日</span></div>
+                        <div class="legend-item"><span class="day-exam-badge"
+                                style="transform: scale(0.8); margin: 0 -4px;">試験</span><span>試験</span></div>
+                    </div>
+
+                    <div class="legend-divider"></div>
+
+                    <!-- 状態セクション -->
+                    <div class="legend-group">
+                        <span class="legend-group-label">状態:</span>
+                        <div class="legend-item"><span class="legend-icon">📌</span><span>参加</span></div>
+                        <div class="legend-item"><span class="legend-icon">📄</span><span>申請済</span></div>
                     </div>
                 </div>
 
@@ -585,6 +672,8 @@
                         <h3 style="font-size: 1rem; margin-bottom: 10px; color: var(--neutral-700);">★ 所属コース</h3>
                         <select id="userCourse" class="form-select" style="width: 100%;">
                             <option value="">選択してください</option>
+                            <option value="GL">一般科目（文系）</option>
+                            <option value="GS">一般科目（理系）</option>
                             <option value="M">エネルギー機械（M）</option>
                             <option value="D">プロダクトデザイン（D）</option>
                             <option value="E">エレクトロニクス（E）</option>
@@ -1600,6 +1689,9 @@
         <ul class="context-menu-list">
             <li id="ctxParticipate" onclick="handleContextAction('participate')">&#x1F4CC; 参加にする</li>
             <li id="ctxNotParticipate" onclick="handleContextAction('not_participate')">&#x1F6AB; 非参加にする</li>
+            <li class="divider"></li>
+            <li onclick="handleContextAction('copy')">&#x1F4CB; 別の日にコピー</li>
+            <li onclick="handleContextAction('move_start')">&#x1F4DD; 別の日に移動</li>
             <li class="divider"></li>
             <li onclick="handleContextAction('edit')">✏️ 編集...</li>
             <li onclick="handleContextAction('delete')" style="color: var(--error-red);">&#x1F5D1;️ 削除</li>

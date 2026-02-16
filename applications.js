@@ -27,6 +27,8 @@ function getReiwaDate(date) {
  */
 function getFullCourseName(id) {
     const map = {
+        'GL': '一般科目（文系）',
+        'GS': '一般科目（理系）',
         'M': 'エネルギー機械コース　M',
         'D': 'プロダクトデザインコース　D',
         'E': 'エレクトロニクスコース　E',
@@ -86,6 +88,8 @@ window.generateApplicationFile = async function (type) {
             await fillWfhPostApplication(fileName);
         } else if (type === 'trip') {
             await fillTripApplication(fileName);
+        } else if (type === 'holiday_work') {
+            await fillHolidayWorkApplication(fileName);
         } else {
             // 他のタイプ（現在は雛形そのままのダウンロード）
             if (window.TEMPLATES_CONTENT && window.TEMPLATES_CONTENT[fileName]) {
@@ -107,6 +111,35 @@ window.generateApplicationFile = async function (type) {
         alert("書類作成中にエラーが発生しました:\n" + err.message);
     }
 };
+
+/**
+ * 休日出勤申請書の作成 (ExcelJS)
+ */
+async function fillHolidayWorkApplication(fileName) {
+    const profile = window.activeUserProfile || {};
+    if (!profile.name) {
+        alert('「あなたについて」タブでプロフィール情報を入力してください。');
+        return;
+    }
+
+    const events = classOverrides.filter(ov => ov.data && ov.data.isHolidayWorkCard && !ov.data.isApplied);
+    if (events.length === 0) {
+        alert('申請が必要な未申請の休日出勤データが見つかりません。');
+        return;
+    }
+
+    // 現時点では、雛形をそのままダウンロードさせる（将来的に自動入力ロジックを追加可能）
+    if (window.TEMPLATES_CONTENT && window.TEMPLATES_CONTENT[fileName]) {
+        const buffer = base64ToArrayBuffer(window.TEMPLATES_CONTENT[fileName]);
+        const blob = new Blob([buffer], { type: 'application/octet-stream' });
+        saveBlob(buffer, fileName);
+    } else {
+        const link = document.createElement('a');
+        link.href = encodeURI('template/' + fileName);
+        link.download = fileName;
+        link.click();
+    }
+}
 
 /**
  * 勤務パターン変更届の作成
