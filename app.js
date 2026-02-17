@@ -173,10 +173,13 @@ const DEFAULT_PINNED_KEYWORDS = [
  */
 function containsPinnedKeyword(text) {
     if (!text) return false;
-
-    // 「入試」が含まれていても、「説明」や「広報」が含まれる場合はデフォルトでピン留めしない
-    // （例：入試説明会、入試広報など、準備や当日の試験本体ではない広報的なイベントを想定）
     if (text.includes('📌')) return true;
+
+    // 「入試」が含まれていても、「説明」「広報」「準備」が含まれる場合はデフォルトでピン留めしない
+    // （例：入試説明会、入試広報、準備日など、試験本体ではないイベントを想定）
+    if (text.includes('入試') && (text.includes('説明') || text.includes('広報') || text.includes('準備'))) {
+        return false;
+    }
 
     return DEFAULT_PINNED_KEYWORDS.some(keyword => text.includes(keyword));
 }
@@ -499,6 +502,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 初回表示のために必ず一度年度リストを更新
     updateAvailableYearsAndMonths();
+
+    // 表示モードのUI（ボタン・グリッドクラス）を現在の状態に同期
+    // initializeEventListeners の後で呼ぶことで、UIの active 状態を正しく反映
+    changeCalendarView(currentCalendarView);
+
     updateBackupInfo(); // バックアップ情報の初期表示
 
     // 1分ごとに現在時刻の線を更新（週表示用）
@@ -1095,7 +1103,13 @@ function initializeEventListeners() {
             currentMonth = today.getMonth() + 1;
 
             const yearSelect = document.getElementById('globalYearSelect');
-            if (yearSelect) yearSelect.value = fiscalYear;
+            if (yearSelect) {
+                yearSelect.value = fiscalYear;
+                // 年度を変更した場合はscheduleDataを更新
+                if (typeof updateScheduleDataWithClasses === 'function') {
+                    updateScheduleDataWithClasses(fiscalYear);
+                }
+            }
             const monthSelect = document.getElementById('monthSelect');
             if (monthSelect) monthSelect.value = currentMonth;
 
@@ -1920,6 +1934,11 @@ function renderYearlyView() {
     });
 
     calendarGrid.innerHTML = '';
+    // インラインスタイルをリセット（他表示からの残骸をクリア）
+    calendarGrid.style.gridTemplateRows = '';
+    calendarGrid.style.gridTemplateColumns = '';
+    calendarGrid.style.height = '';
+    calendarGrid.style.overflow = '';
 
     // 4月から翌年3月までを描画
     for (let m = 0; m < 12; m++) {
@@ -2091,22 +2110,50 @@ function renderYearlyView() {
                     wb.textContent = weekdayEv.weekdayCount.replace('曜授業', '');
                     badsContainer.appendChild(wb);
                 }
-                // 試験/補講
+                // 試験/補講 (重複表示を避けるためフラグを使用)
+                let hasNyushi = false;
+                let hasSiken = false;
+                let hasHoko = false;
+
                 dayEvents.forEach(e => {
                     if (e.event) {
-                        if (e.event.includes('試験')) {
-                            const eb = document.createElement('div');
-                            eb.className = 'day-exam-badge';
-                            eb.textContent = '試験';
-                            badsContainer.appendChild(eb);
-                        } else if (e.event.includes('補講')) {
-                            const mb = document.createElement('div');
-                            mb.className = 'day-makeup-count';
-                            mb.textContent = '補講';
-                            badsContainer.appendChild(mb);
+                        const text = e.event;
+                        if (text.includes('入試') || text.includes('入学試験')) {
+                            if (!(text.includes('説明') || text.includes('広報') || text.includes('準備'))) {
+                                hasNyushi = true;
+                            }
+                        } else if (text.includes('試験')) {
+                            if (!text.includes('返却')) {
+                                hasSiken = true;
+                            }
+                        } else if (text.includes('補講')) {
+                            if (!text.includes('週間')) {
+                                hasHoko = true;
+                            }
                         }
                     }
                 });
+
+                if (hasNyushi) {
+                    const eb = document.createElement('div');
+                    eb.className = 'day-exam-badge';
+                    eb.textContent = '入試';
+                    eb.style.background = '#f472b6';
+                    eb.style.color = 'white';
+                    badsContainer.appendChild(eb);
+                }
+                if (hasSiken) {
+                    const eb = document.createElement('div');
+                    eb.className = 'day-exam-badge';
+                    eb.textContent = '試験';
+                    badsContainer.appendChild(eb);
+                }
+                if (hasHoko) {
+                    const mb = document.createElement('div');
+                    mb.className = 'day-makeup-count';
+                    mb.textContent = '補講';
+                    badsContainer.appendChild(mb);
+                }
 
                 rightBadges.appendChild(badsContainer);
             }
@@ -2466,9 +2513,16 @@ function renderWeeklyView() {
         const badgeMap = new Map();
         dayEvents.forEach(e => {
             if (!e.event) return;
-            if (e.event.includes('補講')) badgeMap.set('補講', { text: '補講', cls: 'day-makeup-count' });
-            if (e.event.includes('試験') && !e.event.includes('入試')) badgeMap.set('試験', { text: '試験', cls: 'day-exam-badge' });
-            if (e.event.includes('入試')) badgeMap.set('入試', { text: '入試', cls: 'day-exam-badge', style: 'background:#f472b6; color:white;' });
+            const text = e.event;
+            // 補講＆週間 の場合は表示しない
+            if (text.includes('補講') && !text.includes('週間')) badgeMap.set('補講', { text: '補講', cls: 'day-makeup-count' });
+            // 試験＆返却 の場合は表示しない
+            if (text.includes('試験') && !text.includes('入試') && !text.includes('返却')) badgeMap.set('試験', { text: '試験', cls: 'day-exam-badge' });
+            if ((text.includes('入試') || text.includes('入学試験'))) {
+                if (!(text.includes('説明') || text.includes('広報') || text.includes('準備'))) {
+                    badgeMap.set('入試', { text: '入試', cls: 'day-exam-badge', style: 'background:#f472b6; color:white;' });
+                }
+            }
         });
         badgeMap.forEach(b => {
             const d = document.createElement('div'); d.className = b.cls; d.textContent = b.text;
@@ -2650,6 +2704,8 @@ function renderWeeklyView() {
     // --- 終日・期間バーの描画 (Lane N at grid rows) ---
     weekSegments.forEach(seg => {
         const item = seg.data;
+        if (!item) return; // データがない場合はスキップ
+
         const el = document.createElement('div');
         el.className = 'event-item';
         const isProc = item.isLeaveCard || item.isTripCard || item.isWfhCard || item.isHolidayWorkCard;
@@ -3146,19 +3202,31 @@ function renderMonthlyView() {
             }
 
             // 補講日バッジ
-            if (dayEvs.some(it => (it.event && it.event.includes('補講日')) || (it.weekdayCount && it.weekdayCount.includes('補講日')))) {
+            if (dayEvs.some(it => ((it.event && it.event.includes('補講日') && !it.event.includes('週間')) || (it.weekdayCount && it.weekdayCount.includes('補講日') && !it.weekdayCount.includes('週間'))))) {
                 const mk = document.createElement('div'); mk.className = 'day-makeup-count'; mk.textContent = '補講日'; bads.appendChild(mk);
             }
 
-            // 試験バッジ
+            // 試験・入試バッジ
             ['前期中間試験', '前期末試験', '後期中間試験', '学年末試験'].forEach(examType => {
-                if (dayEvs.some(it => it.event && it.event.includes(examType))) {
+                if (dayEvs.some(it => it.event && it.event.includes(examType) && !it.event.includes('返却'))) {
                     const eb = document.createElement('div');
                     eb.className = 'day-exam-badge';
                     eb.textContent = examType;
                     bads.appendChild(eb);
                 }
             });
+            const nyushiEv = dayEvs.find(it => it.event && (it.event.includes('入試') || it.event.includes('入学試験')));
+            if (nyushiEv) {
+                const text = nyushiEv.event;
+                if (!(text.includes('説明') || text.includes('広報') || text.includes('準備'))) {
+                    const eb = document.createElement('div');
+                    eb.className = 'day-exam-badge';
+                    eb.textContent = '入試';
+                    eb.style.background = '#f472b6';
+                    eb.style.color = 'white';
+                    bads.appendChild(eb);
+                }
+            }
             calendarGrid.appendChild(hr);
         });
 
