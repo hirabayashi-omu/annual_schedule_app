@@ -1386,7 +1386,6 @@ body {
 /* 行事（カスタム・学校行事） */
 .event-item.custom {
     background: #f0fdf4 !important;
-    /* Green tint */
     border-left: 4px solid var(--success-green) !important;
     color: #166534 !important;
     font-weight: 600;
@@ -1394,9 +1393,9 @@ body {
 
 /* 授業予定（マイクラス） */
 .event-item.myclass {
-    background: #f0fdf4 !important;
-    border-left: 5px solid var(--success-green) !important;
-    color: #166534 !important;
+    background: var(--primary-blue-light) !important;
+    border-left: 5px solid var(--primary-blue) !important;
+    color: var(--primary-blue-dark) !important;
     font-weight: 700 !important;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
@@ -1678,7 +1677,7 @@ body {
 
 .event-item.custom {
     border-left-color: var(--success-green);
-    background: hsl(145, 65%, 96%);
+    background: #f0fdf4;
 }
 
 .badge {

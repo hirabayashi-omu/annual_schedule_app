@@ -2670,6 +2670,28 @@ function renderWeeklyView() {
                 const loc = item.location || '';
                 const teacher = item.teacher || (Array.isArray(item.teachers) ? item.teachers.join(', ') : '');
                 el.innerHTML = `<div class="class-name">${name}</div>${loc ? `<div class="class-detail">📍 ${loc}</div>` : ''}${teacher ? `<div class="class-detail">👤 ${teacher}</div>` : ''}`;
+            } else if (isProc) {
+                // 申請・事務処理カードの詳細表示
+                let label = '';
+                let detail = '';
+                if (item.isLeaveCard) {
+                    const lTypes = { morning: '午前休', afternoon: '午後休', late: '遅刻', early: '早退', full: '年休' };
+                    label = lTypes[item.leaveType] || '休暇';
+                    if (item.leaveType === 'early' || item.leaveType === 'late') {
+                        detail = `${item.leaveHours || 0}時間${item.leaveExtra || 0}分`;
+                    }
+                } else if (item.isTripCard) {
+                    label = '出張';
+                    detail = item.tripDetails?.destination || item.location || '';
+                } else if (item.isWfhCard) {
+                    label = '在宅勤務';
+                } else if (item.isHolidayWorkCard) {
+                    label = '休日出勤';
+                }
+
+                const icon = (item.isApplied ? '📄' : '') + (isEventParticipating(ev, dStr, assignmentExclusions) ? '📌' : '');
+                el.innerHTML = `<div style="font-weight:bold; border-bottom:1px solid rgba(0,0,0,0.1); margin-bottom:2px;">${icon}${label}</div>${detail ? `<div style="font-size:0.65rem; opacity:0.8;">${detail}</div>` : ''}`;
+                el.style.padding = '2px 4px';
             } else {
                 el.textContent = (item.event || item.name || '').split('\n')[0];
                 el.style.padding = '2px';
@@ -2741,7 +2763,20 @@ function renderWeeklyView() {
         el.style.overflow = 'hidden';
         el.style.whiteSpace = 'nowrap';
 
-        const label = item.event || item.name || (seg.original ? (seg.original.event || seg.original.name) : '無題');
+        let label = item.event || item.name || (seg.original ? (seg.original.event || seg.original.name) : '無題');
+        if (isProc) {
+            if (item.isLeaveCard) {
+                const lTypes = { morning: '午前休', afternoon: '午後休', late: '遅刻', early: '早退', full: '年休' };
+                label = lTypes[item.leaveType] || '休暇';
+            } else if (item.isTripCard) {
+                const dest = item.tripDetails?.destination || item.location || '';
+                label = `出張${dest ? ': ' + dest : ''}`;
+            } else if (item.isWfhCard) {
+                label = '在宅勤務';
+            } else if (item.isHolidayWorkCard) {
+                label = '休日出勤';
+            }
+        }
         const icon = (item.isApplied ? '📄' : '') + (isEventParticipating(seg, seg.segStart, assignmentExclusions) ? '📌' : '');
         el.textContent = `${icon} ${label}`;
 
