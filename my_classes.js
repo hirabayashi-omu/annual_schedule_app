@@ -2595,8 +2595,21 @@ function exportClassScheduleCsv() {
             if (targetCls) {
                 annualEvents = annualEvents.filter(item => {
                     // 試験の場合は全学年対象の可能性があるため、キーワードを優先
-                    const eventName = item.event || "";
+                    const eventName = item.event || item.name || "";
                     const isExam = examKeywords.some(kw => eventName.includes(kw));
+
+                    // 開講時期による試験のフィルタリング
+                    if (isExam && targetCls.semesterType) {
+                        const type = targetCls.semesterType;
+                        if (type === 'first') {
+                            // 前期科目の場合、後期や学年末の試験を除外
+                            if (eventName.includes('後期') || eventName.includes('学年末')) return false;
+                        } else if (type === 'second') {
+                            // 後期科目の場合、前期の試験を除外
+                            if (eventName.includes('前期')) return false;
+                        }
+                    }
+
                     if (isExam && !item.targetGrade) return true;
 
                     const isSameGrade = item.targetGrade === targetCls.targetGrade;

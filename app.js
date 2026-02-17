@@ -1901,7 +1901,11 @@ function renderYearlyView() {
 
             // 2. 右側のバッジ群ラッパー
             const rightBadges = document.createElement('div');
+            rightBadges.style.position = 'absolute';
+            rightBadges.style.right = '0';
+            rightBadges.style.top = '0';
             rightBadges.style.display = 'flex';
+            rightBadges.style.justifyContent = 'flex-end';
             rightBadges.style.alignItems = 'flex-start';
             rightBadges.style.gap = '2px';
 
@@ -1928,6 +1932,7 @@ function renderYearlyView() {
                 const badsContainer = document.createElement('div');
                 badsContainer.className = 'day-badges';
                 badsContainer.style.display = 'flex';
+                badsContainer.style.justifyContent = 'flex-end';
                 badsContainer.style.gap = '1px';
                 badsContainer.style.transform = 'scale(0.6)';
                 badsContainer.style.transformOrigin = 'top right';
@@ -1937,7 +1942,7 @@ function renderYearlyView() {
                 if (holidayName) {
                     const hb = document.createElement('div');
                     hb.className = 'day-holiday';
-                    hb.textContent = holidayName;
+                    hb.textContent = '祝日';
                     badsContainer.appendChild(hb);
                 }
 
