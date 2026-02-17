@@ -2260,6 +2260,38 @@ function renderMonthlyView() {
         });
     }
 
+    // --- 重複イベントの統合 (表示用) ---
+    // 同じ日付・時間・イベント名のものは1つにまとめる
+    // これにより「大掃除」などが複数登録されていても1つだけ表示し、重複警告も出さないようにする
+    const uniqueDisplayEventsMap = new Map();
+    allDisplayEvents.forEach(ev => {
+        const d = ev.data || {};
+        const name = (d.event || d.name || (ev.original ? (ev.original.event || ev.original.name) : '') || '').trim();
+        const sTime = getEffectiveTime(ev, ev.startDate);
+        const eTime = getEndTime(ev, ev.endDate);
+
+        // ユニークキー: 期間 + 名前 + 時間
+        // IDは含めない（別IDでも中身が同じなら統合するため）
+        const key = `${ev.startDate}_${ev.endDate}_${name}_${sTime}_${eTime}`;
+
+        if (!uniqueDisplayEventsMap.has(key)) {
+            uniqueDisplayEventsMap.set(key, ev);
+        } else {
+            // 既にある場合、優先度が高い方（参加している方）を残す
+            const existing = uniqueDisplayEventsMap.get(key);
+            const isPartExisting = isEventParticipating(existing, ev.startDate, assignmentExclusions);
+            const isPartNew = isEventParticipating(ev, ev.startDate, assignmentExclusions);
+
+            // 新しい方が参加状態で、既存が不参加なら入れ替える
+            if (isPartNew && !isPartExisting) {
+                uniqueDisplayEventsMap.set(key, ev);
+            }
+        }
+    });
+    // allDisplayEventsを更新
+    allDisplayEvents.length = 0;
+    allDisplayEvents.push(...Array.from(uniqueDisplayEventsMap.values()));
+
     // 重複チェック
     const dayOverlapInfo = new Map();
     allDates.forEach(d => {
@@ -2321,8 +2353,9 @@ function renderMonthlyView() {
                 const isSpecial2 = isTrip2 || isWfh2;
 
                 // 終日予定の📌（行事）と時間指定予定（授業・予定）の重複は除外 (ユーザー要望)
-                const isAllDayPinned1 = (p1 < 2 && !isSpecial1 && isPinned1);
-                const isAllDayPinned2 = (p2 < 2 && !isSpecial2 && isPinned2);
+                // relevantリストに入っている時点ですべて「参加(📌)」扱いなので、isPinnedによるキーワード判定は不要とする
+                const isAllDayPinned1 = (p1 < 2 && !isSpecial1);
+                const isAllDayPinned2 = (p2 < 2 && !isSpecial2);
                 const isTimedOrClass1 = (ov1.type === 'myclass' || p1 === 2);
                 const isTimedOrClass2 = (ov2.type === 'myclass' || p2 === 2);
 

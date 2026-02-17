@@ -1969,6 +1969,21 @@ window.showClassSchedule = function (classId = null, options = {}) {
         }
 
         examPeriods = extractExamPeriods(examSource);
+
+        // 授業の開講期間に応じて試験期間をフィルタリング
+        if (classId) {
+            const targetCls = myClasses.find(c => String(c.id) === String(classId));
+            if (targetCls && targetCls.semesterType) {
+                const type = targetCls.semesterType; // 'first', 'second', 'full'
+                if (type === 'first') {
+                    examPeriods = examPeriods.filter(p => p.name.includes('前期'));
+                } else if (type === 'second') {
+                    examPeriods = examPeriods.filter(p => p.name.includes('後期') || p.name.includes('学年末'));
+                }
+                // 'full' の場合は全て表示するのでフィルタしない
+            }
+        }
+
         console.log(`抽出された試験期間: ${examPeriods.length}件`);
 
         // 元の個別試験イベントを除去
