@@ -2183,6 +2183,8 @@ function renderYearlyView() {
 function renderWeeklyView() {
     const calendarGrid = document.getElementById('calendarGrid');
     const calendarTitle = document.getElementById('calendarTitle');
+    const target = document.getElementById('targetSelect')?.value || 'both';
+    const assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
 
     // 現在の表示月の第1週の開始日（月曜日）を基準にする
     if (!currentWeekBaseDate) {
@@ -2192,15 +2194,18 @@ function renderWeeklyView() {
         currentWeekBaseDate.setDate(currentWeekBaseDate.getDate() - offset);
     }
     const startDay = new Date(currentWeekBaseDate);
-
-    // 表示期間のタイトル（月曜〜日曜）
     const endDay = new Date(startDay);
     endDay.setDate(startDay.getDate() + 6);
+
+    const weekStartStr = formatDateKey(startDay);
+    const weekEndStr = formatDateKey(endDay);
+
     calendarTitle.textContent = `${startDay.getFullYear()}年${startDay.getMonth() + 1}月${startDay.getDate()}日 〜 ${endDay.getFullYear()}年${endDay.getMonth() + 1}月${endDay.getDate()}日`;
 
     calendarGrid.innerHTML = '';
+    calendarGrid.className = 'calendar-grid view-week';
 
-    // 曜日ヘッダー
+    // 1. 曜日ヘッダー
     const weekdays = ['月', '火', '水', '木', '金', '土', '日'];
     weekdays.forEach((day, index) => {
         const header = document.createElement('div');
@@ -2208,80 +2213,158 @@ function renderWeeklyView() {
         if (index === 5) header.classList.add('saturday');
         if (index === 6) header.classList.add('sunday');
         header.textContent = day;
+        header.style.gridRow = '1';
+        header.style.gridColumn = (index + 1);
         calendarGrid.appendChild(header);
     });
 
-    // 時間軸の設定
+    // 2. データ収集 (全7日分を一括処理)
+    const weekDates = [];
+    for (let i = 0; i < 7; i++) {
+        const d = new Date(startDay);
+        d.setDate(startDay.getDate() + i);
+        weekDates.push(d);
+    }
+
+    const allDisplayEvents = [];
+
+    // Excel予定
+    scheduleData.forEach(item => {
+        if (!item.event || item.event.trim() === '') return;
+        const dStr = formatDateKey(item.date);
+        if (dStr < weekStartStr || dStr > weekEndStr) return;
+        if (classOverrides.some(ov => String(ov.id) === String(item.id) && ov.type === 'excel' && ov.date === dStr && (ov.action === 'delete' || ov.action === 'move'))) return;
+        allDisplayEvents.push({ id: String(item.id), startDate: dStr, endDate: dStr, type: 'excel', data: item, original: item });
+    });
+
+    // Overrides
+    classOverrides.forEach(ov => {
+        let start = (ov.startDate || ov.date || '').replace(/\//g, '-');
+        let end = (ov.endDate || ov.date || ov.startDate || '').replace(/\//g, '-');
+        if (!start || !end) return;
+        if (end < weekStartStr || start > weekEndStr) return; // 期間外
+        if (ov.action === 'delete') return;
+        allDisplayEvents.push({ id: String(ov.id), startDate: start, endDate: end, type: ov.type, data: ov.data, original: ov });
+    });
+
+    // MyClass
+    if (typeof getDisplayableClassesForDate === 'function') {
+        weekDates.forEach(d => {
+            const dStr = formatDateKey(d);
+            const dayEvents = scheduleData.filter(item => formatDateKey(item.date) === dStr && !item.fromMyClass);
+            getDisplayableClassesForDate(d, dayEvents).forEach(cls => {
+                allDisplayEvents.push({ id: String(cls.id), startDate: dStr, endDate: dStr, type: 'myclass', data: cls, original: cls });
+            });
+        });
+    }
+
+    // --- セグメント化 (リボン表示用) ---
+    const weekSegments = [];
+    allDisplayEvents.forEach(ov => {
+        const p = getSortPriority(ov);
+        if (p < 2) { // 終日予定のみ
+            const start = ov.startDate > weekStartStr ? ov.startDate : weekStartStr;
+            const end = ov.endDate < weekEndStr ? ov.endDate : weekEndStr;
+            const sIdx = weekDates.findIndex(d => formatDateKey(d) === start);
+            const eIdx = weekDates.findIndex(d => formatDateKey(d) === end);
+            weekSegments.push({ ...ov, sIdx, eIdx, segStart: start, segEnd: end });
+        }
+    });
+
+    // レーン計算
+    weekSegments.sort((a, b) => {
+        const pA = getSortPriority(a);
+        const pB = getSortPriority(b);
+        if (pA !== pB) return pA - pB;
+        if (a.startDate !== b.startDate) return a.startDate.localeCompare(b.startDate);
+        return (b.eIdx - b.sIdx) - (a.eIdx - a.sIdx);
+    });
+
+    const weekLanes = [];
+    weekSegments.forEach(seg => {
+        let targetL = 0;
+        while (true) {
+            if (!weekLanes[targetL]) weekLanes[targetL] = new Array(7).fill(false);
+            let possible = true;
+            for (let x = seg.sIdx; x <= seg.eIdx; x++) {
+                if (weekLanes[targetL][x]) { possible = false; break; }
+            }
+            if (possible) {
+                for (let x = seg.sIdx; x <= seg.eIdx; x++) weekLanes[targetL][x] = true;
+                seg.laneIdx = targetL;
+                break;
+            }
+            targetL++;
+        }
+    });
+
+    const laneCount = weekLanes.length;
+    const TOTAL_ALDAY_ROWS = Math.max(laneCount, 4);
+
+    // グリッド配置の安定化
+    calendarGrid.style.gridTemplateRows = `auto auto repeat(${TOTAL_ALDAY_ROWS}, 32px) 1fr`;
+
+    // --- 各日の背景・日付・タイムグリッド描画 ---
     const START_HOUR = 8;
     const END_HOUR = 20;
-    const TOTAL_MINUTES = (END_HOUR - START_HOUR) * 60;
-    const PIXELS_PER_MINUTE = 0.8; // 高さ調整用
-    const TIME_GRID_HEIGHT = TOTAL_MINUTES * PIXELS_PER_MINUTE; // 約864px
+    const PIXELS_PER_MINUTE = 0.8;
+    const TIME_GRID_HEIGHT = (END_HOUR - START_HOUR) * 60 * PIXELS_PER_MINUTE;
 
-    // 7日間分を描画
-    for (let i = 0; i < 7; i++) {
-        const date = new Date(startDay);
-        date.setDate(startDay.getDate() + i);
+    weekDates.forEach((date, i) => {
         const dStr = formatDateKey(date);
-
-        const dayCol = document.createElement('div');
-        dayCol.className = 'calendar-day-bg'; // use same base class as monthly (or similar)
-        dayCol.style.gridRow = '2';
-        dayCol.style.gridColumn = i + 1;
-        dayCol.style.position = 'relative';
-        dayCol.style.display = 'flex';
-        dayCol.style.flexDirection = 'column';
-        dayCol.style.minHeight = (TIME_GRID_HEIGHT + 100) + 'px'; // 確保
-
         const weekday = date.getDay();
-        if (weekday === 6) dayCol.classList.add('saturday');
-        if (weekday === 0) dayCol.classList.add('sunday');
-        if (dStr === formatDateKey(new Date())) dayCol.classList.add('today');
+        const holidayMaps = typeof getHolidaysForYear === 'function' ? getHolidaysForYear(date.getFullYear()) : {};
+        const isHol = typeof getHolidayName === 'function' ? !!getHolidayName(date, holidayMaps) : false;
 
-        // --- イベントデータ収集 ---
+        // 背景
+        const bg = document.createElement('div');
+        bg.className = 'calendar-day-bg';
+        bg.style.gridColumn = i + 1;
+        bg.style.gridRow = `1 / span ${3 + TOTAL_ALDAY_ROWS}`; // Header(1) + Date(1) + Lanes(N) + TimeGrid(1)
+        if (weekday === 6) bg.classList.add('saturday');
+        if (weekday === 0) bg.classList.add('sunday');
+        if (isHol) bg.classList.add('holiday');
+        if (dStr === formatDateKey(new Date())) bg.classList.add('today');
+        calendarGrid.appendChild(bg);
+
+        // 背景クリックアクション
+        bg.onclick = (e) => {
+            if (e.target !== bg) return;
+            if (mobileAction) { executeMobileAction(dStr); return; }
+            editCalendarEvent('custom', 'custom-' + Date.now(), dStr);
+        };
+        bg.oncontextmenu = (e) => {
+            if (e.target !== bg) return;
+            if (typeof showAnnualLeaveMenu === 'function') showAnnualLeaveMenu(e, dStr);
+        };
+
+        // 日付・バッジコンテナ (Row 2)
+        const dateHeader = document.createElement('div');
+        dateHeader.className = 'weekly-day-date-header';
+        dateHeader.style.gridColumn = i + 1;
+        dateHeader.style.gridRow = '2';
+        dateHeader.style.padding = '4px';
+        dateHeader.style.display = 'flex';
+        dateHeader.style.justifyContent = 'space-between';
+        dateHeader.style.alignItems = 'flex-start';
+        dateHeader.style.zIndex = '5';
+        dateHeader.innerHTML = `<div class="day-number">${date.getMonth() + 1}/${date.getDate()}</div><div class="day-badges" style="display:flex; justify-content:flex-end; gap:1px; flex-wrap:wrap;"></div>`;
+        const bads = dateHeader.querySelector('.day-badges');
+
+        // バッジ追加ロジック (既存より移植)
         const dayEvents = scheduleData.filter(item => formatDateKey(item.date) === dStr && !item.fromMyClass);
-        const dayOverrides = classOverrides.filter(ov => (ov.startDate === dStr || ov.date === dStr || (dStr >= ov.startDate && dStr <= ov.endDate)));
-
-        let dayAllEvents = [];
-        // Excel
-        dayEvents.forEach(e => {
-            if (e.event && !classOverrides.some(ov => String(ov.id) === String(e.id) && ov.type === 'excel' && (ov.date === dStr || ov.startDate === dStr) && (ov.action === 'delete' || ov.action === 'move'))) {
-                dayAllEvents.push({ type: 'excel', data: e, id: e.id, startDate: dStr, endDate: dStr });
-            }
-        });
-        // Overrides
-        classOverrides.forEach(ov => {
-            const start = (ov.startDate || ov.date || '').replace(/\//g, '-');
-            const end = (ov.endDate || ov.date || ov.startDate || '').replace(/\//g, '-');
-            if (dStr >= start && dStr <= end) {
-                if (ov.action !== 'delete') {
-                    dayAllEvents.push({ type: ov.type, data: ov.data, id: ov.id, startDate: start, endDate: end, original: ov });
-                }
-            }
-        });
-        // MyClass
-        if (typeof getDisplayableClassesForDate === 'function') {
-            getDisplayableClassesForDate(date, dayEvents).forEach(cls => {
-                dayAllEvents.push({ type: 'myclass', data: cls, id: cls.id, startDate: dStr, endDate: dStr });
-            });
-        }
-
-        // ピン留め有無に関わらず全て表示
-        // ピン留め有無に関わらず全て表示
-        const participating = dayAllEvents;
-        const hasAnySchedule = dayAllEvents.length > 0;
-
-        // 重複チェック (renderMonthlyViewのロジックを流用)
-        const relevant = participating.filter(ov => { // 既にフィルタリング済みとみなすか、再度チェック
-            // ここではparticipatingは全てのイベントを含むので、重複チェック対象も全てとする
-            return true;
+        const dayParticipating = allDisplayEvents.filter(ev => {
+            const start = ev.startDate;
+            const end = ev.endDate;
+            return dStr >= start && dStr <= end;
         });
 
+        // 重複チェック
         const localConflicts = [];
-        for (let i = 0; i < relevant.length; i++) {
-            for (let j = i + 1; j < relevant.length; j++) {
-                const ov1 = relevant[i];
-                const ov2 = relevant[j];
+        for (let j = 0; j < dayParticipating.length; j++) {
+            for (let k = j + 1; k < dayParticipating.length; k++) {
+                const ov1 = dayParticipating[j];
+                const ov2 = dayParticipating[k];
                 const p1 = getSortPriority(ov1);
                 const p2 = getSortPriority(ov2);
 
@@ -2297,8 +2380,6 @@ function renderWeeklyView() {
                 const isTrip2 = !!ov2.data?.isTripCard || name2.includes('出張');
                 const isWfh1 = !!ov1.data?.isWfhCard || name1.includes('在宅');
                 const isWfh2 = !!ov2.data?.isWfhCard || name2.includes('在宅');
-
-                // 例外ケース
                 const isSpecial1 = isTrip1 || isWfh1;
                 const isSpecial2 = isTrip2 || isWfh2;
 
@@ -2307,10 +2388,7 @@ function renderWeeklyView() {
                 const isAllDayPinned2 = (p2 < 2 && !isSpecial2);
                 const isTimedOrClass1 = (ov1.type === 'myclass' || p1 === 2);
                 const isTimedOrClass2 = (ov2.type === 'myclass' || p2 === 2);
-
-                if ((isAllDayPinned1 && isTimedOrClass2) || (isTimedOrClass1 && isAllDayPinned2)) {
-                    continue;
-                }
+                if ((isAllDayPinned1 && isTimedOrClass2) || (isTimedOrClass1 && isAllDayPinned2)) continue;
 
                 if (p1 < 2 && p2 < 2) {
                     if (!isSpecial1 && !isSpecial2) continue;
@@ -2332,432 +2410,166 @@ function renderWeeklyView() {
             }
         }
         if (localConflicts.length > 0) {
-            dayCol.classList.add('has-overlap');
-            dayCol.title = "【重複警告】\n" + [...new Set(localConflicts)].join("\n");
+            bg.classList.add('has-overlap');
+            bg.title = "【重複警告】\n" + [...new Set(localConflicts)].join("\n");
         }
 
-        // 背景色の判定
-        const holidayMaps = typeof getHolidaysForYear === 'function' ? getHolidaysForYear(date.getFullYear()) : {};
-        const isHol = typeof getHolidayName === 'function' ? !!getHolidayName(date, holidayMaps) : false;
-        if (isHol) dayCol.classList.add('holiday');
-        const isBusDay = weekday !== 0 && weekday !== 6 && !isHol;
+        const holN = typeof getHolidayName === 'function' ? getHolidayName(date, holidayMaps) : null;
+        if (holN) { const hb = document.createElement('div'); hb.className = 'day-holiday'; hb.textContent = holN; bads.appendChild(hb); }
 
-        if (isBusDay && !participating.length) {
-            dayCol.style.backgroundColor = 'hsl(145, 65%, 96%)';
-            dayCol.style.backgroundImage = 'radial-gradient(#10b981 0.5px, transparent 0.5px)';
-            dayCol.style.backgroundSize = '4px 4px';
-        } else if (hasAnySchedule) {
-            // 土日祝はイベントがあっても色を維持
-            if (isHol || weekday === 0) {
-                dayCol.style.backgroundColor = '#fef2f2'; // Red tint
-            } else if (weekday === 6) {
-                dayCol.style.backgroundColor = '#eff6ff'; // Blue tint
-            } else {
-                dayCol.style.backgroundColor = '#fff';
-            }
-            dayCol.style.backgroundImage = 'radial-gradient(var(--neutral-200) 1px, transparent 1px)';
-            dayCol.style.backgroundSize = '4px 4px';
+        if (localConflicts.length > 0) {
+            const ovIcon = document.createElement('div');
+            ovIcon.className = 'day-overlap-icon';
+            ovIcon.innerHTML = '⚠️';
+            ovIcon.title = bg.title;
+            bads.appendChild(ovIcon);
         }
-
-        // --- バッジ・日付コンテナ ---
-        const badgeContainer = document.createElement('div');
-        badgeContainer.style.display = 'flex';
-        badgeContainer.style.justifyContent = 'space-between';
-        badgeContainer.style.alignItems = 'flex-start';
-        badgeContainer.style.marginBottom = '4px';
-        badgeContainer.style.padding = '4px';
-        badgeContainer.style.flexShrink = '0'; // 縮小しない
-
-        // 1. 日付
-        const numSpan = document.createElement('div');
-        numSpan.className = 'day-number';
-        numSpan.textContent = `${date.getMonth() + 1}/${date.getDate()}`;
-        badgeContainer.appendChild(numSpan);
-
-        // 2. 右側のバッジ群
-        const rightBadges = document.createElement('div');
-        rightBadges.style.display = 'flex';
-        rightBadges.style.justifyContent = 'flex-end';
-        rightBadges.style.alignItems = 'flex-start';
-        rightBadges.style.gap = '2px';
 
         const work = typeof getWorkTimeForDate === 'function' ? getWorkTimeForDate(date) : null;
-
-        // バッジ表示エリア（モードに関わらず表示する要望に対応）
-        const badsContainer = document.createElement('div');
-        badsContainer.className = 'day-badges';
-        badsContainer.style.display = 'flex';
-        badsContainer.style.justifyContent = 'flex-end';
-        badsContainer.style.gap = '1px';
-        badsContainer.style.flexWrap = 'wrap'; // Allow wrapping if many badges
-
-        // 1. 祝日名
-        const holidayName = typeof getHolidayName === 'function' ? getHolidayName(date, holidayMaps) : null;
-        if (holidayName) {
-            const hb = document.createElement('div');
-            hb.className = 'day-holiday';
-            hb.textContent = holidayName; // 具体的な祝日名を表示
-            badsContainer.appendChild(hb);
-        }
-
-        // 2. 勤務パターン (指定があれば表示)
-        // ユーザー要望「勤務パターン...を表示」に応えるため、モードチェックを緩和、または両方表示
-        // ここではWorkモードでなくてもデータがあれば表示するように変更、またはWorkモード時のみかは文脈次第だが、
-        // 「バッジの表示をお願いします...勤務パターンと...」と列挙されているので、併記する形にする。
         if (work) {
             const wb = document.createElement('div');
             wb.className = 'day-work-badge' + (work.isOverride && !work.isApplied ? ' is-override' : '');
             let label = (work.name || '').replace('勤務', '');
             if (label === 'その他') label = '他';
             wb.textContent = (work.isApplied ? '📄' : '') + label;
-            wb.title = "クリックで勤務パターン変更申請";
-            wb.style.cursor = 'pointer';
-            wb.onclick = (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                if (typeof showWorkShiftMenu === 'function') showWorkShiftMenu(e, dStr);
-            };
-            badsContainer.appendChild(wb);
+            wb.onclick = (e) => { e.stopPropagation(); showWorkShiftMenu(e, dStr); };
+            bads.appendChild(wb);
         }
 
-        // 3. 曜日カウント
         const weekdayEv = dayEvents.find(e => e.weekdayCount);
-        const targetSelect = document.getElementById('targetSelect');
-        // 'teacher' (バッチなし) の場合は表示しない
-        if (!targetSelect || targetSelect.value !== 'teacher') {
-            if (weekdayEv) {
-                const wb = document.createElement('div');
-                wb.className = 'day-weekday-count';
-                wb.textContent = weekdayEv.weekdayCount.replace('曜授業', '');
-                badsContainer.appendChild(wb);
-            }
+        if (target !== 'teacher' && weekdayEv) {
+            const wb = document.createElement('div');
+            wb.className = 'day-weekday-count';
+            wb.textContent = weekdayEv.weekdayCount.replace('曜授業', '');
+            bads.appendChild(wb);
         }
 
-        // 4. 試験・補講・入試
+        // 試験・補講
         const badgeMap = new Map();
         dayEvents.forEach(e => {
             if (!e.event) return;
-            const evt = e.event;
-            if (evt.includes('補講')) {
-                badgeMap.set('補講', { text: '補講', cls: 'day-makeup-count' });
-            }
-            if (evt.includes('定期試験') || evt.includes('試験')) {
-                // 入試と区別するため、入試が含まれない場合のみ「試験」とする、あるいは両方出す
-                if (!evt.includes('入試')) {
-                    badgeMap.set('試験', { text: '試験', cls: 'day-exam-badge' });
-                }
-            }
-            if (evt.includes('入試')) {
-                badgeMap.set('入試', { text: '入試', cls: 'day-exam-badge', style: 'background:#f472b6; color:white;' });
-            }
+            if (e.event.includes('補講')) badgeMap.set('補講', { text: '補講', cls: 'day-makeup-count' });
+            if (e.event.includes('試験') && !e.event.includes('入試')) badgeMap.set('試験', { text: '試験', cls: 'day-exam-badge' });
+            if (e.event.includes('入試')) badgeMap.set('入試', { text: '入試', cls: 'day-exam-badge', style: 'background:#f472b6; color:white;' });
         });
-
         badgeMap.forEach(b => {
-            const div = document.createElement('div');
-            div.className = b.cls;
-            div.textContent = b.text;
-            if (b.style) div.style = b.style;
-            badsContainer.appendChild(div);
+            const d = document.createElement('div'); d.className = b.cls; d.textContent = b.text;
+            if (b.style) d.style = b.style;
+            bads.appendChild(d);
         });
 
-        rightBadges.appendChild(badsContainer);
-        badgeContainer.appendChild(rightBadges);
-        dayCol.appendChild(badgeContainer);
+        calendarGrid.appendChild(dateHeader);
 
-        // --- 予定の分類（終日 vs 時間指定）---
-        const allDayEvents = [];
-        const timedEvents = [];
-
-        participating.forEach(ev => {
-            const priority = getSortPriority(ev);
-            // 優先度2が時間指定、それ以外は終日扱い
-            if (priority === 2) {
-                // 時間情報を取得・計算
-                const sT = getEffectiveTime(ev, dStr);
-                const eT = getEndTime(ev, dStr);
-
-                // 時間を分に変換 (8:00 = 0分起点とするため、絶対分も計算)
-                const toMin = (t) => {
-                    if (!t) return 0;
-                    const [h, m] = t.split(':').map(Number);
-                    return h * 60 + m;
-                };
-                const startMin = toMin(sT);
-                let endMin = toMin(eT);
-
-                // 20時を超える場合はクリップ、8時前の場合はクリップ
-                const VIEW_START_MIN = START_HOUR * 60; // 480
-                const VIEW_END_MIN = END_HOUR * 60;     // 1200
-
-                // 表示範囲内かチェック
-                if (endMin > VIEW_START_MIN && startMin < VIEW_END_MIN) {
-                    timedEvents.push({
-                        ...ev,
-                        startMin: Math.max(startMin, VIEW_START_MIN),
-                        endMin: Math.min(endMin, VIEW_END_MIN),
-                        originalStart: sT,
-                        originalEnd: eT
-                    });
-                } else {
-                    // 範囲外のものは終日エリアへ（あるいは表示しないか？一応終日へ）
-                    // ここでは範囲外の時間指定は終日扱いにする
-                    allDayEvents.push(ev);
-                }
-            } else {
-                allDayEvents.push(ev);
-            }
-        });
-
-        // --- 終日イベントエリア ---
-        const allDayContainer = document.createElement('div');
-        allDayContainer.className = 'weekly-allday-container';
-        allDayContainer.style.display = 'flex';
-        allDayContainer.style.flexDirection = 'column';
-        allDayContainer.style.gap = '2px';
-        allDayContainer.style.padding = '0 4px 4px 4px';
-        allDayContainer.style.marginBottom = '4px';
-        allDayContainer.style.borderBottom = '1px solid var(--neutral-200)';
-        allDayContainer.style.flexShrink = '0';
-        allDayContainer.style.height = '120px'; // 高さ拡張 (約3行分追加)
-        allDayContainer.style.overflowY = 'auto'; // はみ出す場合はスクロール
-
-        // 終日イベント描画
-        allDayEvents.forEach(ev => {
-            const el = document.createElement('div');
-            el.className = 'event-item';
-
-            const item = ev.data || {};
-            const isProc = item.isLeaveCard || item.isTripCard || item.isWfhCard || item.isHolidayWorkCard;
-            if (isProc) {
-                el.classList.add('process-card');
-                if (item.isLeaveCard) el.classList.add('leave-card');
-                if (item.isTripCard) el.classList.add('trip-card');
-                if (item.isWfhCard) el.classList.add('wfh-card');
-                if (item.isHolidayWorkCard) el.classList.add('holiday-work-card');
-            } else { el.classList.add(ev.type === 'myclass' ? 'myclass' : 'custom'); }
-
-            // 内容
-            if (ev.type === 'myclass') {
-                const name = item.name || '授業';
-                const loc = item.location || '';
-                const teacher = item.teacher || (Array.isArray(item.teachers) ? item.teachers.join(', ') : '');
-
-                let html = `<div class="class-name">${name}</div>`;
-                if (loc) html += `<div class="class-detail">📍 ${loc}</div>`;
-                if (teacher) html += `<div class="class-detail">👤 ${teacher}</div>`;
-                el.innerHTML = html;
-            } else {
-                el.textContent = item.event || item.name || '予定';
-                el.style.fontSize = '0.75rem';
-                el.style.padding = '1px 4px';
-            }
-
-            // 非参加 (ピンなし) の場合はグレーアウト
-            if (!isEventParticipating(ev, dStr, {})) {
-                el.style.opacity = '0.6';
-                el.style.backgroundColor = 'var(--neutral-100)';
-                el.style.color = 'var(--neutral-500)';
-                el.style.border = '1px solid var(--neutral-300)';
-            }
-
-            allDayContainer.appendChild(el);
-
-            // Interaction
-            addEventInteractions(el, ev, dStr);
-        });
-
-        dayCol.appendChild(allDayContainer);
-
-        // --- 時間軸イベントエリア ---
+        // タイムグリッド (Row 3 + TOTAL_ALDAY_ROWS)
         const timeGridContainer = document.createElement('div');
         timeGridContainer.className = 'weekly-timegrid-container';
+        timeGridContainer.style.gridColumn = i + 1;
+        timeGridContainer.style.gridRow = (3 + TOTAL_ALDAY_ROWS);
         timeGridContainer.style.position = 'relative';
-        timeGridContainer.style.flexGrow = '1';
         timeGridContainer.style.height = TIME_GRID_HEIGHT + 'px';
-        timeGridContainer.style.borderTop = '1px dashed var(--neutral-300)';
+        timeGridContainer.style.borderTop = '1px solid var(--neutral-200)';
+        timeGridContainer.style.zIndex = '5';
 
-        // 背景グリッド線 (1時間ごと)
+        // 背景のグリッド線
         for (let h = START_HOUR; h <= END_HOUR; h++) {
             const line = document.createElement('div');
             line.style.position = 'absolute';
-            line.style.left = '0';
-            line.style.right = '0';
-            line.style.height = '1px';
+            line.style.left = '0'; line.style.right = '0'; line.style.height = '1px';
             line.style.backgroundColor = 'var(--neutral-100)';
             const top = (h - START_HOUR) * 60 * PIXELS_PER_MINUTE;
             line.style.top = top + 'px';
-
-            // 時間ラベル（各ラインの端に小さく）
-            const label = document.createElement('span');
-            label.textContent = `${h}:00`;
-            label.style.position = 'absolute';
-            label.style.left = '2px';
-            label.style.top = top + 'px';
-            label.style.fontSize = '0.6rem';
-            label.style.color = 'var(--neutral-400)';
-            timeGridContainer.appendChild(label); // ラベル追加
             timeGridContainer.appendChild(line);
-        }
 
-        // 勤務時間のハイライト (timeGridContainer内)
-        if (work && work.start && work.end) {
-            const parseTime = (t) => {
-                if (!t) return 0;
-                const [h, m] = t.split(':').map(Number);
-                return h * 60 + m;
-            };
-            const wStartMin = parseTime(work.start);
-            const wEndMin = parseTime(work.end);
-
-            const startLimit = START_HOUR * 60;
-            const endLimit = END_HOUR * 60;
-
-            const dispStart = Math.max(wStartMin, startLimit);
-            const dispEnd = Math.min(wEndMin, endLimit);
-
-            if (dispEnd > dispStart) {
-                const hTop = (dispStart - startLimit) * PIXELS_PER_MINUTE;
-                const hHeight = (dispEnd - dispStart) * PIXELS_PER_MINUTE;
-
-                const highlight = document.createElement('div');
-                highlight.className = 'work-time-highlight';
-                highlight.style.position = 'absolute';
-                highlight.style.left = '0';
-                highlight.style.right = '0';
-                highlight.style.top = hTop + 'px';
-                highlight.style.height = hHeight + 'px';
-                highlight.style.backgroundColor = 'rgba(255, 247, 237, 0.6)'; // 薄いオレンジ/黄色系
-                highlight.style.borderTop = '1px dashed rgba(249, 115, 22, 0.2)';
-                highlight.style.borderBottom = '1px dashed rgba(249, 115, 22, 0.2)';
-                highlight.style.pointerEvents = 'none'; // クリック透過
-                highlight.style.zIndex = '0'; // 最背面
-                timeGridContainer.appendChild(highlight);
-
-                // 出勤・退勤時刻のラベリング (右寄せ)
-                const createTimeLabel = (text, topPos) => {
-                    const l = document.createElement('div');
-                    l.textContent = text;
-                    l.style.position = 'absolute';
-                    l.style.right = '2px';
-                    l.style.top = topPos + 'px';
-                    l.style.fontSize = '0.7rem';
-                    l.style.fontWeight = 'bold';
-                    l.style.color = '#f97316'; // Orange-500
-                    l.style.backgroundColor = 'rgba(255,255,255,0.7)';
-                    l.style.padding = '0 2px';
-                    l.style.marginTop = '-0.5em'; // Center on line
-                    l.style.borderRadius = '2px';
-                    return l;
-                };
-
-                timeGridContainer.appendChild(createTimeLabel(work.start, hTop));
-                timeGridContainer.appendChild(createTimeLabel(work.end, hTop + hHeight));
+            if (i === 0) {
+                const label = document.createElement('span');
+                label.textContent = `${h}:00`; label.style.position = 'absolute'; label.style.left = '2px';
+                label.style.top = top + 'px'; label.style.fontSize = '0.6rem'; label.style.color = 'var(--neutral-400)';
+                timeGridContainer.appendChild(label);
             }
         }
 
-        // 授業日または試験日または補講日の時限区切り (1限～4限)
-        // 定期試験期間かどうか判定
+        // 勤務時間のハイライト (既存ロジック)
+        if (work && work.start && work.end) {
+            const parseTime = (t) => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+            const wStartMin = parseTime(work.start); const wEndMin = parseTime(work.end);
+            const startLimit = START_HOUR * 60; const endLimit = END_HOUR * 60;
+            const dispStart = Math.max(wStartMin, startLimit); const dispEnd = Math.min(wEndMin, endLimit);
+            if (dispEnd > dispStart) {
+                const hTop = (dispStart - startLimit) * PIXELS_PER_MINUTE;
+                const hHeight = (dispEnd - dispStart) * PIXELS_PER_MINUTE;
+                const high = document.createElement('div');
+                high.style.position = 'absolute'; high.style.left = '0'; high.style.right = '0';
+                high.style.top = hTop + 'px'; high.style.height = hHeight + 'px';
+                high.style.backgroundColor = 'rgba(255, 247, 237, 0.6)'; high.style.zIndex = '0';
+                timeGridContainer.appendChild(high);
+            }
+        }
+
+        // 授業日・試験期間区切り
         const isRegularExamDay = dayEvents.some(e => {
             const ev = e.event || '';
             return ev.includes('前期中間試験') || ev.includes('前期末試験') || ev.includes('後期中間試験') || ev.includes('学年末試験');
         });
-        // 補講日かどうか判定
         const isMakeupDay = dayEvents.some(e => (e.event || '').includes('補講'));
-
         if (weekdayEv || isRegularExamDay || isMakeupDay) {
             const matrixSource = isRegularExamDay ? EXAM_PERIOD_TIMES : PERIOD_TIMES;
-
             [1, 2, 3, 4].forEach(p => {
-                const matrix = matrixSource[p];
-                if (!matrix) return;
-
-                const parseTime = (t) => {
-                    if (!t) return 0;
-                    const [h, m] = t.split(':').map(Number);
-                    return h * 60 + m;
-                };
-
-                const pStart = parseTime(matrix.start);
-                const pEnd = parseTime(matrix.end);
-
-                const startLimit = START_HOUR * 60;
-                const endLimit = END_HOUR * 60;
-
-                // 表示範囲チェック
-                if (pEnd <= startLimit || pStart >= endLimit) return;
-
-                const dispStart = Math.max(pStart, startLimit);
-                const dispEnd = Math.min(pEnd, endLimit);
-
-                const ptTop = (dispStart - startLimit) * PIXELS_PER_MINUTE;
-                const ptHeight = (dispEnd - dispStart) * PIXELS_PER_MINUTE;
-
+                const matrix = matrixSource[p]; if (!matrix) return;
+                const parseTime = (t) => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+                const pS = parseTime(matrix.start); const pE = parseTime(matrix.end);
+                const sL = START_HOUR * 60; const eL = END_HOUR * 60;
+                if (pE <= sL || pS >= eL) return;
+                const top = (Math.max(pS, sL) - sL) * PIXELS_PER_MINUTE;
+                const h = (Math.min(pE, eL) - Math.max(pS, sL)) * PIXELS_PER_MINUTE;
                 const pDiv = document.createElement('div');
-                pDiv.style.position = 'absolute';
-                pDiv.style.left = '0';
-                pDiv.style.right = '0';
-                pDiv.style.top = ptTop + 'px';
-                pDiv.style.height = ptHeight + 'px';
-
-                // 試験期間は色を変えるなどして区別しやすくする
-                if (isRegularExamDay) {
-                    pDiv.style.borderTop = '1px solid var(--secondary-purple)';
-                    pDiv.style.borderBottom = '1px solid var(--secondary-purple)';
-                    pDiv.style.backgroundColor = 'rgba(232, 121, 249, 0.05)'; // 薄い紫背景
-                } else {
-                    pDiv.style.borderTop = '1px dotted var(--neutral-300)';
-                    pDiv.style.borderBottom = '1px dotted var(--neutral-300)';
-                }
-
-                pDiv.style.pointerEvents = 'none';
-                pDiv.style.zIndex = '1';
-
-                // Label
-                const pLabel = document.createElement('span');
-                pLabel.textContent = `${p}限` + (isRegularExamDay ? '(試験)' : '');
-                pLabel.style.position = 'absolute';
-                pLabel.style.right = '40px';
-                pLabel.style.top = '2px';
-                pLabel.style.fontSize = '0.6rem';
-                pLabel.style.color = isRegularExamDay ? 'var(--secondary-purple)' : 'var(--neutral-400)';
-                pDiv.appendChild(pLabel);
-
+                pDiv.style.position = 'absolute'; pDiv.style.left = '0'; pDiv.style.right = '0';
+                pDiv.style.top = top + 'px'; pDiv.style.height = h + 'px';
+                pDiv.style.borderTop = isRegularExamDay ? '1px solid var(--secondary-purple)' : '1px dotted var(--neutral-300)';
+                pDiv.style.borderBottom = isRegularExamDay ? '1px solid var(--secondary-purple)' : '1px dotted var(--neutral-300)';
+                pDiv.style.backgroundColor = isRegularExamDay ? 'rgba(232, 121, 249, 0.05)' : 'transparent';
+                pDiv.style.zIndex = '1'; pDiv.style.pointerEvents = 'none';
+                const pL = document.createElement('span');
+                pL.textContent = `${p}限` + (isRegularExamDay ? '(試)' : '');
+                pL.style.position = 'absolute'; pL.style.right = '5px'; pL.style.top = '2px';
+                pL.style.fontSize = '0.6rem'; pL.style.color = isRegularExamDay ? 'var(--secondary-purple)' : 'var(--neutral-400)';
+                pDiv.appendChild(pL);
                 timeGridContainer.appendChild(pDiv);
             });
         }
 
-        // 時間指定イベントのレイアウト計算 (重複処理)
-        // アルゴリズム: 重なり合うイベントのグループを見つけ、幅を分割する
-        timedEvents.sort((a, b) => a.startMin - b.startMin);
+        // 時間指定イベント (Priority 2)
+        const timedOnDay = allDisplayEvents.filter(ev => {
+            if (getSortPriority(ev) !== 2 || ev.startDate !== dStr) return false;
+            return true;
+        });
 
-        // カラム割り当て (シンプルなパッキング)
+        // 重なり計算 (既存ロジック)
+        timedOnDay.sort((a, b) => {
+            const sA = getEffectiveTime(a, dStr);
+            const sB = getEffectiveTime(b, dStr);
+            return sA.localeCompare(sB);
+        });
+
         const columns = [];
-        timedEvents.forEach(ev => {
+        const parseTime = (t) => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+        timedOnDay.forEach(ev => {
+            const sMin = parseTime(getEffectiveTime(ev, dStr));
+            const eMin = parseTime(getEndTime(ev, dStr));
             let placed = false;
             for (let c = 0; c < columns.length; c++) {
                 const col = columns[c];
-                const lastEv = col[col.length - 1];
-                // 重ならないならこの列に追加
-                if (lastEv.endMin <= ev.startMin) {
-                    col.push(ev);
-                    ev.colIndex = c;
-                    placed = true;
-                    break;
-                }
+                const last = col[col.length - 1];
+                const lastEMin = parseTime(getEndTime(last, dStr));
+                if (lastEMin <= sMin) { col.push(ev); ev.colIdx = c; placed = true; break; }
             }
-            if (!placed) {
-                columns.push([ev]);
-                ev.colIndex = columns.length - 1;
-            }
+            if (!placed) { columns.push([ev]); ev.colIdx = columns.length - 1; }
         });
 
-        const maxCols = columns.length;
-        const colWidth = 100 / maxCols;
-
-        timedEvents.forEach(ev => {
+        const maxC = columns.length;
+        const cw = 100 / (maxC || 1);
+        timedOnDay.forEach(ev => {
             const el = document.createElement('div');
             el.className = 'event-item';
-
             const item = ev.data;
             const isProc = item.isLeaveCard || item.isTripCard || item.isWfhCard || item.isHolidayWorkCard;
             if (isProc) {
@@ -2768,71 +2580,88 @@ function renderWeeklyView() {
                 if (item.isHolidayWorkCard) el.classList.add('holiday-work-card');
             } else { el.classList.add(ev.type === 'myclass' ? 'myclass' : 'custom'); }
 
-            // 位置とサイズ
-            const top = (ev.startMin - (START_HOUR * 60)) * PIXELS_PER_MINUTE;
-            const height = (ev.endMin - ev.startMin) * PIXELS_PER_MINUTE;
+            const sMin = parseTime(getEffectiveTime(ev, dStr));
+            const eMin = parseTime(getEndTime(ev, dStr));
+            const top = (sMin - (START_HOUR * 60)) * PIXELS_PER_MINUTE;
+            const h = (eMin - sMin) * PIXELS_PER_MINUTE;
 
             el.style.position = 'absolute';
             el.style.top = top + 'px';
-            el.style.height = Math.max(height, 20) + 'px'; // 最小高さ確保
-            el.style.left = (ev.colIndex * colWidth) + '%';
-            el.style.width = (colWidth - 2) + '%'; // 2% margin
-            el.style.zIndex = '10';
-            el.style.fontSize = '0.7rem';
-            el.style.overflow = 'hidden';
-            el.style.borderRadius = '3px';
-            el.style.boxShadow = '0 1px 2px rgba(0,0,0,0.1)';
+            el.style.setProperty('height', h + 'px', 'important');
+            el.style.setProperty('min-height', h + 'px', 'important');
+            el.style.left = (ev.colIdx * cw) + '%'; el.style.width = (cw - 1) + '%';
+            el.style.zIndex = '10'; el.style.fontSize = '0.7rem'; el.style.overflow = 'hidden';
+            el.style.borderRadius = '4px'; el.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
 
-            // 内容 (授業の場合は詳細を表示)
             if (ev.type === 'myclass') {
                 const name = item.name || '授業';
                 const loc = item.location || '';
                 const teacher = item.teacher || (Array.isArray(item.teachers) ? item.teachers.join(', ') : '');
-
-                let html = `<div class="class-name">${name}</div>`;
-                if (loc) html += `<div class="class-detail">📍 ${loc}</div>`;
-                if (teacher) html += `<div class="class-detail">👤 ${teacher}</div>`;
-                el.innerHTML = html;
+                el.innerHTML = `<div class="class-name">${name}</div>${loc ? `<div class="class-detail">📍 ${loc}</div>` : ''}${teacher ? `<div class="class-detail">👤 ${teacher}</div>` : ''}`;
             } else {
-                const name = (item.event || item.name || '').split('\n')[0];
-                el.textContent = name;
-                el.style.padding = '1px 2px';
-                el.style.lineHeight = '1.2';
+                el.textContent = (item.event || item.name || '').split('\n')[0];
+                el.style.padding = '2px';
             }
 
-            el.title = `${item.event || item.name || ''}\n${ev.originalStart}-${ev.originalEnd}`;
-
-            // 非参加 (ピンなし) の場合はグレーアウト
-            if (!isEventParticipating(ev, dStr, {})) {
-                el.style.opacity = '0.6';
-                el.style.backgroundColor = 'var(--neutral-100)';
-                el.style.color = 'var(--neutral-500)';
-                el.style.border = '1px solid var(--neutral-300)';
+            if (!isEventParticipating(ev, dStr, assignmentExclusions)) {
+                el.style.opacity = '0.5'; el.style.filter = 'grayscale(1)';
             }
-
             addEventInteractions(el, ev, dStr);
             timeGridContainer.appendChild(el);
         });
 
-        dayCol.appendChild(timeGridContainer);
+        calendarGrid.appendChild(timeGridContainer);
+    });
 
-        // Click handlers (Background)
-        dayCol.onclick = (e) => {
-            // コンテナ自体のクリックのみ（イベントクリックは伝播止める）
-            if (e.target !== dayCol && !e.target.classList.contains('weekly-timegrid-container') && !e.target.classList.contains('weekly-allday-container')) return;
+    // --- 終日・期間バーの描画 (Lane N at grid rows) ---
+    weekSegments.forEach(seg => {
+        const item = seg.data;
+        const el = document.createElement('div');
+        el.className = 'event-item';
+        const isProc = item.isLeaveCard || item.isTripCard || item.isWfhCard || item.isHolidayWorkCard;
+        if (isProc) {
+            el.classList.add('process-card');
+            if (item.isLeaveCard) el.classList.add('leave-card');
+            if (item.isTripCard) el.classList.add('trip-card');
+            if (item.isWfhCard) el.classList.add('wfh-card');
+            if (item.isHolidayWorkCard) el.classList.add('holiday-work-card');
+            el.style.height = '28px'; // Weekly Bar height
+            el.style.minHeight = '28px';
+        } else {
+            el.classList.add(seg.type === 'myclass' ? 'myclass' : 'custom');
+        }
 
-            if (mobileAction) { executeMobileAction(dStr); return; }
+        // 期間中バーの端丸め (Monthly互換)
+        if (seg.startDate !== seg.endDate) {
+            const startsBefore = seg.startDate < seg.segStart;
+            const endsAfter = seg.endDate > seg.segEnd;
+            if (startsBefore && endsAfter) el.classList.add('range-middle');
+            else if (startsBefore) el.classList.add('range-end');
+            else if (endsAfter) el.classList.add('range-start');
+        }
 
-            // 時間軸上のクリック位置から開始時間を推定するのは高度だが、ここではシンプルに新規作成
-            editCalendarEvent('custom', 'custom-' + Date.now(), dStr);
-        };
-        dayCol.oncontextmenu = (e) => {
-            if (e.target !== dayCol && !e.target.classList.contains('weekly-timegrid-container')) return;
-            if (typeof showAnnualLeaveMenu === 'function') showAnnualLeaveMenu(e, dStr);
-        };
+        el.style.gridColumn = `${seg.sIdx + 1} / span ${seg.eIdx - seg.sIdx + 1}`;
+        el.style.gridRow = (3 + seg.laneIdx);
+        el.style.zIndex = '15';
+        el.style.margin = '1px 2px';
+        el.style.fontSize = '0.75rem';
+        el.style.display = 'flex';
+        el.style.alignItems = 'center';
+        el.style.padding = '0 6px';
+        el.style.overflow = 'hidden';
+        el.style.whiteSpace = 'nowrap';
 
-        calendarGrid.appendChild(dayCol);
-    }
+        const label = item.event || item.name || (seg.original ? (seg.original.event || seg.original.name) : '無題');
+        const icon = (item.isApplied ? '📄' : '') + (isEventParticipating(seg, seg.segStart, assignmentExclusions) ? '📌' : '');
+        el.textContent = `${icon} ${label}`;
+
+        if (!isEventParticipating(seg, seg.segStart, assignmentExclusions)) {
+            el.style.opacity = '0.5'; el.style.filter = 'grayscale(1)';
+        }
+
+        addEventInteractions(el, seg, seg.segStart);
+        calendarGrid.appendChild(el);
+    });
 }
 
 // ヘルパー：イベントへのインタラクション追加

@@ -1434,6 +1434,56 @@ body {
     z-index: 10;
 }
 
+/* 週間表示用の調整 */
+/* (grid-template-rows は JS で動的に生成) */
+
+.weekly-day-date-header {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(4px);
+    border-bottom: 1px solid var(--neutral-200);
+    border-right: 1px solid var(--neutral-200);
+    min-height: 28px;
+}
+
+.weekly-day-date-header .day-number {
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--neutral-700);
+}
+
+.view-week .event-item {
+    height: 28px !important;
+    min-height: 28px !important;
+    padding: 2px 8px !important;
+    display: flex !important;
+    align-items: center !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+    margin: 1px 2px !important;
+    border-radius: 4px !important;
+    font-size: 0.75rem !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+}
+
+.view-week .event-item.process-card {
+    border-left-width: 4px !important;
+    padding-left: 6px !important;
+}
+
+/* タイムグリッド内の時間指定イベント */
+.view-week .weekly-timegrid-container .event-item {
+    height: auto !important;
+    /* JS で inline style が当たっている場合はそちらが優先されるようにしたいが、!important で指定しないと親に負ける */
+    /* inline style (style="height: XXXpx") は CSS の !important に負ける。 
+       なので JS で !important をつけるか、CSS を調整する。
+       ここでは JS の inline style を活かすために CSS での height 指定を unset !important にする。 */
+    height: unset !important;
+    min-height: unset !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    white-space: normal !important;
+}
+
 /* 期間予定（リボン）表示時の調整 */
 .event-item.process-card.range-start {
     border-top-right-radius: 0 !important;
