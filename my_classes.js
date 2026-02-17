@@ -1404,17 +1404,10 @@ function generateClassEvents(year, options = {}) {
                 }
             });
 
-            let isMorningOnly = false;
-            let isAfternoonOnly = false;
-
-            // 優先順位：授業そのものに指定があれば、そちらを優先する
-            if (sessionInfo.hasPriorityMorning || sessionInfo.hasPriorityAfternoon) {
-                isMorningOnly = sessionInfo.hasPriorityMorning && !sessionInfo.hasPriorityAfternoon;
-                isAfternoonOnly = sessionInfo.hasPriorityAfternoon && !sessionInfo.hasPriorityMorning;
-            } else {
-                isMorningOnly = sessionInfo.hasMorningIndicator && !sessionInfo.hasAfternoonIndicator;
-                isAfternoonOnly = sessionInfo.hasAfternoonIndicator && !sessionInfo.hasMorningIndicator;
-            }
+            // 打ち切り判定：授業そのもの（曜授業）に指定がある場合のみ適用するように修正
+            // ユーザー要望：一般行事の「午前」「午後」で授業が消えるのを防ぐ
+            const isMorningOnly = sessionInfo.hasPriorityMorning && !sessionInfo.hasPriorityAfternoon;
+            const isAfternoonOnly = sessionInfo.hasPriorityAfternoon && !sessionInfo.hasPriorityMorning;
 
             const effectiveResult = getEffectivePeriods(schedule.period, isMorningOnly, isAfternoonOnly);
             if (!effectiveResult) return;
