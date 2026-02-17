@@ -3598,3 +3598,40 @@ body {
     padding: 0 !important;
     background-color: var(--neutral-50) !important;
 }
+
+/* 今日の現在時刻を示す赤線 */
+.current-time-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: #ff3b30;
+    z-index: 100;
+    pointer-events: none;
+    box-shadow: 0 0 10px rgba(255, 59, 48, 0.6);
+    animation: currentTimeBlink 1.5s infinite alternate ease-in-out;
+}
+
+.current-time-line::before {
+    content: '';
+    position: absolute;
+    left: -4px;
+    top: -4px;
+    width: 10px;
+    height: 10px;
+    background-color: #ff3b30;
+    border-radius: 50%;
+    box-shadow: 0 0 8px rgba(255, 59, 48, 0.8);
+}
+
+@keyframes currentTimeBlink {
+    0% {
+        opacity: 1;
+        box-shadow: 0 0 10px rgba(255, 59, 48, 0.6);
+    }
+
+    100% {
+        opacity: 0.3;
+        box-shadow: 0 0 4px rgba(255, 59, 48, 0.2);
+    }
+}

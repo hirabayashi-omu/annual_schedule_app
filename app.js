@@ -500,7 +500,25 @@ document.addEventListener('DOMContentLoaded', () => {
     // 初回表示のために必ず一度年度リストを更新
     updateAvailableYearsAndMonths();
     updateBackupInfo(); // バックアップ情報の初期表示
+
+    // 1分ごとに現在時刻の線を更新（週表示用）
+    setInterval(() => {
+        if (currentCalendarView === 'week') {
+            const todayStr = formatDateKey(new Date());
+            if (currentWeekBaseDate) {
+                const startDay = new Date(currentWeekBaseDate);
+                const endDay = new Date(startDay);
+                endDay.setDate(startDay.getDate() + 6);
+                const weekStartStr = formatDateKey(startDay);
+                const weekEndStr = formatDateKey(endDay);
+                if (todayStr >= weekStartStr && todayStr <= weekEndStr) {
+                    updateCalendar();
+                }
+            }
+        }
+    }, 60000);
 });
+
 
 /**
  * バックアップ情報の表示更新
@@ -2610,8 +2628,24 @@ function renderWeeklyView() {
             timeGridContainer.appendChild(el);
         });
 
+        // 今日の現在時刻を示す赤線
+        if (dStr === formatDateKey(new Date())) {
+            const now = new Date();
+            const nowMin = now.getHours() * 60 + now.getMinutes();
+            const startLimit = START_HOUR * 60;
+            const endLimit = END_HOUR * 60;
+            if (nowMin >= startLimit && nowMin <= endLimit) {
+                const nowTop = (nowMin - startLimit) * PIXELS_PER_MINUTE;
+                const redLine = document.createElement('div');
+                redLine.className = 'current-time-line';
+                redLine.style.top = nowTop + 'px';
+                timeGridContainer.appendChild(redLine);
+            }
+        }
+
         calendarGrid.appendChild(timeGridContainer);
     });
+
 
     // --- 終日・期間バーの描画 (Lane N at grid rows) ---
     weekSegments.forEach(seg => {
