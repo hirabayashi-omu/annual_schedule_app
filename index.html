@@ -35,6 +35,18 @@
                     <button id="viewListBtn" class="view-btn">リスト</button>
                     <button id="viewCalendarShortcutBtn" class="view-btn" title="カレンダー画面に戻ります">📅 カレンダー</button>
                 </div>
+                <!-- クイッククラウド同期 -->
+                <div class="header-sync-controls"
+                    style="display: flex; align-items: center; gap: 8px; margin-right: 15px;">
+                    <button class="btn btn-primary btn-sm" onclick="GistSync.pushToCloud()" title="現在のデータをクラウドに保存(Push)"
+                        style="padding: 5px 8px; background: #4f46e5; border: none; font-size: 1.1rem; line-height: 1;">
+                        ⬆️
+                    </button>
+                    <button class="btn btn-primary btn-sm" onclick="GistSync.pullFromCloud()" title="クラウドからデータを同期(Pull)"
+                        style="padding: 5px 8px; background: #6366f1; border: none; font-size: 1.1rem; line-height: 1;">
+                        ⬇️
+                    </button>
+                </div>
                 <div class="year-selector">
                     <label for="globalYearSelect">年度:</label>
                     <select id="globalYearSelect" class="year-select">
