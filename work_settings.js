@@ -405,8 +405,8 @@ window.addMinutes = function addMinutes(timeStr, minutes) {
 /**
  * 年休をカレンダーに追加
  */
-window.addAnnualLeaveCard = function (dateStr, label, leaveType, hours, extra = 0) {
-    const id = 'original-leave-' + Date.now();
+window.addAnnualLeaveCard = function (dateStr, label, leaveType, hours, extra = 0, editId = null) {
+    const id = editId || ('original-leave-' + Date.now());
     const normalizedDate = dateStr.replace(/\//g, '-');
     const newEvent = {
         type: 'custom',
@@ -429,7 +429,18 @@ window.addAnnualLeaveCard = function (dateStr, label, leaveType, hours, extra = 
     };
 
     if (typeof classOverrides === 'undefined') window.classOverrides = [];
-    classOverrides.push(newEvent);
+
+    if (editId) {
+        // 既存の編集
+        const idx = classOverrides.findIndex(ov => String(ov.id) === String(editId));
+        if (idx !== -1) {
+            classOverrides[idx] = newEvent;
+        } else {
+            classOverrides.push(newEvent);
+        }
+    } else {
+        classOverrides.push(newEvent);
+    }
 
     if (typeof saveAllToLocal === 'function') saveAllToLocal();
     if (typeof updateCalendar === 'function') updateCalendar();
@@ -531,7 +542,7 @@ window.showAnnualLeaveMenu = window.showDayInteractionMenu;
  * @param {string} endDate 'yyyy/mm/dd'
  * @param {Object} newEventTimes { startTime, endTime, isTrip } (新規登録する予定の時間情報)
  */
-window.checkEventConflicts = function (startDate, endDate, newEventTimes = null) {
+window.checkEventConflicts = function (startDate, endDate, newEventTimes = null, ignoreId = null) {
     const conflicts = [];
     const dStart = parseDateKey(startDate);
     const dEnd = parseDateKey(endDate);
@@ -561,8 +572,8 @@ window.checkEventConflicts = function (startDate, endDate, newEventTimes = null)
         if (typeof scheduleData !== 'undefined') {
             scheduleData.forEach(item => {
                 if (formatDateKey(item.date) === dStr && item.event) {
-                    // Excel行事は時間指定がない場合が多いので原則重複とするが、
-                    // もし時間があれば時間でチェックする
+                    if (ignoreId && String(item.id) === String(ignoreId)) return;
+
                     const eStart = item.startTime || '00:00';
                     const eEnd = item.endTime || '23:59';
                     if (checkOverlap(nStart, nEnd, eStart, eEnd)) {
@@ -576,6 +587,8 @@ window.checkEventConflicts = function (startDate, endDate, newEventTimes = null)
         if (typeof getDisplayableClassesForDate === 'function') {
             const classes = getDisplayableClassesForDate(curr, []);
             classes.forEach(cls => {
+                if (ignoreId && String(cls.id) === String(ignoreId)) return;
+
                 const PERIOD_TIMES_LOCAL = window.PERIOD_TIMES || (typeof PERIOD_TIMES !== 'undefined' ? PERIOD_TIMES : {});
                 const pKey = cls.displayPeriod || cls.originalPeriod;
                 let times = PERIOD_TIMES_LOCAL[pKey];
@@ -597,6 +610,8 @@ window.checkEventConflicts = function (startDate, endDate, newEventTimes = null)
         // 3. 他のカスタム予定（年休など）との重複チェック
         if (typeof classOverrides !== 'undefined') {
             classOverrides.forEach(ov => {
+                if (ignoreId && String(ov.id) === String(ignoreId)) return;
+
                 if (ov.type === 'custom' && ov.action === 'add' && ov.data) {
                     const ovStart = ov.startDate || ov.date;
                     const ovEnd = ov.endDate || ov.date || ov.startDate;
@@ -638,7 +653,7 @@ window.checkEventConflicts = function (startDate, endDate, newEventTimes = null)
 /**
  * 年休モーダルを開く
  */
-window.openAnnualLeaveModal = function (dateStr) {
+window.openAnnualLeaveModal = function (dateStr, editId = null) {
     const d = parseDateKey(dateStr);
     const workTime = getWorkTimeForDate(d);
     if (!workTime || !workTime.start || !workTime.end) {
@@ -696,13 +711,19 @@ window.openAnnualLeaveModal = function (dateStr) {
         btn.innerHTML = `<span>${opt.label}</span> <span style="font-size: 0.75rem; opacity: 0.7;">${timeRange}</span>`;
         btn.onclick = () => {
             // 重複チェック
-            const conflicts = checkEventConflicts(dateStr, dateStr, { startTime: timeRange.split('-')[0], endTime: timeRange.split('-')[1], isTrip: false });
+            // 編集の場合は自分自身を ignoreId に指定して除外する
+            const conflicts = checkEventConflicts(dateStr, dateStr, {
+                startTime: timeRange.split('-')[0],
+                endTime: timeRange.split('-')[1],
+                isTrip: false
+            }, editId);
+
             if (conflicts.length > 0) {
                 if (!confirm(`以下の予定と重複していますが、登録しますか？\n\n${conflicts.join('\n')}`)) {
                     return;
                 }
             }
-            addAnnualLeaveCard(dateStr, opt.label.split('（')[0], opt.type, opt.hours || 0, opt.extra || 0);
+            addAnnualLeaveCard(dateStr, opt.label.split('（')[0], opt.type, opt.hours || 0, opt.extra || 0, editId);
             closeAnnualLeaveModal();
         };
         list.appendChild(btn);
@@ -798,17 +819,15 @@ window.saveBusinessTrip = function () {
         return;
     }
 
+    const editId = document.getElementById('businessTripModal').dataset.editId;
+
     // 📌予定や授業との重複チェック
-    const conflicts = checkEventConflicts(startDate, endDate, { startTime: depTime, endTime: arrTime, isTrip: true });
+    const conflicts = checkEventConflicts(startDate, endDate, { startTime: depTime, endTime: arrTime, isTrip: true }, editId);
     if (conflicts.length > 0) {
         if (!confirm(`以下の予定と重複していますが、登録しますか？\n\n${conflicts.join('\n')}`)) {
             return;
         }
     }
-
-    let memo = `${dest} (${depPoint === 'school' ? '学校発' : '自宅発'} / ${arrPoint === 'school' ? '学校着' : '自宅着'})`;
-
-    const editId = document.getElementById('businessTripModal').dataset.editId;
     const id = editId || ('trip-' + Date.now());
 
     // 既存データを削除（編集時）
@@ -916,19 +935,20 @@ window.saveWfh = function () {
     const endTime = document.getElementById('wfhEndTime').value;
     const normalizedDate = currentWfhDate.replace(/\//g, '-');
 
+    const editId = document.getElementById('wfhModal').dataset.editId;
+
     // 重複チェック
     const conflicts = checkEventConflicts(normalizedDate, normalizedDate, {
         startTime: allDay ? '00:00' : startTime,
         endTime: allDay ? '23:59' : endTime,
         isTrip: false
-    });
+    }, editId);
     if (conflicts.length > 0) {
         if (!confirm(`以下の予定と重複していますが、登録しますか？\n\n${conflicts.join('\n')}`)) {
             return;
         }
     }
 
-    const editId = document.getElementById('wfhModal').dataset.editId;
     const id = editId || ('wfh-' + Date.now());
 
     if (editId) {
@@ -1030,13 +1050,26 @@ window.saveHolidayWork = function () {
     }
 
     const editId = document.getElementById('holidayWorkModal').dataset.editId;
+    const normalizedDate = currentHolidayWorkDate.replace(/\//g, '-');
+
+    // 重複チェック
+    const conflicts = checkEventConflicts(normalizedDate, normalizedDate, {
+        startTime: startTime,
+        endTime: endTime,
+        isTrip: false
+    }, editId);
+    if (conflicts.length > 0) {
+        if (!confirm(`以下の予定と重複していますが、更新しますか？\n\n${conflicts.join('\n')}`)) {
+            return;
+        }
+    }
+
     const id = editId || ('holiday-work-' + Date.now());
 
     if (editId) {
         classOverrides = classOverrides.filter(ov => String(ov.id) !== String(editId));
     }
 
-    const normalizedDate = currentHolidayWorkDate.replace(/\//g, '-');
     const newEvent = {
         type: 'custom',
         id: id,
@@ -1608,6 +1641,19 @@ window.renderApplicationStats = function () {
     // テーブル描画
     statsData.forEach(item => {
         const tr = document.createElement('tr');
+        tr.style.cursor = 'pointer';
+        tr.title = 'ダブルクリックでカレンダーの該当月へ移動';
+        tr.ondblclick = () => {
+            const dateParts = item.date.split(/[\/-]/);
+            if (dateParts.length >= 2) {
+                window.currentYear = parseInt(dateParts[0]);
+                window.currentMonth = parseInt(dateParts[1]);
+                if (typeof window.saveViewState === 'function') window.saveViewState();
+                const navBtn = document.getElementById('navCalendarBtn');
+                if (navBtn) navBtn.click();
+                if (typeof window.updateCalendar === 'function') window.updateCalendar();
+            }
+        };
         const appliedState = item.isApplied ?
             '<span style="color: var(--success-600); font-weight: bold;">📄 申請済み</span>' :
             '<span style="color: var(--neutral-400);">未申請</span>';

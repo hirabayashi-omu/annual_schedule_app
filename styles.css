@@ -1174,6 +1174,43 @@ body {
     }
 }
 
+/* カスタムツールチップ */
+.custom-tooltip {
+    position: fixed;
+    z-index: 10000;
+    background: rgba(30, 41, 59, 0.95);
+    color: white;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+    max-width: 300px;
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transform: translateY(-10px);
+    opacity: 0;
+    transition: opacity 0.2s, transform 0.2s;
+}
+
+.custom-tooltip.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.custom-tooltip-header {
+    font-weight: 800;
+    color: #fda4af;
+    /* rose-300 */
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 4px;
+}
+
 .day-badges {
     display: flex;
     flex-direction: row;

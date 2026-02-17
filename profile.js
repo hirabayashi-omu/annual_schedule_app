@@ -7,6 +7,7 @@ window.UserProfile = {
         rank: '',
         staffId: '',
         name: '',
+        email: '',
         subjects: []
     },
 
@@ -29,6 +30,7 @@ window.UserProfile = {
         this.data.rank = document.getElementById('userRank').value;
         this.data.staffId = document.getElementById('userStaffId').value;
         this.data.name = document.getElementById('userName').value;
+        this.data.email = document.getElementById('userEmail').value;
 
         localStorage.setItem('user_profile', JSON.stringify(this.data));
         window.activeUserProfile = this.data;
@@ -40,11 +42,13 @@ window.UserProfile = {
         const rankEl = document.getElementById('userRank');
         const staffIdEl = document.getElementById('userStaffId');
         const nameEl = document.getElementById('userName');
+        const emailEl = document.getElementById('userEmail');
 
         if (courseEl) courseEl.value = this.data.course || '';
         if (rankEl) rankEl.value = this.data.rank || '';
         if (staffIdEl) staffIdEl.value = this.data.staffId || '';
         if (nameEl) nameEl.value = this.data.name || '';
+        if (emailEl) emailEl.value = this.data.email || '';
 
         this.renderSubjects();
     },

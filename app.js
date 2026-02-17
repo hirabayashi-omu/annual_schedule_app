@@ -603,6 +603,73 @@ function downloadBackup() {
 window.downloadBackup = downloadBackup;
 
 /**
+ * バックアップをメールで送信（共有機能またはメーラー起動）
+ */
+async function sendBackupByEmail() {
+    const profile = window.activeUserProfile || (window.UserProfile ? window.UserProfile.data : null);
+    if (!profile || !profile.email) {
+        alert('「あなたについて」タブでメールアドレスが登録されていません。');
+        const profileBtn = document.querySelector('[data-view="profileSection"]');
+        if (profileBtn) profileBtn.click();
+        return;
+    }
+
+    // 1. バックアップデータの生成
+    const type = 'all';
+    const backupData = {};
+    backupData.scheduleCache = typeof scheduleCache !== 'undefined' ? scheduleCache : {};
+    backupData.myClasses = typeof myClasses !== 'undefined' ? myClasses : [];
+    backupData.classOverrides = typeof classOverrides !== 'undefined' ? classOverrides : [];
+    try {
+        backupData.assignmentExclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
+        backupData.teacherMaster = JSON.parse(localStorage.getItem('teacherMaster') || '[]');
+        backupData.courseMaster = JSON.parse(localStorage.getItem('courseMaster') || '[]');
+        backupData.workSettings = JSON.parse(localStorage.getItem('workSettings') || '{}');
+        backupData.workOverrides = JSON.parse(localStorage.getItem('workOverrides') || '{}');
+        backupData.userProfile = JSON.parse(localStorage.getItem('user_profile') || '{}');
+    } catch (e) { }
+    backupData.timestamp = new Date().toISOString();
+    backupData.backupType = type;
+
+    const fileName = `backup_${type}_${new Date().toISOString().split('T')[0]}.json`;
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const file = new File([blob], fileName, { type: 'application/json' });
+
+    // 2. Web Share API (案1) を試行
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+            await navigator.share({
+                files: [file],
+                title: '年間行事予定バックアップ',
+                text: `${profile.name}様のバックアップデータです。`
+            });
+            return; // 共有成功
+        } catch (err) {
+            if (err.name === 'AbortError') return; // ユーザーによるキャンセル
+            console.error('Share failed:', err);
+        }
+    }
+
+    // 3. フォールバック: 従来のダウンロード ＆ mailto
+    alert('この端末は直接の共有に対応していないため、ファイルをダウンロードします。ダウンロード後、手動でメールに添付して送信してください。');
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    const subject = encodeURIComponent('【年行事予定アプリ】バックアップデータ');
+    const body = encodeURIComponent(`バックアップファイル「${fileName}」を作成しました。\nファイルを添付して ${profile.email} 宛に送信してください。`);
+
+    setTimeout(() => {
+        window.location.href = `mailto:${profile.email}?subject=${subject}&body=${body}`;
+    }, 1000);
+}
+window.sendBackupByEmail = sendBackupByEmail;
+
+/**
  * バックアップから復元
  */
 /**
@@ -2223,11 +2290,13 @@ function renderYearlyView() {
             statusIcons.style.right = '1px';
             statusIcons.style.top = 'auto'; // 下寄せに変更
 
-            if (participating.some(ev => {
+            const isPinned = participating.some(ev => {
                 const text = ev.data?.event || ev.data?.name || '';
-                const isPinned = typeof containsPinnedKeyword === 'function' && containsPinnedKeyword(text);
-                return isPinned || (ev.original && (ev.original.action === 'participate' || ev.original.action === 'move' || ev.original.action === 'add'));
-            })) {
+                return (typeof containsPinnedKeyword === 'function' && containsPinnedKeyword(text)) ||
+                    (ev.original && (ev.original.action === 'participate' || ev.original.action === 'move' || ev.original.action === 'add'));
+            });
+
+            if (isPinned) {
                 const s = document.createElement('span'); s.textContent = '📌';
                 statusIcons.appendChild(s);
             }
@@ -2236,6 +2305,15 @@ function renderYearlyView() {
                 statusIcons.appendChild(s);
             }
             el.appendChild(statusIcons);
+
+            // ツールチップ設定 (全イベント名を表示)
+            if (participating.length > 0) {
+                const names = participating.map(ev => {
+                    const d = ev.data || {};
+                    return (d.event || d.name || '無題').replace(/[📌📍]/g, '').trim();
+                });
+                el.title = names.join('\n');
+            }
 
             grid.appendChild(el);
         }
@@ -2655,7 +2733,8 @@ function renderWeeklyView() {
             const sMin = parseTime(getEffectiveTime(ev, dStr));
             const eMin = parseTime(getEndTime(ev, dStr));
             const top = (sMin - (START_HOUR * 60)) * PIXELS_PER_MINUTE;
-            const h = (eMin - sMin) * PIXELS_PER_MINUTE;
+            let h = (eMin - sMin) * PIXELS_PER_MINUTE;
+            if (h < 20) h = 20; // 最小高さを確保
 
             el.style.position = 'absolute';
             el.style.top = top + 'px';
@@ -2674,23 +2753,28 @@ function renderWeeklyView() {
                 // 申請・事務処理カードの詳細表示
                 let label = '';
                 let detail = '';
+                let timeRange = `${getEffectiveTime(ev, dStr)} - ${getEndTime(ev, dStr)}`;
+
                 if (item.isLeaveCard) {
                     const lTypes = { morning: '午前休', afternoon: '午後休', late: '遅刻', early: '早退', full: '年休' };
-                    label = lTypes[item.leaveType] || '休暇';
-                    if (item.leaveType === 'early' || item.leaveType === 'late') {
-                        detail = `${item.leaveHours || 0}時間${item.leaveExtra || 0}分`;
-                    }
+                    // item.event に具体的な名前（前半1時間休など）があればそれを使う
+                    label = item.event || lTypes[item.leaveType] || '休暇';
                 } else if (item.isTripCard) {
-                    label = '出張';
-                    detail = item.tripDetails?.destination || item.location || '';
+                    const dest = item.tripDetails?.destination || item.location || '';
+                    label = `出張${dest ? ': ' + dest : ''}`;
                 } else if (item.isWfhCard) {
-                    label = '在宅勤務';
+                    const loc = item.location || '自宅';
+                    label = `在宅(${loc})`;
                 } else if (item.isHolidayWorkCard) {
                     label = '休日出勤';
                 }
 
                 const icon = (item.isApplied ? '📄' : '') + (isEventParticipating(ev, dStr, assignmentExclusions) ? '📌' : '');
-                el.innerHTML = `<div style="font-weight:bold; border-bottom:1px solid rgba(0,0,0,0.1); margin-bottom:2px;">${icon}${label}</div>${detail ? `<div style="font-size:0.65rem; opacity:0.8;">${detail}</div>` : ''}`;
+                el.innerHTML = `
+                    <div style="font-weight:bold; border-bottom:1px solid rgba(0,0,0,0.1); margin-bottom:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${icon}${label}</div>
+                    <div style="font-size:0.6rem; opacity:0.9; line-height:1.1;">${timeRange}</div>
+                    ${item.isApplied ? '<div style="font-size:0.55rem; color:#059669; font-weight:bold;">[申請済み]</div>' : ''}
+                `;
                 el.style.padding = '2px 4px';
             } else {
                 el.textContent = (item.event || item.name || '').split('\n')[0];
@@ -2767,12 +2851,15 @@ function renderWeeklyView() {
         if (isProc) {
             if (item.isLeaveCard) {
                 const lTypes = { morning: '午前休', afternoon: '午後休', late: '遅刻', early: '早退', full: '年休' };
-                label = lTypes[item.leaveType] || '休暇';
+                if (!item.event || item.event === '休暇') {
+                    label = lTypes[item.leaveType] || '休暇';
+                }
             } else if (item.isTripCard) {
                 const dest = item.tripDetails?.destination || item.location || '';
                 label = `出張${dest ? ': ' + dest : ''}`;
             } else if (item.isWfhCard) {
-                label = '在宅勤務';
+                const loc = item.location || '自宅';
+                label = `在宅(${loc})`;
             } else if (item.isHolidayWorkCard) {
                 label = '休日出勤';
             }
@@ -3224,7 +3311,13 @@ function renderMonthlyView() {
                 const ovIcon = document.createElement('div');
                 ovIcon.className = 'day-overlap-icon';
                 ovIcon.innerHTML = '⚠️';
-                ovIcon.title = dayOverlapInfo.get(dStr);
+                // ovIcon.title = dayOverlapInfo.get(dStr); // ツールチップを表示するので title は削除
+
+                const content = dayOverlapInfo.get(dStr);
+                ovIcon.onmouseover = (e) => showCustomTooltip(e, content);
+                ovIcon.onmouseout = hideCustomTooltip;
+                ovIcon.ontouchstart = (e) => showCustomTooltip(e, content);
+
                 bads.appendChild(ovIcon);
             }
 
@@ -3414,8 +3507,12 @@ function getEffectiveTime(ov, dateStr) {
         const d = parseDateKey(dateStr);
         const work = typeof getWorkTimeForDate === 'function' ? getWorkTimeForDate(d, true) : { start: '08:30', end: '17:00' };
         if (!work) return '08:30';
-        if (item.leaveType === 'morning') return work.start;
-        if (item.leaveType === 'afternoon') return '13:00'; // 一般的な午後開始
+        if (item.leaveType === 'morning' || item.leaveType === 'early' || item.leaveType === 'full') return work.start;
+        if (item.leaveType === 'afternoon') return '13:00';
+        if (item.leaveType === 'late') {
+            const mins = (item.leaveHours || 0) * 60 + (item.leaveExtra || 0);
+            return typeof addMinutes === 'function' ? addMinutes(work.end, -mins) : work.start;
+        }
         return work.start;
     }
 
@@ -3454,9 +3551,8 @@ function getEndTime(ov, dateStr) {
         const d = parseDateKey(dateStr);
         const work = typeof getWorkTimeForDate === 'function' ? getWorkTimeForDate(d, true) : { start: '08:30', end: '17:00' };
         if (!work) return '17:00';
-        if (item.leaveType === 'morning') return '13:00'; // 一般的な午前終了
-        if (item.leaveType === 'afternoon') return work.end;
-        if (item.leaveType === 'late' || item.leaveType === 'full') return work.end;
+        if (item.leaveType === 'morning') return '13:00';
+        if (item.leaveType === 'afternoon' || item.leaveType === 'late' || item.leaveType === 'full') return work.end;
         if (item.leaveType === 'early') {
             const mins = (item.leaveHours || 0) * 60 + (item.leaveExtra || 0);
             return typeof addMinutes === 'function' ? addMinutes(work.start, mins) : work.end;
@@ -3820,7 +3916,6 @@ function editCalendarEvent(type, id, date, period) {
     const modal = document.getElementById('quickEditModal');
     const classFields = document.getElementById('quickEditClassOnlyFields');
     const allDayCheckbox = document.getElementById('quickEditAllDay');
-
     const participateCheckbox = document.getElementById('quickEditParticipate');
     const participateFields = document.getElementById('quickEditParticipateFields');
 
@@ -3835,222 +3930,89 @@ function editCalendarEvent(type, id, date, period) {
         const format = (t) => {
             if (!t) return '';
             const parts = t.split(':');
-            if (parts.length >= 2) {
-                return parts[0].padStart(2, '0') + ':' + parts[1].padStart(2, '0');
-            }
-            return t;
+            return parts.length >= 2 ? parts[0].padStart(2, '0') + ':' + parts[1].padStart(2, '0') : t;
         };
         const sVal = format(start);
         const eVal = format(end);
-
-        const s1 = document.getElementById('quickEditStartTime');
-        const e1 = document.getElementById('quickEditEndTime');
-        const s2 = document.getElementById('quickEditStartTime_Single');
-        const e2 = document.getElementById('quickEditEndTime_Single');
-        if (s1) s1.value = sVal;
-        if (e1) e1.value = eVal;
-        if (s2) s2.value = sVal;
-        if (e2) e2.value = eVal;
+        if (document.getElementById('quickEditStartTime')) document.getElementById('quickEditStartTime').value = sVal;
+        if (document.getElementById('quickEditEndTime')) document.getElementById('quickEditEndTime').value = eVal;
+        if (document.getElementById('quickEditStartTime_Single')) document.getElementById('quickEditStartTime_Single').value = sVal;
+        if (document.getElementById('quickEditEndTime_Single')) document.getElementById('quickEditEndTime_Single').value = eVal;
     };
 
     if (type === 'myclass') {
         const cls = myClasses.find(c => String(c.id) === String(id));
         if (!cls) return;
-
         classFields.classList.remove('hidden');
-        participateFields.classList.remove('hidden'); // 授業でもピン管理を同期
+        participateFields.classList.remove('hidden');
         document.getElementById('quickEditModalTitle').textContent = `${date} の授業編集`;
+        const existingOv = classOverrides.find(ov => String(ov.id) === String(id) && ov.date === date && ov.type === 'myclass' && ov.action === 'move');
 
-        const existingOv = classOverrides.find(ov =>
-            String(ov.id) === String(id) &&
-            ov.date === date &&
-            ov.type === 'myclass' &&
-            ov.action === 'move' &&
-            ov.data
-        );
-
-        // 授業のピン状態（デフォルトは担当＝ピンあり。Exclusionsにあればなし）
         let isParticipating = true;
         const exclusions = JSON.parse(localStorage.getItem('assignmentExclusions') || '{}');
-        const classExclusions = exclusions[id] || [];
-        if (classExclusions.includes(date)) {
-            isParticipating = false;
-        }
-        // 個別データに記録があれば優先
-        if (existingOv && existingOv.data && existingOv.data.isParticipating !== undefined) {
-            isParticipating = !!existingOv.data.isParticipating;
-        }
+        if ((exclusions[id] || []).includes(date)) isParticipating = false;
+        if (existingOv && existingOv.data && existingOv.data.isParticipating !== undefined) isParticipating = !!existingOv.data.isParticipating;
         participateCheckbox.checked = isParticipating;
 
-        // 授業はデフォルト「終日=False」
-        allDayCheckbox.checked = (existingOv && existingOv.data) ? !!existingOv.data.allDay : false;
-        document.getElementById('quickEditName').value = existingOv && existingOv.data ? existingOv.data.name : cls.name;
+        allDayCheckbox.checked = existingOv?.data?.allDay || false;
+        document.getElementById('quickEditName').value = existingOv?.data?.name || cls.name;
         document.getElementById('quickEditPeriod').value = existingOv ? existingOv.period : period;
-        document.getElementById('quickEditLocation').value = existingOv && existingOv.data ? existingOv.data.location : (cls.location || '');
-        document.getElementById('quickEditMemo').value = (existingOv && existingOv.data) ? (existingOv.data.memo || '') : '';
-
-        // 時刻セット
-        if (existingOv && existingOv.data && existingOv.data.startTime) {
-            setTimeValues(existingOv.data.startTime, existingOv.data.endTime);
-        } else {
-            // updateQuickTimeFromPeriod も内部で setTimeValues を使うように修正
-            updateQuickTimeFromPeriod();
-        }
-        toggleQuickEditTimeFields();
+        document.getElementById('quickEditLocation').value = existingOv?.data?.location || (cls.location || '');
+        document.getElementById('quickEditMemo').value = existingOv?.data?.memo || '';
+        if (existingOv?.data?.startTime) setTimeValues(existingOv.data.startTime, existingOv.data.endTime);
+        else updateQuickTimeFromPeriod();
+        document.getElementById('quickEditDateRangeFields').classList.add('hidden');
 
     } else if (type.startsWith('excel')) {
         classFields.classList.add('hidden');
         participateFields.classList.remove('hidden');
         document.getElementById('quickEditModalTitle').textContent = `${date} の予定編集`;
-
-        let currentText = '';
-        let currentLocation = '';
-        let currentStartTime = '';
-        let currentEndTime = '';
-        let currentMemo = '';
-        let isAllDay = true; // 行事はデフォルト「終日=True」
-        let isParticipating = false;
         const item = scheduleData.find(i => String(i.id) === String(id) && formatDateKey(i.date) === date);
         const override = classOverrides.find(ov => String(ov.id) === String(id) && ov.date === date && ov.type === 'excel' && ov.action === 'move');
 
-        if (override && override.data) {
-            currentText = override.data.event;
-            currentLocation = override.data.location || '';
-            currentStartTime = override.data.startTime || '';
-            currentEndTime = override.data.endTime || '';
-            currentMemo = override.data.memo || '';
-            isAllDay = override.data.allDay !== undefined ? override.data.allDay : (currentStartTime ? false : true);
-            isParticipating = override.data.isParticipating !== undefined ? override.data.isParticipating : false;
-        } else if (item) {
-            currentText = item.event || '';
-            currentLocation = item.location || '';
-            currentStartTime = item.startTime || '';
-            currentEndTime = item.endTime || '';
-            isAllDay = (item.allDay !== undefined) ? item.allDay : (currentStartTime ? false : true);
-
-            if (containsPinnedKeyword(currentText)) {
-                isParticipating = true;
-            }
-        }
-
-        allDayCheckbox.checked = isAllDay;
-        participateCheckbox.checked = isParticipating;
-        document.getElementById('quickEditName').value = currentText;
-        document.getElementById('quickEditLocation').value = currentLocation;
-        setTimeValues(currentStartTime, currentEndTime);
-        document.getElementById('quickEditMemo').value = currentMemo;
+        const data = override?.data || item || {};
+        document.getElementById('quickEditName').value = data.event || '';
+        document.getElementById('quickEditLocation').value = data.location || '';
+        setTimeValues(data.startTime || '', data.endTime || '');
+        document.getElementById('quickEditMemo').value = data.memo || '';
+        allDayCheckbox.checked = data.allDay !== undefined ? data.allDay : !data.startTime;
+        participateCheckbox.checked = data.isParticipating || containsPinnedKeyword(data.event || '');
+        document.getElementById('quickEditApplied').checked = !!data.isApplied;
         document.getElementById('quickEditDateRangeFields').classList.add('hidden');
+
     } else if (type === 'custom') {
         const override = classOverrides.find(ov => String(ov.id) === String(id) && ov.type === 'custom');
-        const item = override ? override.data : null;
+        const item = override?.data;
 
         if (item) {
-            if (item.isTripCard) {
-                // 出張専用モーダルで編集
-                if (typeof openBusinessTripModal === 'function') {
-                    openBusinessTripModal(override.startDate || override.date, override.id);
-                    return;
-                }
-            } else if (item.isHolidayWorkCard) {
-                // 休日出勤専用モーダルで編集
-                if (typeof openHolidayWorkModal === 'function') {
-                    openHolidayWorkModal(override.date, override.id);
-                    return;
-                }
-            } else if (item.isWfhCard) {
-                // 在宅勤務専用モーダルで編集
-                if (typeof openWfhModal === 'function') {
-                    openWfhModal(override.date, override.id);
-                    return;
-                }
-            }
+            if (item.isTripCard && typeof openBusinessTripModal === 'function') { openBusinessTripModal(date, id); return; }
+            if (item.isLeaveCard && typeof openAnnualLeaveModal === 'function') { openAnnualLeaveModal(date, id); return; }
+            if (item.isWfhCard && typeof openWfhModal === 'function') { openWfhModal(date, id); return; }
+            if (item.isHolidayWorkCard && typeof openHolidayWorkModal === 'function') { openHolidayWorkModal(date, id); return; }
         }
 
         classFields.classList.add('hidden');
         participateFields.classList.remove('hidden');
+        document.getElementById('quickEditModalTitle').textContent = item ? `${date} の予定編集` : `${date} の新規予定追加`;
+        document.getElementById('quickEditName').value = item?.event || '';
+        document.getElementById('quickEditLocation').value = item?.location || '';
+        setTimeValues(item?.startTime || '', item?.endTime || '');
+        document.getElementById('quickEditMemo').value = item?.memo || '';
+        allDayCheckbox.checked = item ? !!item.allDay : true;
+        participateCheckbox.checked = item ? !!item.isParticipating : true;
+        document.getElementById('quickEditApplied').checked = item ? !!item.isApplied : false;
 
-        let title = `${date} の新規予定追加`;
-        let showDateRange = true;
-
-        if (item) {
-            if (item.isLeaveCard) {
-                title = '年休の編集';
-                showDateRange = false;
-            } else if (item.isTripCard) {
-                title = '出張の編集';
-                // 複数日出張なら期間を表示
-                showDateRange = true;
-            } else if (item.isWfhCard) {
-                title = '在宅勤務の編集';
-                showDateRange = false;
-            } else if (item.isHolidayWorkCard) {
-                title = '休日出勤の編集';
-                showDateRange = false;
-            } else {
-                const isPeriod = (override.startDate || override.date) !== (override.endDate || override.date);
-                title = isPeriod ? '期間予定の編集' : '予定の編集';
-                showDateRange = true;
-            }
-
-            document.getElementById('quickEditModalTitle').textContent = title;
-            document.getElementById('quickEditName').value = item.event || '';
-            document.getElementById('quickEditLocation').value = item.location || '';
-
-            let startTime = item.startTime || '';
-            let endTime = item.endTime || '';
-
-            // 年休カードの場合は表示用に時刻を算出
-            if (item.isLeaveCard && typeof getWorkTimeForDate === 'function') {
-                const d = parseDateKey(override.date || date);
-                const work = getWorkTimeForDate(d, true);
-                if (work && work.start && work.end) {
-                    if (item.leaveType === 'early' || item.leaveType === 'full') startTime = work.start;
-                    if (item.leaveType === 'late') startTime = addMinutes(work.end, -(item.leaveHours * 60 + (item.leaveExtra || 0)));
-
-                    if (item.leaveType === 'late' || item.leaveType === 'full') endTime = work.end;
-                    if (item.leaveType === 'early') endTime = addMinutes(work.start, item.leaveHours * 60 + (item.leaveExtra || 0));
-                }
-            }
-
-            setTimeValues(startTime, endTime);
-            document.getElementById('quickEditMemo').value = item.memo || '';
-            document.getElementById('quickEditApplied').checked = !!item.isApplied; // 申請状況
-            document.getElementById('quickEditStartDate').value = (override.startDate || override.date || date).replace(/\//g, '-');
-            document.getElementById('quickEditEndDate').value = (override.endDate || override.date || date).replace(/\//g, '-');
-            allDayCheckbox.checked = item.allDay !== undefined ? item.allDay : true;
-            participateCheckbox.checked = item.isParticipating || false;
-
-
-        } else {
-            // 新規
-            document.getElementById('quickEditModalTitle').textContent = title;
-            document.getElementById('quickEditName').value = '';
-            document.getElementById('quickEditLocation').value = '';
-            setTimeValues('', '');
-            document.getElementById('quickEditMemo').value = '';
-            document.getElementById('quickEditApplied').checked = false; // 新規は未申請
-            document.getElementById('quickEditStartDate').value = date.replace(/\//g, '-');
-            document.getElementById('quickEditEndDate').value = date.replace(/\//g, '-');
-            allDayCheckbox.checked = true;
-            participateCheckbox.checked = false;
-        }
-
-        const rangeFields = document.getElementById('quickEditDateRangeFields');
-        const singleTimeFields = document.getElementById('quickEditSingleTimeFields');
-        if (showDateRange) {
-            rangeFields.classList.remove('hidden');
-            if (singleTimeFields) singleTimeFields.classList.add('hidden');
-        } else {
-            rangeFields.classList.add('hidden');
-            if (singleTimeFields) singleTimeFields.classList.remove('hidden');
-        }
-
+        document.getElementById('quickEditStartDate').value = (override?.startDate || override?.date || date).replace(/\//g, '-');
+        document.getElementById('quickEditEndDate').value = (override?.endDate || override?.date || date).replace(/\//g, '-');
+        document.getElementById('quickEditDateRangeFields').classList.remove('hidden');
     }
 
     toggleQuickEditTimeFields();
+    updateQuickDateDuration();
+    updateQuickTimeDuration();
     modal.classList.remove('hidden');
-    modal.classList.add('visible');
 }
+
 window.editCalendarEvent = editCalendarEvent;
 
 /**
@@ -4085,6 +4047,95 @@ function syncQuickTime(el, type) {
     } else {
         if (main) main.value = el.value;
     }
+    updateQuickTimeDuration();
+}
+
+/**
+ * 期間（日数）の計算と表示
+ */
+function updateQuickDateDuration() {
+    const start = document.getElementById('quickEditStartDate').value;
+    const end = document.getElementById('quickEditEndDate').value;
+    const info = document.getElementById('quickEditDateDurationInfo');
+    if (!start || !end) { if (info) info.textContent = ''; return; }
+
+    const sD = new Date(start);
+    const eD = new Date(end);
+    const diffTime = eD - sD;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+    if (info) {
+        if (diffDays <= 0) {
+            info.textContent = '終了日は開始日以降にしてください';
+            info.style.color = 'var(--error-red)';
+        } else {
+            info.textContent = `期間: ${diffDays}日間`;
+            info.style.color = 'var(--primary-600)';
+        }
+    }
+}
+
+/**
+ * 期間（日数）をクイックセット
+ */
+function setQuickDateDuration(days) {
+    const start = document.getElementById('quickEditStartDate').value;
+    if (!start) return;
+
+    const sD = new Date(start);
+    const eD = new Date(sD);
+    if (days >= 1) {
+        eD.setDate(sD.getDate() + (days - 1));
+    }
+    // 0.5日の場合は開始日と同じ（時間は別途）
+
+    document.getElementById('quickEditEndDate').value = formatDateKey(eD);
+    updateQuickDateDuration();
+}
+
+/**
+ * 時間（分）の計算と表示
+ */
+function updateQuickTimeDuration() {
+    const start = document.getElementById('quickEditStartTime_Single').value;
+    const end = document.getElementById('quickEditEndTime_Single').value;
+    const info = document.getElementById('quickEditTimeDurationInfo');
+    if (!start || !end) { if (info) info.textContent = ''; return; }
+
+    const [sH, sM] = start.split(':').map(Number);
+    const [eH, eM] = end.split(':').map(Number);
+    const diff = (eH * 60 + eM) - (sH * 60 + sM);
+
+    if (info) {
+        if (diff < 0) {
+            info.textContent = '終了時刻を開始時刻以降にしてください';
+            info.style.color = 'var(--error-red)';
+        } else {
+            const h = Math.floor(diff / 60);
+            const m = diff % 60;
+            info.textContent = `所要時間: ${h > 0 ? h + '時間' : ''}${m}分 (${diff}分)`;
+            info.style.color = 'var(--primary-600)';
+        }
+    }
+}
+
+/**
+ * 時間（分）をクイックセット
+ */
+function setQuickTimeDuration(minutes) {
+    const start = document.getElementById('quickEditStartTime_Single').value;
+    if (!start) return;
+
+    const [h, m] = start.split(':').map(Number);
+    let totalMins = h * 60 + m + minutes;
+
+    const endH = Math.floor(totalMins / 60) % 24;
+    const endM = totalMins % 60;
+
+    const endStr = String(endH).padStart(2, '0') + ':' + String(endM).padStart(2, '0');
+    document.getElementById('quickEditEndTime_Single').value = endStr;
+    document.getElementById('quickEditEndTime').value = endStr;
+    updateQuickTimeDuration();
 }
 window.syncQuickTime = syncQuickTime;
 window.toggleQuickEditTimeFields = toggleQuickEditTimeFields;
@@ -4903,7 +4954,7 @@ function exportToCsv() {
 
     // CSV形式生成
     const isExportNewFormat = parseInt(getFiscalYear(startDate)) >= 2026;
-    const studentHeader = isExportNewFormat ? '専攻科/備考' : '専攻科';
+    const studentHeader = isExportNewFormat ? '学生/備考' : '専攻科';
     const headers = ['日付', '曜日', '祝日', '曜日カウント', 'イベント', '対象', '学期', '場所', 'メモ'];
     // 実際には表示対象(type)によってラベルを変える
     const rows = [headers];
@@ -4917,7 +4968,7 @@ function exportToCsv() {
         const holidayName = allHolidays.get(dateKey) || '';
 
         const isNewFormat = getFiscalYear(item.date) >= 2026;
-        const typeLabel = item.type === 'teacher' ? '本科' : (isNewFormat ? '専攻科/備考' : '専攻科');
+        const typeLabel = item.type === 'teacher' ? '本科' : (isNewFormat ? '学生/備考' : '専攻科');
 
         rows.push([
             formatDateKey(item.date),
@@ -5076,6 +5127,7 @@ function renderCachedYearList() {
     tbody.innerHTML = years.map(year => {
         const info = scheduleCache[year];
         const data = info.data || [];
+        const isNewEra = (parseInt(year) >= 2026);
 
         // 統計計算
         const uniqueDates = new Set(data.map(item => item.date.toDateString())).size;
@@ -5084,6 +5136,15 @@ function renderCachedYearList() {
         const classDays = new Set(data.filter(item => item.weekdayCount).map(d => d.date.toDateString())).size;
 
         const dateStr = info.timestamp ? new Date(info.timestamp).toLocaleDateString() : '---';
+
+        // ヘッダーラベルの同期 (表示中の年度に基づき1回だけ行えば良いが、ここで簡易的に行う)
+        if (String(year) === String(currentYear)) {
+            const tHead = document.getElementById('teacherColHeader');
+            const sHead = document.getElementById('studentColHeader');
+            if (tHead) tHead.textContent = '本科行事';
+            if (sHead) sHead.textContent = isNewEra ? '学生/備考' : '専攻科/備考';
+        }
+
         return `
             <tr>
                 <td style="font-weight: 600;">${year}年度</td>
@@ -5356,3 +5417,49 @@ function cancelMobileAction() {
 window.showEventContextMenu = showEventContextMenu;
 window.handleContextAction = handleContextAction;
 window.cancelMobileAction = cancelMobileAction;
+
+// --- カスタムツールチップ関連 ---
+let tooltipEl = null;
+
+function showCustomTooltip(e, content) {
+    if (!tooltipEl) {
+        tooltipEl = document.createElement('div');
+        tooltipEl.className = 'custom-tooltip';
+        document.body.appendChild(tooltipEl);
+    }
+
+    // HTML構成
+    const lines = content.split('\n');
+    const header = lines[0] || '重複警告';
+    const details = lines.slice(1).join('<br>');
+
+    tooltipEl.innerHTML = `
+        <div class="custom-tooltip-header">⚠️ ${header}</div>
+        <div class="custom-tooltip-body">${details}</div>
+    `;
+
+    tooltipEl.classList.add('visible');
+
+    // ポジショニング
+    const rect = e.target.getBoundingClientRect();
+    const tooltipHeight = tooltipEl.offsetHeight;
+
+    // 上に表示するが、画面外に出る場合は下に表示
+    let top = rect.top + window.scrollY - tooltipHeight - 10;
+    if (top < window.scrollY + 10) {
+        top = rect.bottom + window.scrollY + 10;
+    }
+
+    tooltipEl.style.left = `${rect.left + window.scrollX}px`;
+    tooltipEl.style.top = `${top}px`;
+}
+
+function hideCustomTooltip() {
+    if (tooltipEl) {
+        tooltipEl.classList.remove('visible');
+    }
+}
+
+window.showCustomTooltip = showCustomTooltip;
+window.hideCustomTooltip = hideCustomTooltip;
+
